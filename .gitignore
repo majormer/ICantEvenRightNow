@@ -13,6 +13,7 @@ Thumbs.db
 
 # Development artifacts (not needed in packaged addon; also excluded via .pkgmeta)
 .github/
+scripts/
 
 # Git artifacts from other repos
 .gitlab-ci.yml

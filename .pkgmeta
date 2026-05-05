@@ -8,6 +8,8 @@ ignore:
   - .git
   - .gitignore
   - .github
+  - scripts
+  - build
 
 manual-changelog:
   filename: CHANGELOG.md
