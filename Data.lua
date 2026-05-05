@@ -5,27 +5,30 @@ local ns = select(2, ...)
 ns.Data = {}
 
 -- Expansion definitions
+-- IDs match WoW's LE_EXPANSION_* globals (0-based).
+-- GetItemInfo() returns expansionID using these same values.
 ns.Data.Expansions = {
-    [1] = { name = "Classic", id = 1 },
-    [2] = { name = "The Burning Crusade", id = 2 },
-    [3] = { name = "Wrath of the Lich King", id = 3 },
-    [4] = { name = "Cataclysm", id = 4 },
-    [5] = { name = "Mists of Pandaria", id = 5 },
-    [6] = { name = "Warlords of Draenor", id = 6 },
-    [7] = { name = "Legion", id = 7 },
-    [8] = { name = "Battle for Azeroth", id = 8 },
-    [9] = { name = "Shadowlands", id = 9 },
-    [10] = { name = "Dragonflight", id = 10 },
-    [11] = { name = "The War Within", id = 11 },
-    [12] = { name = "Midnight", id = 12 },
+    [LE_EXPANSION_CLASSIC]              = { name = EXPANSION_NAME0, id = LE_EXPANSION_CLASSIC },
+    [LE_EXPANSION_BURNING_CRUSADE]      = { name = EXPANSION_NAME1, id = LE_EXPANSION_BURNING_CRUSADE },
+    [LE_EXPANSION_WRATH_OF_THE_LICH_KING] = { name = EXPANSION_NAME2, id = LE_EXPANSION_WRATH_OF_THE_LICH_KING },
+    [LE_EXPANSION_CATACLYSM]            = { name = EXPANSION_NAME3, id = LE_EXPANSION_CATACLYSM },
+    [LE_EXPANSION_MISTS_OF_PANDARIA]    = { name = EXPANSION_NAME4, id = LE_EXPANSION_MISTS_OF_PANDARIA },
+    [LE_EXPANSION_WARLORDS_OF_DRAENOR]  = { name = EXPANSION_NAME5, id = LE_EXPANSION_WARLORDS_OF_DRAENOR },
+    [LE_EXPANSION_LEGION]               = { name = EXPANSION_NAME6, id = LE_EXPANSION_LEGION },
+    [LE_EXPANSION_BATTLE_FOR_AZEROTH]   = { name = EXPANSION_NAME7, id = LE_EXPANSION_BATTLE_FOR_AZEROTH },
+    [LE_EXPANSION_SHADOWLANDS]          = { name = EXPANSION_NAME8, id = LE_EXPANSION_SHADOWLANDS },
+    [LE_EXPANSION_DRAGONFLIGHT]         = { name = EXPANSION_NAME9, id = LE_EXPANSION_DRAGONFLIGHT },
+    [LE_EXPANSION_WAR_WITHIN]           = { name = EXPANSION_NAME10, id = LE_EXPANSION_WAR_WITHIN },
+    [LE_EXPANSION_MIDNIGHT]             = { name = EXPANSION_NAME11, id = LE_EXPANSION_MIDNIGHT },
 }
 
-ns.Data.CurrentExpansionID = 12
+ns.Data.CurrentExpansionID = LE_EXPANSION_MIDNIGHT
 
 -- Item type classifications
 ns.Data.ItemTypes = {
     REPUTATION = "Reputation",
     QUEST = "Quest",
+    SEASONAL = "Seasonal",
     PROFESSION = "Profession",
     CONSUMABLE = "Consumable",
     BOE = "BoE",
@@ -56,7 +59,7 @@ ns.Data.CuratedItems = {
     -- Legion currency-like items
     Legion = {
         -- Ancient Mana
-        [141652] = { type = "CurrencyLike", expansion = 7, action = "Bank", reason = "Old expansion currency-like item" },
+        [141652] = { type = "CurrencyLike", expansion = LE_EXPANSION_LEGION, action = "Bank", reason = "Old expansion currency-like item" },
         -- Add more curated items as needed
     },
     -- Other expansions will be added here

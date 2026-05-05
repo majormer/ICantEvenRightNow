@@ -20,11 +20,18 @@ local UI = {
     selected = {},
     visible = {},
     page = 1,
-    pageSize = 10,
+    pageSize = 7,
 }
 
 local BAG_SCOPE = "bags"
 local BANK_SCOPE = "bank"
+local EXPANSION_FILTER_ALL = 0
+local EXPANSION_FILTER_NOT_CURRENT = -1
+local MYTHIC_KEYSTONE_ITEM_IDS = {
+    [138019] = true,
+    [158923] = true,
+    [180653] = true,
+}
 
 local BAG_IDS = { 0, 1, 2, 3, 4 }
 local BANK_IDS = { -1, 5, 6, 7, 8, 9, 10, 11, -3 }
@@ -100,12 +107,22 @@ local function EnsureRule(itemID)
     return ns.DB.rules.items[itemID]
 end
 
+local function IsMythicKeystone(item)
+    if MYTHIC_KEYSTONE_ITEM_IDS[item.itemID] then
+        return true
+    end
+    return item.name == "Mythic Keystone"
+end
+
 local function GetItemType(item)
     if item.rule and item.rule.typeOverride then
         return item.rule.typeOverride
     end
     if item.curated and item.curated.type then
         return item.curated.type
+    end
+    if IsMythicKeystone(item) then
+        return Data.ItemTypes.SEASONAL
     end
     if item.classID == 0 then
         return Data.ItemTypes.CONSUMABLE
@@ -126,18 +143,7 @@ local function IsCurrentExpansion(expansionID)
 end
 
 local function IsOldExpansion(expansionID)
-    return expansionID and expansionID > 0 and expansionID < Data.CurrentExpansionID
-end
-
-local function InferExpansionOverride(item)
-    local name = (item.name or ""):lower()
-    local subtype = (item.itemSubTypeName or ""):lower()
-
-    if name:find("primordial stone", 1, true) or subtype:find("primordial stone", 1, true) then
-        return 10, "Dragonflight Primordial Stone"
-    end
-
-    return nil, nil
+    return expansionID ~= nil and expansionID < Data.CurrentExpansionID
 end
 
 local function SetBankOrRecallDecision(item, bankGroup, bankReason, recallReason)
@@ -155,10 +161,6 @@ local function BuildDecision(item)
     local expansionID = rule and rule.expansionOverride or item.expansionID
     if item.curated and item.curated.expansion then
         expansionID = expansionID or item.curated.expansion
-    end
-    local inferredExpansionID, inferredReason = InferExpansionOverride(item)
-    if inferredExpansionID then
-        expansionID = inferredExpansionID
     end
 
     local itemType = GetItemType(item)
@@ -180,6 +182,13 @@ local function BuildDecision(item)
         action = Data.Actions.NONE
         reason = rule.protect and "Protected by item rule" or "Never move rule"
         table.insert(blocked, reason)
+    elseif IsMythicKeystone(item) then
+        expansionID = Data.CurrentExpansionID
+        group = "Protected / blocked"
+        recommendation = Data.Recommendations.PROTECTED
+        action = Data.Actions.NONE
+        reason = "Mythic Keystone is protected as current seasonal content"
+        table.insert(blocked, "Mythic Keystone")
     elseif item.isBound and (item.classID == 2 or item.classID == 4) then
         group = "Protected / blocked"
         recommendation = Data.Recommendations.BLOCKED
@@ -223,6 +232,13 @@ local function BuildDecision(item)
             "Old expansion material",
             "Old expansion material is available to recall from bank"
         )
+    elseif IsOldExpansion(expansionID) and itemType ~= Data.ItemTypes.EQUIPMENT then
+        group, recommendation, action, reason = SetBankOrRecallDecision(
+            item,
+            "Recommended bank candidates",
+            "Old expansion item",
+            "Old expansion item is available to recall from bank"
+        )
     elseif item.scope == BANK_SCOPE
         and expansionID
         and IsCurrentExpansion(expansionID)
@@ -235,7 +251,7 @@ local function BuildDecision(item)
         group = "Protected / blocked"
         recommendation = Data.Recommendations.BLOCKED
         action = Data.Actions.NONE
-        reason = inferredReason and (inferredReason .. " is blocked by default") or "Current or unknown expansion is blocked by default"
+        reason = "Current or unknown expansion is blocked by default"
         table.insert(blocked, "Current or unknown expansion")
     end
 
@@ -294,7 +310,11 @@ local function MatchesFilter(item)
             return false
         end
     end
-    if ui.expansionFilter and ui.expansionFilter ~= 0 and item.expansionID ~= ui.expansionFilter then
+    if ui.expansionFilter == EXPANSION_FILTER_NOT_CURRENT then
+        if not IsOldExpansion(item.expansionID) then
+            return false
+        end
+    elseif ui.expansionFilter and ui.expansionFilter ~= EXPANSION_FILTER_ALL and item.expansionID ~= ui.expansionFilter then
         return false
     end
     if ui.typeFilter and ui.typeFilter ~= "All" and item.typeTag ~= ui.typeFilter then
@@ -397,9 +417,10 @@ end
 
 local function GetExpansionOptions()
     local options = {
-        { text = "All expansions", value = 0 },
+        { text = "All expansions",  value = EXPANSION_FILTER_ALL },
+        { text = "Not current",     value = EXPANSION_FILTER_NOT_CURRENT },
     }
-    for expansionID = 1, Data.CurrentExpansionID do
+    for expansionID = 0, Data.CurrentExpansionID do
         local expansion = Data.Expansions[expansionID]
         if expansion then
             table.insert(options, { text = expansion.name, value = expansionID })
@@ -510,6 +531,23 @@ function Core.ScanInventory(scope, quiet)
 
     if UI.frame and UI.frame:IsShown() then
         Core.RefreshUI()
+    end
+
+    -- Some items may not be in the client cache yet; retry after a short delay
+    -- to pick up expansionID and other fields that GetItemInfo returns as nil on first call.
+    local needsRetry = false
+    for _, item in ipairs(ns.DB.scans.bags or {}) do
+        if item.expansionID == nil then needsRetry = true; break end
+    end
+    if not needsRetry then
+        for _, item in ipairs(ns.DB.scans.bank or {}) do
+            if item.expansionID == nil then needsRetry = true; break end
+        end
+    end
+    if needsRetry then
+        C_Timer.After(1.5, function()
+            Core.ScanInventory(scope, true)
+        end)
     end
 end
 
@@ -651,6 +689,7 @@ local function BuildMoveTab(parent)
         { text = "All", value = "All" },
         { text = Data.ItemTypes.REPUTATION, value = Data.ItemTypes.REPUTATION },
         { text = Data.ItemTypes.QUEST, value = Data.ItemTypes.QUEST },
+        { text = Data.ItemTypes.SEASONAL, value = Data.ItemTypes.SEASONAL },
         { text = Data.ItemTypes.PROFESSION, value = Data.ItemTypes.PROFESSION },
         { text = Data.ItemTypes.CONSUMABLE, value = Data.ItemTypes.CONSUMABLE },
         { text = Data.ItemTypes.BOE, value = Data.ItemTypes.BOE },
@@ -691,12 +730,9 @@ local function BuildMoveTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.headers = CreateLabel(parent, "Item                         Count  Expansion       Type        Location          Action          Rule", "GameFontNormalSmall")
-    parent.headers:SetPoint("TOPLEFT", parent.search, "BOTTOMLEFT", -6, -12)
-
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     parent.listFrame:SetSize(720, 306)
-    parent.listFrame:SetPoint("TOPLEFT", parent.headers, "BOTTOMLEFT", 0, -4)
+    parent.listFrame:SetPoint("TOPLEFT", parent.search, "BOTTOMLEFT", -6, -14)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -708,19 +744,23 @@ local function BuildMoveTab(parent)
     parent.rows = {}
     for i = 1, UI.pageSize do
         local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
-        row:SetSize(710, 28)
+        row:SetSize(710, 40)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
-        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * 30)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * 42)
         row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         row.check:SetPoint("LEFT", 0, 0)
         row.icon = row:CreateTexture(nil, "ARTWORK")
-        row.icon:SetSize(22, 22)
+        row.icon:SetSize(24, 24)
         row.icon:SetPoint("LEFT", row.check, "RIGHT", -2, 0)
-        row.text = CreateLabel(row, "", "GameFontHighlightSmall")
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 5, 0)
-        row.text:SetWidth(420)
-        row.text:SetWordWrap(false)
+        row.nameText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.nameText:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -4)
+        row.nameText:SetWidth(420)
+        row.nameText:SetWordWrap(false)
+        row.detailText = CreateLabel(row, "", "GameFontDisableSmall")
+        row.detailText:SetPoint("TOPLEFT", row.nameText, "BOTTOMLEFT", 0, -2)
+        row.detailText:SetWidth(420)
+        row.detailText:SetWordWrap(false)
         row.bank = CreateButton(row, "Bank", 50, 22)
         row.bank:SetPoint("RIGHT", row, "RIGHT", -180, 0)
         row.recall = CreateButton(row, "Recall", 56, 22)
@@ -897,7 +937,15 @@ function Core.RefreshMove()
 
     panel.modeBank:SetText(ui.mode == "Dump to Bank" and "[Dump to Bank]" or "Dump to Bank")
     panel.modeRecall:SetText(ui.mode == "Recall from Bank" and "[Recall from Bank]" or "Recall from Bank")
-    SetDropdownText(panel.expansionFilter, "Expansion: " .. (ui.expansionFilter == 0 and "All expansions" or GetExpansionName(ui.expansionFilter)))
+    local expansionLabel
+    if ui.expansionFilter == EXPANSION_FILTER_ALL then
+        expansionLabel = "All expansions"
+    elseif ui.expansionFilter == EXPANSION_FILTER_NOT_CURRENT then
+        expansionLabel = "Not current"
+    else
+        expansionLabel = GetExpansionName(ui.expansionFilter)
+    end
+    SetDropdownText(panel.expansionFilter, "Expansion: " .. expansionLabel)
     SetDropdownText(panel.typeFilter, "Type: " .. ui.typeFilter)
     SetDropdownText(panel.locationFilter, "Location: " .. ui.locationFilter)
     panel.recommended:SetChecked(ui.recommendedOnly)
@@ -928,15 +976,14 @@ function Core.RefreshMove()
             row.check:SetScript("OnClick", function(self)
                 UI.selected[item.key] = self:GetChecked() and true or nil
             end)
-            local line = string.format("%-28s x%-3d  %-14s %-11s %-16s %-14s %s",
-                item.name or ("Item " .. item.itemID),
+            row.nameText:SetText(item.name or ("Item " .. item.itemID))
+            row.detailText:SetText(string.format("x%d  |  %s  |  %s  |  %s  |  %s  |  %s",
                 item.count or 1,
                 item.expansionName or "Unknown",
                 item.typeTag or "Unknown",
                 item.location or "",
                 item.recommendedAction or "Review",
-                item.ruleStatus or "none")
-            row.text:SetText(line)
+                item.ruleStatus == "custom" and "custom rule" or "no rule"))
             row.bank:SetScript("OnClick", function() AddRule(item, "Always Bank") end)
             row.recall:SetScript("OnClick", function() AddRule(item, "Always Recall") end)
             row.protect:SetScript("OnClick", function() AddRule(item, "Protect") end)
@@ -1175,6 +1222,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         end
     elseif ns.DB and ns.DB.context then
         Core.UpdateContext()
+        if event == "BANKFRAME_OPENED" then
+            Core.ScanInventory("all", true)
+        end
         if UI.frame and UI.frame:IsShown() then
             Core.RefreshUI()
         end
