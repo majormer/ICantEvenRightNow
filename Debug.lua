@@ -12,6 +12,10 @@ function ns.Debug.SetDebug(enabled)
     DEBUG_MODE = enabled
 end
 
+function ns.Debug.IsDebugEnabled()
+    return DEBUG_MODE
+end
+
 -- Debug print function
 function ns.Debug.Print(...)
     if DEBUG_MODE then

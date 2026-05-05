@@ -16,7 +16,11 @@ ns.Data.Expansions = {
     [8] = { name = "Battle for Azeroth", id = 8 },
     [9] = { name = "Shadowlands", id = 9 },
     [10] = { name = "Dragonflight", id = 10 },
+    [11] = { name = "The War Within", id = 11 },
+    [12] = { name = "Midnight", id = 12 },
 }
+
+ns.Data.CurrentExpansionID = 12
 
 -- Item type classifications
 ns.Data.ItemTypes = {
@@ -26,7 +30,25 @@ ns.Data.ItemTypes = {
     CONSUMABLE = "Consumable",
     BOE = "BoE",
     CURRENCY_LIKE = "CurrencyLike",
+    EQUIPMENT = "Equipment",
+    MATERIAL = "Material",
     UNKNOWN = "Unknown",
+}
+
+ns.Data.Recommendations = {
+    BANK = "BankCandidate",
+    RECALL = "RecallCandidate",
+    REVIEW = "NeedsReview",
+    PROTECTED = "Protected",
+    IGNORED = "Ignored",
+    BLOCKED = "Blocked",
+}
+
+ns.Data.Actions = {
+    BANK = "Bank",
+    RECALL = "Recall",
+    REVIEW = "Review",
+    NONE = "None",
 }
 
 -- Curated item tables (to be populated with actual item IDs)
@@ -34,7 +56,7 @@ ns.Data.CuratedItems = {
     -- Legion currency-like items
     Legion = {
         -- Ancient Mana
-        [141652] = { type = "CurrencyLike", expansion = 7, action = "Bank" },
+        [141652] = { type = "CurrencyLike", expansion = 7, action = "Bank", reason = "Old expansion currency-like item" },
         -- Add more curated items as needed
     },
     -- Other expansions will be added here
@@ -57,5 +79,18 @@ ns.Data.DefaultDB = {
     lastScan = {
         bags = 0,
         bank = 0,
+    },
+    scans = {
+        bags = {},
+        bank = {},
+    },
+    ui = {
+        mode = "Dump to Bank",
+        expansionFilter = 0,
+        typeFilter = "All",
+        rarityFilter = "All",
+        locationFilter = "All",
+        recommendedOnly = true,
+        search = "",
     },
 }
