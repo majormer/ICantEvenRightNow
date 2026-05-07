@@ -7,7 +7,13 @@ ignore:
   - docs
   - .git
   - .gitignore
+  - .env.example
   - .github
+  - scripts
+  - build
+  - .release
+  - "*.zip"
+  - "*.log"
 
 manual-changelog:
   filename: CHANGELOG.md

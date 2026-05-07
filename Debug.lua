@@ -12,10 +12,14 @@ function ns.Debug.SetDebug(enabled)
     DEBUG_MODE = enabled
 end
 
+function ns.Debug.IsDebugEnabled()
+    return DEBUG_MODE
+end
+
 -- Debug print function
 function ns.Debug.Print(...)
     if DEBUG_MODE then
-        print("|cFF00FF00ICantEvenRightNow Debug:|r", ...)
+        print("|cFF00FF00I Can't Even Right Now Debug:|r", ...)
     end
 end
 
@@ -37,7 +41,7 @@ end
 
 -- Run full diagnostic dump
 function ns.Debug.RunDiagnosticDump()
-    ns.Debug.Print("=== ICantEvenRightNow Diagnostic Dump ===")
+    ns.Debug.Print("=== I Can't Even Right Now Diagnostic Dump ===")
     ns.Debug.Print("Addon Version: " .. GetAddOnMetadata("ICantEvenRightNow", "Version"))
     ns.Debug.Print("Game Version: " .. GetBuildInfo())
     ns.Debug.Print("Player Name: " .. UnitName("player"))

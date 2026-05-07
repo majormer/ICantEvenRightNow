@@ -12,7 +12,9 @@
 Thumbs.db
 
 # Development artifacts (not needed in packaged addon; also excluded via .pkgmeta)
-.github/
+scripts/*
+!scripts/
+!scripts/Build-Release.ps1
 
 # Git artifacts from other repos
 .gitlab-ci.yml
@@ -20,8 +22,13 @@ Thumbs.db
 
 # Build artifacts
 build/
+.release/
 *.zip
+*.log
 
 # Local testing/config
+.env
+.env.*
+!.env.example
 ICantEvenRightNowDB_backup.lua
 test_*.lua
