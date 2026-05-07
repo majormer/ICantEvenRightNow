@@ -20,13 +20,14 @@ This runbook describes the repeatable process to publish a new addon release thr
 1. Working tree is clean enough to isolate release-intended changes.
 2. `CHANGELOG.md` contains a dated section for the version (for example `## [0.3.0] - YYYY-MM-DD`).
 3. `## Version:` in `ICantEvenRightNow.toc` matches the release version (for example `0.3.0`).
-4. Lua syntax passes:
+4. `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface value(s), so CurseForge does not classify the upload under outdated game versions only.
+5. Lua syntax passes:
 
 ```powershell
 luac -p Core.lua Data.lua Debug.lua
 ```
 
-5. In-game smoke check completed (copy + `/reload`).
+6. In-game smoke check completed (copy + `/reload`).
 
 ## Standard release flow
 
@@ -50,6 +51,7 @@ git push origin v0.3.0
 2. Confirm `WoW Packager` step succeeded.
 3. Confirm GitHub Release exists for tag `vX.Y.Z`.
 4. Confirm CurseForge file appeared for the project.
+5. Confirm CurseForge game-version tags on the uploaded file match intended current Retail client versions.
 
 Useful commands:
 
@@ -76,6 +78,7 @@ gh release list --limit 5
 - Check the project Files tab filters (game version and release type).
 - Confirm the file status in CurseForge project management, since first-project moderation or delayed indexing can hide newly uploaded files temporarily.
 - Recheck after a short delay; packager success in GitHub Actions means the upload request completed successfully.
+- If the file is approved but only tagged with older game versions, update `## Interface:` in `ICantEvenRightNow.toc` and publish a patch release.
 
 ### Changelog missing in release notes
 

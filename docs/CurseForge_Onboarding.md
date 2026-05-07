@@ -48,8 +48,9 @@ Upload the generated file from `build/` as a Retail release.
 1. Verify the addon in-game after `./scripts/Copy-ToWoW.ps1` and `/reload`.
 2. Update `CHANGELOG.md` from `[Unreleased]` to the release version and date.
 3. Confirm `## Version:` in `ICantEvenRightNow.toc` matches the tag.
-4. Confirm `## X-Curse-Project-ID:` is set.
-5. Push a `vX.Y.Z` tag.
-6. Check the GitHub Actions release run and CurseForge file status.
+4. Confirm `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface version(s).
+5. Confirm `## X-Curse-Project-ID:` is set.
+6. Push a `vX.Y.Z` tag.
+7. Check the GitHub Actions release run and CurseForge file status.
 
 For the full repeatable process, see `docs/Release_Process.md`.
