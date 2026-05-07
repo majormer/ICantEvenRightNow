@@ -71,6 +71,12 @@ gh release list --limit 5
 - Confirm `CF_API_KEY` exists in repo secrets.
 - Confirm `X-Curse-Project-ID` is set in `ICantEvenRightNow.toc`.
 
+### Upload succeeded but file is not visible on CurseForge
+
+- Check the project Files tab filters (game version and release type).
+- Confirm the file status in CurseForge project management, since first-project moderation or delayed indexing can hide newly uploaded files temporarily.
+- Recheck after a short delay; packager success in GitHub Actions means the upload request completed successfully.
+
 ### Changelog missing in release notes
 
 - Confirm `.pkgmeta` contains:
