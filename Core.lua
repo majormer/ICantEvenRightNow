@@ -9,15 +9,26 @@ ns.DB = {}
 local Core = ns.Core
 local Data = ns.Data
 local Debug = ns.Debug
+local DISPLAY_NAME = "I Can't Even Right Now (With My Bags and Bank)"
+local ICON_TEXTURE = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow.png"
 
 local CContainer = C_Container
 local UI = {
     frame = nil,
+    minimapButton = nil,
+    minimapDataObject = nil,
+    minimapIconRegistered = false,
+    bankButton = nil,
+    vendorButton = nil,
     tabs = {},
     activeTab = "Summary",
     rows = {},
     ruleRows = {},
     selected = {},
+    organizeSelected = {},
+    organizeVisible = {},
+    vendorSelected = {},
+    vendorVisible = {},
     visible = {},
     page = 1,
     pageSize = 7,
@@ -27,14 +38,214 @@ local BAG_SCOPE = "bags"
 local BANK_SCOPE = "bank"
 local EXPANSION_FILTER_ALL = 0
 local EXPANSION_FILTER_NOT_CURRENT = -1
+local EXPANSION_FILTER_UNKNOWN = -2
+local ORGANIZE_PAGE_SIZE = 8
+local VENDOR_PAGE_SIZE = 8
+local STORAGE_BAGS = "Bags"
+local STORAGE_PRIVATE_BANK = "Private Bank"
+local STORAGE_REAGENT_BANK = "Reagent Bank"
+local STORAGE_WARBAND_BANK = "Warband Bank"
+local TYPE_FILTER_REAGENT = "Reagent"
+local TYPE_FILTER_BOE = "BoE"
+local TYPE_FILTER_WUE = "WuE"
+local VENDOR_ACTION_RECALL = "Recall to Bags"
+local VENDOR_ACTION_SELL = "Sell at Vendor"
+local MINIMAP_LDB_NAME = "ICantEvenRightNow"
+local BANK_FRAME_NAMES = {
+    "BetterBagsBagBank",
+    "BagnonFramebank",
+    "BagnonFrameBank",
+    "CombuctorFramebank",
+    "CombuctorFrameBank",
+    "LiteBagBankPanel",
+    "InventorianBankFrame",
+    "BankFrame",
+    "BankPanel",
+    "AccountBankPanel",
+    "BetterBagsBankFrame",
+    "BetterBags_BankFrame",
+    "BetterBagsBank",
+}
+local BANK_FRAME_PATTERNS = {
+    "betterbagsbagbank",
+    "bagnonframebank",
+    "combuctorframebank",
+    "litebagbank",
+    "inventorianbank",
+    "adibagsbank",
+    "sortedbank",
+}
 local MYTHIC_KEYSTONE_ITEM_IDS = {
     [138019] = true,
     [158923] = true,
     [180653] = true,
 }
 
-local BAG_IDS = { 0, 1, 2, 3, 4 }
-local BANK_IDS = { -1, 5, 6, 7, 8, 9, 10, 11, -3 }
+local function AppendBagID(list, bagID)
+    if type(bagID) == "number" then
+        table.insert(list, bagID)
+    end
+end
+
+local function AppendNamedBagID(list, bagIndex, ...)
+    if not bagIndex then
+        return
+    end
+    for i = 1, select("#", ...) do
+        local key = select(i, ...)
+        AppendBagID(list, rawget(bagIndex, key))
+    end
+end
+
+local function UniqueBagIDs(list)
+    local seen = {}
+    local unique = {}
+    for _, bagID in ipairs(list or {}) do
+        if type(bagID) == "number" and not seen[bagID] then
+            seen[bagID] = true
+            table.insert(unique, bagID)
+        end
+    end
+    return unique
+end
+
+local function BuildBackpackIDs()
+    local bagIndex = Enum and Enum.BagIndex
+    if bagIndex and bagIndex.Backpack then
+        local list = {}
+        AppendBagID(list, bagIndex.Backpack)
+        AppendBagID(list, bagIndex.Bag_1)
+        AppendBagID(list, bagIndex.Bag_2)
+        AppendBagID(list, bagIndex.Bag_3)
+        AppendBagID(list, bagIndex.Bag_4)
+        AppendBagID(list, rawget(bagIndex, "ReagentBag"))
+        AppendBagID(list, rawget(bagIndex, "Reagentbag"))
+        return list
+    end
+    return { 0, 1, 2, 3, 4 }
+end
+
+local function BuildNormalBackpackIDs()
+    local bagIndex = Enum and Enum.BagIndex
+    if bagIndex and bagIndex.Backpack then
+        local list = {}
+        AppendBagID(list, bagIndex.Backpack)
+        AppendBagID(list, bagIndex.Bag_1)
+        AppendBagID(list, bagIndex.Bag_2)
+        AppendBagID(list, bagIndex.Bag_3)
+        AppendBagID(list, bagIndex.Bag_4)
+        return list
+    end
+    return { 0, 1, 2, 3, 4 }
+end
+
+local function BuildPrivateBankIDs()
+    local bagIndex = Enum and Enum.BagIndex
+    if bagIndex then
+        local list = {}
+        AppendNamedBagID(list, bagIndex,
+            "CharacterBankTab_1", "CharacterBankTab_2", "CharacterBankTab_3",
+            "CharacterBankTab_4", "CharacterBankTab_5", "CharacterBankTab_6")
+
+        -- Legacy naming seen in older clients/docs.
+        AppendNamedBagID(list, bagIndex,
+            "BankBag_1", "BankBag_2", "BankBag_3", "BankBag_4", "BankBag_5", "BankBag_6", "BankBag_7",
+            "Bankbag_1", "Bankbag_2", "Bankbag_3", "Bankbag_4", "Bankbag_5", "Bankbag_6", "Bankbag_7")
+
+        if #list == 0 then
+            -- Prefer explicit tab IDs over Characterbanktab because that value can
+            -- represent an aggregate/current tab in modern UI flows.
+            local reagentBagID = rawget(bagIndex, "ReagentBag")
+            if reagentBagID == 5 then
+                list = { 6, 7, 8, 9, 10, 11 }
+            else
+                list = { 5, 6, 7, 8, 9, 10, 11 }
+            end
+        end
+        return UniqueBagIDs(list)
+    end
+    return { -1, 5, 6, 7, 8, 9, 10, 11 }
+end
+
+local function BuildReagentBankIDs()
+    local bagIndex = Enum and Enum.BagIndex
+    local list = {}
+    if bagIndex then
+        AppendNamedBagID(list, bagIndex, "Reagentbank", "ReagentBank")
+
+        local hasModernAccountAggregate = rawget(bagIndex, "Accountbanktab") == -3
+        local hasModernAccountTabs = rawget(bagIndex, "AccountBankTab_1") ~= nil
+        if #list == 0 and not (hasModernAccountAggregate or hasModernAccountTabs) then
+            -- Legacy fallback: reagent bank container used -3 prior to modern account bank IDs.
+            AppendBagID(list, -3)
+        end
+    else
+        AppendBagID(list, -3)
+    end
+    return UniqueBagIDs(list)
+end
+
+local function BuildWarbandBankIDs()
+    local bagIndex = Enum and Enum.BagIndex
+    local list = {}
+    if bagIndex then
+        AppendBagID(list, bagIndex.AccountBankTab_1)
+        AppendBagID(list, bagIndex.AccountBankTab_2)
+        AppendBagID(list, bagIndex.AccountBankTab_3)
+        AppendBagID(list, bagIndex.AccountBankTab_4)
+        AppendBagID(list, bagIndex.AccountBankTab_5)
+    end
+    return list
+end
+
+local function BuildBagIDSet(...)
+    local set = {}
+    for index = 1, select("#", ...) do
+        local list = select(index, ...)
+        for _, bagID in ipairs(list or {}) do
+            set[bagID] = true
+        end
+    end
+    return set
+end
+
+local function RemoveBagIDs(list, ...)
+    local blocked = BuildBagIDSet(...)
+    local filtered = {}
+    for _, bagID in ipairs(list or {}) do
+        if not blocked[bagID] then
+            AppendBagID(filtered, bagID)
+        end
+    end
+    return filtered
+end
+
+local NORMAL_BAG_IDS = BuildNormalBackpackIDs()
+local BAG_IDS = BuildBackpackIDs()
+local REAGENT_BANK_IDS = BuildReagentBankIDs()
+local WARBAND_BANK_IDS = BuildWarbandBankIDs()
+local PRIVATE_BANK_IDS = RemoveBagIDs(BuildPrivateBankIDs(), REAGENT_BANK_IDS, WARBAND_BANK_IDS)
+local STORAGE_BY_BAG_ID = {}
+for _, bagID in ipairs(PRIVATE_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_PRIVATE_BANK end
+for _, bagID in ipairs(REAGENT_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_REAGENT_BANK end
+for _, bagID in ipairs(WARBAND_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_WARBAND_BANK end
+
+local function HasReagentBankStorage()
+    return #REAGENT_BANK_IDS > 0
+end
+
+local function NormalizeLegacyBankStorageKinds(items)
+    if HasReagentBankStorage() then
+        return
+    end
+    for _, item in ipairs(items or {}) do
+        if item.scope == BANK_SCOPE and item.storageKind == STORAGE_REAGENT_BANK then
+            item.storageKind = STORAGE_PRIVATE_BANK
+            item.location = STORAGE_PRIVATE_BANK .. " " .. tostring(item.bagID) .. " Slot " .. tostring(item.slot)
+        end
+    end
+end
+
 local GROUP_ORDER = {
     "Unknown / needs review",
     "Recommended bank candidates",
@@ -46,7 +257,92 @@ local GROUP_ORDER = {
 }
 
 local function Print(msg)
-    print("|cFF66CCFFICantEvenRightNow:|r " .. tostring(msg))
+    print("|cFF66CCFF" .. DISPLAY_NAME .. ":|r " .. tostring(msg))
+end
+
+local function JoinBagIDs(list)
+    local parts = {}
+    for _, bagID in ipairs(list or {}) do
+        table.insert(parts, tostring(bagID))
+    end
+    return #parts > 0 and table.concat(parts, ", ") or "(none)"
+end
+
+function Core.PrintBankContainerDiagnostics()
+    Core.UpdateContext()
+    Print("Bank diagnostics start (bankOpen=" .. tostring(ns.DB.context.bankOpen) .. ")")
+
+    local bagIndex = Enum and Enum.BagIndex
+    if bagIndex then
+        local fields = {
+            "Characterbanktab", "Accountbanktab", "ReagentBank", "Reagentbank", "ReagentBag",
+            "CharacterBankTab_1", "CharacterBankTab_2", "CharacterBankTab_3",
+            "CharacterBankTab_4", "CharacterBankTab_5", "CharacterBankTab_6",
+            "AccountBankTab_1", "AccountBankTab_2", "AccountBankTab_3",
+            "AccountBankTab_4", "AccountBankTab_5",
+        }
+        local enumParts = {}
+        for _, key in ipairs(fields) do
+            local value = rawget(bagIndex, key)
+            if type(value) == "number" then
+                table.insert(enumParts, key .. "=" .. tostring(value))
+            end
+        end
+        Print("Enum.BagIndex: " .. (#enumParts > 0 and table.concat(enumParts, "; ") or "(no numeric fields found)"))
+    else
+        Print("Enum.BagIndex unavailable")
+    end
+
+    Print("Resolved private IDs: " .. JoinBagIDs(PRIVATE_BANK_IDS))
+    Print("Resolved reagent IDs: " .. JoinBagIDs(REAGENT_BANK_IDS))
+    Print("Resolved warband IDs: " .. JoinBagIDs(WARBAND_BANK_IDS))
+    if not HasReagentBankStorage() then
+        Print("Reagent-bank container is not available in this client; profession mats use private bank storage.")
+    end
+
+    local overlapSet = BuildBagIDSet(PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS)
+    local overlapCounts = {}
+    for bagID in pairs(overlapSet) do
+        local hits = 0
+        if BuildBagIDSet(PRIVATE_BANK_IDS)[bagID] then hits = hits + 1 end
+        if BuildBagIDSet(REAGENT_BANK_IDS)[bagID] then hits = hits + 1 end
+        if BuildBagIDSet(WARBAND_BANK_IDS)[bagID] then hits = hits + 1 end
+        if hits > 1 then
+            table.insert(overlapCounts, tostring(bagID))
+        end
+    end
+    table.sort(overlapCounts, function(a, b) return tonumber(a) < tonumber(b) end)
+    Print("Resolved overlaps: " .. (#overlapCounts > 0 and table.concat(overlapCounts, ", ") or "none"))
+
+    local function ReportSlots(label, ids)
+        local parts = {}
+        for _, bagID in ipairs(ids) do
+            local slots = CContainer.GetContainerNumSlots(bagID) or 0
+            table.insert(parts, tostring(bagID) .. "=" .. tostring(slots))
+        end
+        Print(label .. " slots: " .. (#parts > 0 and table.concat(parts, ", ") or "(none)"))
+    end
+
+    ReportSlots("Private", PRIVATE_BANK_IDS)
+    ReportSlots("Reagent", REAGENT_BANK_IDS)
+    ReportSlots("Warband", WARBAND_BANK_IDS)
+
+    local countsByStorage = {
+        [STORAGE_PRIVATE_BANK] = 0,
+        [STORAGE_REAGENT_BANK] = 0,
+        [STORAGE_WARBAND_BANK] = 0,
+    }
+    for _, item in ipairs(ns.DB.scans.bank or {}) do
+        local storage = item.storageKind or STORAGE_BY_BAG_ID[item.bagID] or STORAGE_PRIVATE_BANK
+        if countsByStorage[storage] then
+            countsByStorage[storage] = countsByStorage[storage] + 1
+        end
+    end
+    Print("Last bank scan counts: Private=" .. tostring(countsByStorage[STORAGE_PRIVATE_BANK])
+        .. ", Reagent=" .. tostring(countsByStorage[STORAGE_REAGENT_BANK])
+        .. ", Warband=" .. tostring(countsByStorage[STORAGE_WARBAND_BANK]))
+
+    Print("Bank diagnostics end")
 end
 
 local function SafeCopyDefaults(defaults, target)
@@ -80,8 +376,40 @@ local function FormatTimestamp(timestamp)
     return date("%Y-%m-%d %H:%M", timestamp)
 end
 
+local function FormatMoney(copper)
+    copper = copper or 0
+    local gold = math.floor(copper / 10000)
+    local silver = math.floor((copper % 10000) / 100)
+    local copperOnly = copper % 100
+    if gold > 0 then
+        return gold .. "g " .. silver .. "s"
+    elseif silver > 0 then
+        return silver .. "s " .. copperOnly .. "c"
+    end
+    return copperOnly .. "c"
+end
+
 local function LocationKey(item)
     return table.concat({ item.scope or "?", tostring(item.bagID), tostring(item.slot), tostring(item.itemID) }, ":")
+end
+
+local function SlotKey(bagID, slot)
+    return tostring(bagID) .. ":" .. tostring(slot)
+end
+
+local function GetStorageKindForBagID(bagID, scope)
+    if scope == BAG_SCOPE then
+        return STORAGE_BAGS
+    end
+    return STORAGE_BY_BAG_ID[bagID] or STORAGE_PRIVATE_BANK
+end
+
+local function FormatItemLocation(bagID, slot, scope, storageKind)
+    storageKind = storageKind or GetStorageKindForBagID(bagID, scope)
+    if storageKind == STORAGE_BAGS then
+        return "Bag " .. tostring(bagID) .. " Slot " .. tostring(slot)
+    end
+    return storageKind .. " " .. tostring(bagID) .. " Slot " .. tostring(slot)
 end
 
 local function FindCuratedItem(itemID)
@@ -112,6 +440,89 @@ local function IsMythicKeystone(item)
         return true
     end
     return item.name == "Mythic Keystone"
+end
+
+local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
+    local details = {
+        bindingScope = fallbackIsBound and "Bound" or "Unbound",
+        isBound = fallbackIsBound and true or false,
+        isSoulbound = false,
+        isWarbandBound = false,
+        accountBankAllowed = not fallbackIsBound,
+    }
+
+    if bindType == 2 then
+        details.bindingScope = "BoE"
+    elseif bindType == 3 then
+        details.bindingScope = "Bind on Use"
+    elseif bindType == 4 then
+        details.bindingScope = "Quest"
+        details.isBound = true
+    elseif bindType == 8 then
+        details.bindingScope = "Battle.net Account"
+        details.isWarbandBound = true
+        details.accountBankAllowed = true
+    end
+
+    if not (ItemLocation and C_Item) then
+        return details
+    end
+
+    local itemLocation = ItemLocation:CreateFromBagAndSlot(bagID, slot)
+    if not itemLocation then
+        return details
+    end
+
+    if C_Item.IsBound then
+        local ok, isBound = pcall(C_Item.IsBound, itemLocation)
+        if ok then
+            details.isBound = isBound and true or false
+            if not details.isBound and details.bindingScope == "Bound" then
+                details.bindingScope = "Unbound"
+            end
+        end
+    end
+
+    if C_Item.IsBoundToAccountUntilEquip then
+        local ok, isWarboundUntilEquipped = pcall(C_Item.IsBoundToAccountUntilEquip, itemLocation)
+        if ok and isWarboundUntilEquipped then
+            details.bindingScope = "Warbound Until Equipped"
+            details.isWarbandBound = true
+            details.accountBankAllowed = true
+        end
+    end
+
+    if details.isBound then
+        details.isSoulbound = true
+        details.accountBankAllowed = false
+        if C_Bank and C_Bank.IsItemAllowedInBankType and Enum and Enum.BankType and Enum.BankType.Account then
+            local ok, allowed = pcall(C_Bank.IsItemAllowedInBankType, Enum.BankType.Account, itemLocation)
+            if ok and allowed then
+                details.bindingScope = "Warbound"
+                details.isSoulbound = false
+                details.isWarbandBound = true
+                details.accountBankAllowed = true
+            else
+                details.bindingScope = details.bindingScope == "Quest" and "Quest" or "Soulbound"
+            end
+        else
+            details.bindingScope = details.bindingScope == "Quest" and "Quest" or "Soulbound"
+        end
+    elseif details.bindingScope ~= "Warbound Until Equipped" then
+        details.accountBankAllowed = true
+        -- Unbound items may still be warband-eligible (e.g. current-expansion crafting mats
+        -- the game allows in the account bank). Check explicitly so Organize can route them.
+        if not details.isWarbandBound and itemLocation
+            and C_Bank and C_Bank.IsItemAllowedInBankType
+            and Enum and Enum.BankType and Enum.BankType.Account then
+            local ok, allowed = pcall(C_Bank.IsItemAllowedInBankType, Enum.BankType.Account, itemLocation)
+            if ok and allowed then
+                details.isWarbandBound = true
+            end
+        end
+    end
+
+    return details
 end
 
 local function GetItemType(item)
@@ -146,11 +557,73 @@ local function IsOldExpansion(expansionID)
     return expansionID ~= nil and expansionID < Data.CurrentExpansionID
 end
 
+local function IsUnknownExpansion(expansionID)
+    return expansionID == nil
+end
+
 local function SetBankOrRecallDecision(item, bankGroup, bankReason, recallReason)
     if item.scope == BANK_SCOPE then
         return "Recommended recall candidates", Data.Recommendations.RECALL, Data.Actions.RECALL, recallReason or bankReason
     end
     return bankGroup, Data.Recommendations.BANK, Data.Actions.BANK, bankReason
+end
+
+local function IsTransferableSharedValueItem(item, itemType)
+    itemType = itemType or item.typeTag
+    return item.accountBankAllowed
+        and itemType ~= Data.ItemTypes.EQUIPMENT
+        and itemType ~= Data.ItemTypes.PROFESSION
+        and itemType ~= Data.ItemTypes.QUEST
+        and itemType ~= Data.ItemTypes.SEASONAL
+end
+
+-- Returns a set of item subclassIDs (classID 7) used by this character's professions.
+-- Returns an empty table when profession data is unavailable; callers must treat that
+-- as "unknown" and fall back to the conservative default (keep mats on this character).
+local function GetCharacterProfessionSubclasses()
+    local subclasses = {}
+    if not GetProfessions or not GetProfessionInfo then
+        return subclasses
+    end
+    local slots = { GetProfessions() }
+    for _, slot in ipairs(slots) do
+        if slot then
+            local _, _, _, _, _, _, skillLine = GetProfessionInfo(slot)
+            local mapped = Data.ProfessionSubclasses and Data.ProfessionSubclasses[skillLine]
+            if mapped then
+                for _, sc in ipairs(mapped) do
+                    subclasses[sc] = true
+                end
+            end
+        end
+    end
+    return subclasses
+end
+
+local function GetPreferredProfessionStorage(item, charProfSubclasses)
+    local noProfData = not next(charProfSubclasses)
+    local isCharMat = noProfData or (charProfSubclasses[item.subclassID or -1] == true)
+    if isCharMat then
+        if #REAGENT_BANK_IDS > 0 then
+            return STORAGE_REAGENT_BANK, "Crafting material for this character belongs in the reagent bank"
+        end
+        return STORAGE_PRIVATE_BANK, "Crafting material for this character belongs in character storage"
+    elseif item.accountBankAllowed then
+        return STORAGE_WARBAND_BANK, "Crafting material for other professions belongs in shared storage"
+    end
+    return STORAGE_PRIVATE_BANK, "Bound crafting material belongs in character storage"
+end
+
+local function GetPreferredBankStorage(item, itemType, charProfSubclasses)
+    itemType = itemType or item.typeTag
+    if itemType == Data.ItemTypes.PROFESSION then
+        return GetPreferredProfessionStorage(item, charProfSubclasses or GetCharacterProfessionSubclasses())
+    elseif IsTransferableSharedValueItem(item, itemType) then
+        return STORAGE_WARBAND_BANK, IsUnknownExpansion(item.expansionID)
+            and "Transferable item with unknown expansion belongs in shared storage"
+            or "Transferable non-profession item belongs in shared storage"
+    end
+    return STORAGE_PRIVATE_BANK, "Item can be stored in the private bank"
 end
 
 local function BuildDecision(item)
@@ -169,6 +642,7 @@ local function BuildDecision(item)
     local recommendation = Data.Recommendations.REVIEW
     local action = Data.Actions.REVIEW
     local reason = "Needs player review before moving"
+    local bankTargetStorage
 
     if rule and rule.ignore then
         group = "Ignored"
@@ -232,6 +706,11 @@ local function BuildDecision(item)
             "Old expansion material",
             "Old expansion material is available to recall from bank"
         )
+    elseif item.scope == BAG_SCOPE and itemType == Data.ItemTypes.PROFESSION then
+        bankTargetStorage, reason = GetPreferredBankStorage(item, itemType)
+        group = "Recommended bank candidates"
+        recommendation = Data.Recommendations.BANK
+        action = Data.Actions.BANK
     elseif IsOldExpansion(expansionID) and itemType ~= Data.ItemTypes.EQUIPMENT then
         group, recommendation, action, reason = SetBankOrRecallDecision(
             item,
@@ -247,6 +726,17 @@ local function BuildDecision(item)
         recommendation = Data.Recommendations.RECALL
         action = Data.Actions.RECALL
         reason = "Current expansion item is available to recall from bank"
+    elseif item.scope == BAG_SCOPE and item.bindingScope == "Warbound Until Equipped" then
+        bankTargetStorage = STORAGE_WARBAND_BANK
+        group = "Recommended bank candidates"
+        recommendation = Data.Recommendations.BANK
+        action = Data.Actions.BANK
+        reason = "Warbound-until-equipped item belongs in shared storage"
+    elseif item.scope == BAG_SCOPE and IsTransferableSharedValueItem(item, itemType) then
+        bankTargetStorage, reason = GetPreferredBankStorage(item, itemType)
+        group = "Recommended bank candidates"
+        recommendation = Data.Recommendations.BANK
+        action = Data.Actions.BANK
     elseif IsCurrentExpansion(expansionID) then
         group = "Protected / blocked"
         recommendation = Data.Recommendations.BLOCKED
@@ -255,17 +745,15 @@ local function BuildDecision(item)
         table.insert(blocked, "Current or unknown expansion")
     end
 
-    local eligibleForBankMove = action == Data.Actions.BANK
-        and item.scope == BAG_SCOPE
-        and ns.DB.context.bankOpen
-        and not ns.DB.context.inCombat
-        and #blocked == 0
+    local eligibleForBankMove = item.scope == BAG_SCOPE
+        and not (rule and (rule.ignore or rule.protect or rule.neverMove))
 
-    local eligibleForRecall = action == Data.Actions.RECALL
-        and item.scope == BANK_SCOPE
-        and ns.DB.context.bankOpen
-        and not ns.DB.context.inCombat
-        and #blocked == 0
+    local eligibleForRecall = item.scope == BANK_SCOPE
+        and not (rule and (rule.ignore or rule.protect or rule.neverMove))
+
+    if item.scope == BAG_SCOPE and not bankTargetStorage then
+        bankTargetStorage = GetPreferredBankStorage(item, itemType)
+    end
 
     item.expansionID = expansionID
     item.expansionName = GetExpansionName(expansionID)
@@ -277,6 +765,7 @@ local function BuildDecision(item)
     item.blockedReasons = blocked
     item.eligibleForBankMove = eligibleForBankMove
     item.eligibleForRecall = eligibleForRecall
+    item.bankTargetStorage = bankTargetStorage
     item.ruleStatus = rule and "custom" or "none"
     item.key = LocationKey(item)
 
@@ -293,6 +782,8 @@ local function GetAllDecisions()
     end
     return decisions
 end
+
+local IsItemWarboundUntilEquipped
 
 local function MatchesFilter(item)
     local ui = ns.DB.ui
@@ -314,11 +805,32 @@ local function MatchesFilter(item)
         if not IsOldExpansion(item.expansionID) then
             return false
         end
+    elseif ui.expansionFilter == EXPANSION_FILTER_UNKNOWN then
+        if not IsUnknownExpansion(item.expansionID) then
+            return false
+        end
     elseif ui.expansionFilter and ui.expansionFilter ~= EXPANSION_FILTER_ALL and item.expansionID ~= ui.expansionFilter then
         return false
     end
-    if ui.typeFilter and ui.typeFilter ~= "All" and item.typeTag ~= ui.typeFilter then
-        return false
+    if ui.typeFilter and ui.typeFilter ~= "All" then
+        if ui.typeFilter == TYPE_FILTER_REAGENT then
+            local isInReagentBank = item.storageKind == STORAGE_REAGENT_BANK
+            local goesToReagentBank = item.bankTargetStorage == STORAGE_REAGENT_BANK
+            local isProfessionMaterial = item.typeTag == Data.ItemTypes.PROFESSION
+            if not isInReagentBank and not goesToReagentBank and not isProfessionMaterial then
+                return false
+            end
+        elseif ui.typeFilter == TYPE_FILTER_BOE then
+            if item.typeTag ~= Data.ItemTypes.BOE or IsItemWarboundUntilEquipped(item) then
+                return false
+            end
+        elseif ui.typeFilter == TYPE_FILTER_WUE then
+            if not IsItemWarboundUntilEquipped(item) then
+                return false
+            end
+        elseif item.typeTag ~= ui.typeFilter then
+            return false
+        end
     end
     if ui.locationFilter == "Bags" and item.scope ~= BAG_SCOPE then
         return false
@@ -339,6 +851,226 @@ local function MatchesFilter(item)
     return true
 end
 
+IsItemWarboundUntilEquipped = function(item)
+    if item.bindingScope == "Warbound Until Equipped" then
+        return true
+    end
+
+    -- WuE should be a subset of BoE-like behavior; reject explicit non-BoE binds.
+    if item.bindType and item.bindType ~= 2 then
+        return false
+    end
+
+    if not (ItemLocation and C_Item and C_Item.IsBoundToAccountUntilEquip) then
+        return false
+    end
+    if type(item.bagID) ~= "number" or type(item.slot) ~= "number" then
+        return false
+    end
+    local itemLocation = ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot)
+    if not itemLocation then
+        return false
+    end
+    local ok, isWuE = pcall(C_Item.IsBoundToAccountUntilEquip, itemLocation)
+    return ok and isWuE and true or false
+end
+
+local function TextMatchesSearch(searchText, parts)
+    local search = searchText and searchText:lower() or ""
+    if search == "" then
+        return true
+    end
+    local haystack = table.concat(parts, " "):lower()
+    return haystack:find(search, 1, true) ~= nil
+end
+
+local function PlanMatchesSearch(plan, searchText)
+    local item = plan.item or {}
+    return TextMatchesSearch(searchText, {
+        item.name or "",
+        tostring(item.itemID or ""),
+        item.expansionName or "",
+        item.typeTag or "",
+        item.location or "",
+        plan.currentStorage or "",
+        plan.targetStorage or "",
+        plan.action or "",
+        plan.reason or "",
+        plan.blockedReason or "",
+    })
+end
+
+local GetStorageBagIDs
+local FindFreeSlot
+local FindFreeNormalBagSlot
+
+local function GetCandidateBankStorages(item)
+    local preferred = item.bankTargetStorage or GetPreferredBankStorage(item, item.typeTag)
+    local ordered = { preferred, STORAGE_PRIVATE_BANK, STORAGE_WARBAND_BANK, STORAGE_REAGENT_BANK }
+    local seen = {}
+    local candidates = {}
+    for _, storage in ipairs(ordered) do
+        if type(storage) == "string" and not seen[storage] and #GetStorageBagIDs(storage) > 0 then
+            seen[storage] = true
+            table.insert(candidates, storage)
+        end
+    end
+    return candidates
+end
+
+local function GetMoveBlockReason(item)
+    if ns.DB.context.inCombat then
+        return "Cannot move items in combat"
+    elseif not ns.DB.context.bankOpen then
+        return "Open the bank first"
+    end
+
+    if ns.DB.ui.mode == "Dump to Bank" then
+        if item.scope ~= BAG_SCOPE then
+            return "Only bag items can be banked from this mode"
+        elseif item.rule and item.rule.ignore then
+            return "Ignored by item rule"
+        elseif item.rule and item.rule.protect then
+            return "Protected by item rule"
+        elseif item.rule and item.rule.neverMove then
+            return "Never move rule"
+        end
+
+        local candidates = GetCandidateBankStorages(item)
+        if #candidates == 0 then
+            return "No bank storage is available"
+        end
+        for _, storage in ipairs(candidates) do
+            if FindFreeSlot(storage, {}, item) then
+                item.bankTargetStorage = storage
+                return nil
+            end
+        end
+        return "No empty slots in available bank storage"
+    elseif ns.DB.ui.mode == "Recall from Bank" then
+        if item.scope ~= BANK_SCOPE then
+            return "Only bank items can be recalled from this mode"
+        elseif item.rule and item.rule.ignore then
+            return "Ignored by item rule"
+        elseif item.rule and item.rule.protect then
+            return "Protected by item rule"
+        elseif item.rule and item.rule.neverMove then
+            return "Never move rule"
+        elseif not FindFreeNormalBagSlot({}, item) then
+            return "No empty normal bag slots"
+        end
+    end
+    return nil
+end
+
+local function MoveItemToBankTarget(item, takenSlots)
+    if not CContainer.PickupContainerItem then
+        return false, "Container pickup API unavailable"
+    end
+
+    local candidates = GetCandidateBankStorages(item)
+    if #candidates == 0 then
+        return false, "No bank storage is available"
+    end
+
+    for _, storage in ipairs(candidates) do
+        local toBag, toSlot, toKey = FindFreeSlot(storage, takenSlots or {}, item)
+        if toBag and toSlot then
+            item.bankTargetStorage = storage
+            CContainer.PickupContainerItem(item.bagID, item.slot)
+            CContainer.PickupContainerItem(toBag, toSlot)
+            if GetCursorInfo() ~= "item" then
+                if takenSlots and toKey then
+                    takenSlots[toKey] = true
+                end
+                return true
+            end
+            ClearCursor()
+        end
+    end
+
+    return false, "No empty compatible slots in available bank storage"
+end
+
+FindFreeNormalBagSlot = function(takenSlots, item)
+    if item and item.itemID and (item.maxStack or 1) > 1 then
+        for _, bagID in ipairs(NORMAL_BAG_IDS) do
+            local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+            for slot = 1, numSlots do
+                local key = SlotKey(bagID, slot)
+                if not takenSlots[key] and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
+                    local info = CContainer.GetContainerItemInfo(bagID, slot)
+                    local stackCount = info and info.stackCount or 0
+                    if stackCount < item.maxStack then
+                        return bagID, slot, key
+                    end
+                end
+            end
+        end
+    end
+
+    for _, bagID in ipairs(NORMAL_BAG_IDS) do
+        local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+        for slot = 1, numSlots do
+            local key = SlotKey(bagID, slot)
+            if not takenSlots[key] and not CContainer.GetContainerItemID(bagID, slot) then
+                return bagID, slot, key
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+local function MoveBankItemToNormalBag(item, takenSlots)
+    local toBag, toSlot, toKey = FindFreeNormalBagSlot(takenSlots or {}, item)
+    if not toBag or not toSlot then
+        return false, "No empty normal bag slots"
+    end
+    if not CContainer.PickupContainerItem then
+        return false, "Container pickup API unavailable"
+    end
+    CContainer.PickupContainerItem(item.bagID, item.slot)
+    CContainer.PickupContainerItem(toBag, toSlot)
+    if GetCursorInfo() == "item" then
+        ClearCursor()
+        return false, "Normal bag slot rejected item"
+    end
+    if takenSlots and toKey then
+        takenSlots[toKey] = true
+    end
+    return true
+end
+
+local function MoveBankItemToStorageTarget(item, targetStorage, takenSlots)
+    local toBag, toSlot, toKey = FindFreeSlot(targetStorage, takenSlots or {}, item)
+    if toBag and toSlot and toKey and CContainer.PickupContainerItem then
+        CContainer.PickupContainerItem(item.bagID, item.slot)
+        CContainer.PickupContainerItem(toBag, toSlot)
+        if GetCursorInfo() == "item" then
+            ClearCursor()
+            return false, "Target slot rejected item"
+        end
+        if takenSlots then
+            takenSlots[toKey] = true
+        end
+        return true
+    end
+
+    if not CContainer.PickupContainerItem then
+        return false, "Container pickup API unavailable"
+    end
+    return false, "No empty slots in " .. targetStorage
+end
+
+local function IsMoveEligibleForCurrentMode(item)
+    if ns.DB.ui.mode == "Dump to Bank" then
+        return item.eligibleForBankMove and true or false
+    elseif ns.DB.ui.mode == "Recall from Bank" then
+        return item.eligibleForRecall and true or false
+    end
+    return false
+end
+
 local function SortDecisions(a, b)
     local ai, bi = 99, 99
     for index, group in ipairs(GROUP_ORDER) do
@@ -349,6 +1081,209 @@ local function SortDecisions(a, b)
         return ai < bi
     end
     return (a.name or "") < (b.name or "")
+end
+
+function GetStorageBagIDs(storageKind)
+    if storageKind == STORAGE_PRIVATE_BANK then
+        return PRIVATE_BANK_IDS
+    elseif storageKind == STORAGE_REAGENT_BANK then
+        return REAGENT_BANK_IDS
+    elseif storageKind == STORAGE_WARBAND_BANK then
+        return WARBAND_BANK_IDS
+    end
+    return {}
+end
+
+function FindFreeSlot(storageKind, takenSlots, item)
+    if item and item.itemID and (item.maxStack or 1) > 1 then
+        for _, bagID in ipairs(GetStorageBagIDs(storageKind)) do
+            local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+            for slot = 1, numSlots do
+                local key = SlotKey(bagID, slot)
+                if not takenSlots[key] and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
+                    local info = CContainer.GetContainerItemInfo(bagID, slot)
+                    local stackCount = info and info.stackCount or 0
+                    if stackCount < item.maxStack then
+                        return bagID, slot, key
+                    end
+                end
+            end
+        end
+    end
+
+    for _, bagID in ipairs(GetStorageBagIDs(storageKind)) do
+        local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+        for slot = 1, numSlots do
+            local key = SlotKey(bagID, slot)
+            if not takenSlots[key] and not CContainer.GetContainerItemID(bagID, slot) then
+                return bagID, slot, key
+            end
+        end
+    end
+    return nil, nil, nil
+end
+
+local function IsSharedValueItem(item)
+    if item.accountBankAllowed and (item.isWarbandBound or item.bindingScope == "Warbound" or item.bindingScope == "Warbound Until Equipped") then
+        return true
+    end
+    if item.accountBankAllowed and item.typeTag == Data.ItemTypes.BOE then
+        return true
+    end
+    if item.accountBankAllowed and IsOldExpansion(item.expansionID) and item.typeTag ~= Data.ItemTypes.EQUIPMENT then
+        return true
+    end
+    if IsTransferableSharedValueItem(item) then
+        return true
+    end
+    return false
+end
+
+local function BuildOrganizationPlan(item, charProfSubclasses)
+    if item.scope ~= BANK_SCOPE then
+        return nil
+    end
+
+    local currentStorage = item.storageKind or GetStorageKindForBagID(item.bagID, item.scope)
+    local targetStorage = currentStorage
+    local reason = "Already in the preferred bank tier"
+
+    if item.rule and (item.rule.ignore or item.rule.protect or item.rule.neverMove) then
+        reason = "Rule-protected item"
+    elseif item.typeTag == Data.ItemTypes.SEASONAL or item.typeTag == Data.ItemTypes.QUEST then
+        targetStorage = STORAGE_PRIVATE_BANK
+        reason = "Character/session item belongs in private storage"
+    elseif item.isSoulbound or item.bindingScope == "Soulbound" or item.bindingScope == "Quest" then
+        targetStorage = STORAGE_PRIVATE_BANK
+        reason = "Soulbound or character-bound item"
+    elseif item.typeTag == Data.ItemTypes.PROFESSION then
+        targetStorage, reason = GetPreferredBankStorage(item, item.typeTag, charProfSubclasses)
+        if currentStorage == targetStorage then
+            reason = "Already in the preferred bank tier"
+        end
+    elseif IsSharedValueItem(item) then
+        targetStorage = STORAGE_WARBAND_BANK
+        if item.typeTag == Data.ItemTypes.BOE then
+            reason = "BoE equipment can be shared through Warband storage"
+        elseif item.bindingScope == "Warbound" or item.bindingScope == "Warbound Until Equipped" then
+            reason = "Warband-bound item belongs in Warband storage"
+        elseif item.isWarbandBound then
+            reason = "Item is eligible for Warband storage"
+        elseif IsOldExpansion(item.expansionID) then
+            reason = "Old transferable item is better in shared storage"
+        elseif IsUnknownExpansion(item.expansionID) then
+            reason = "Transferable item with unknown expansion is better in shared storage"
+        else
+            reason = "Transferable non-profession item is better in shared storage"
+        end
+    end
+
+    local needsMove = targetStorage ~= currentStorage
+    local targetAvailable = #GetStorageBagIDs(targetStorage) > 0
+    local hasFreeSlot = false
+    if needsMove and targetAvailable then
+        hasFreeSlot = FindFreeSlot(targetStorage, {}, item) ~= nil
+    end
+
+    return {
+        key = "organize:" .. item.key,
+        item = item,
+        currentStorage = currentStorage,
+        targetStorage = targetStorage,
+        reason = reason,
+        needsMove = needsMove,
+        movable = needsMove and targetAvailable and hasFreeSlot and not ns.DB.context.inCombat,
+        blockedReason = needsMove and (not targetAvailable and "Target bank is not available" or (not hasFreeSlot and "No empty target slots" or nil)) or nil,
+    }
+end
+
+local function GetOrganizationPlans(showAll)
+    local charProfSubclasses = GetCharacterProfessionSubclasses()
+    local plans = {}
+    for _, item in ipairs(GetAllDecisions()) do
+        local plan = BuildOrganizationPlan(item, charProfSubclasses)
+        if plan and (showAll or plan.needsMove) then
+            table.insert(plans, plan)
+        end
+    end
+    table.sort(plans, function(a, b)
+        if a.movable ~= b.movable then
+            return a.movable
+        end
+        if a.targetStorage ~= b.targetStorage then
+            return a.targetStorage < b.targetStorage
+        end
+        return (a.item.name or "") < (b.item.name or "")
+    end)
+    return plans
+end
+
+local function GetVendorBlockReason(item)
+    local rule = item.rule
+    if rule and rule.ignore then
+        return "Ignored by item rule"
+    elseif rule and rule.protect then
+        return "Protected by item rule"
+    elseif rule and rule.neverSell then
+        return "Never sell rule"
+    elseif item.typeTag ~= Data.ItemTypes.CONSUMABLE then
+        return "Only old consumables are vendor candidates"
+    elseif not IsOldExpansion(item.expansionID) then
+        return "Not old expansion content"
+    elseif not item.sellPrice or item.sellPrice <= 0 then
+        return "No vendor value"
+    elseif item.quality == nil or item.quality > 2 then
+        return "Quality is above conservative auto-sell threshold"
+    end
+    return nil
+end
+
+local function BuildVendorPlan(item)
+    if item.scope ~= BAG_SCOPE and item.scope ~= BANK_SCOPE then
+        return nil
+    end
+
+    local blockReason = GetVendorBlockReason(item)
+    local isCandidate = blockReason == nil
+    local action = item.scope == BANK_SCOPE and VENDOR_ACTION_RECALL or VENDOR_ACTION_SELL
+    local contextReady = action == VENDOR_ACTION_RECALL and ns.DB.context.bankOpen
+        or action == VENDOR_ACTION_SELL and ns.DB.context.vendorOpen
+    local contextMessage = action == VENDOR_ACTION_RECALL and "Open the bank to recall this item" or "Open a vendor to sell this item"
+    local value = (item.sellPrice or 0) * (item.count or 1)
+
+    return {
+        key = "vendor:" .. item.key,
+        item = item,
+        action = action,
+        isCandidate = isCandidate,
+        movable = isCandidate and contextReady and not ns.DB.context.inCombat,
+        blockedReason = blockReason or (contextReady and nil or contextMessage),
+        reason = isCandidate and "Old low-risk consumable with vendor value" or blockReason,
+        value = value,
+    }
+end
+
+local function GetVendorPlans(showAll)
+    local plans = {}
+    for _, item in ipairs(GetAllDecisions()) do
+        local plan = BuildVendorPlan(item)
+        if plan and (showAll or plan.isCandidate) then
+            table.insert(plans, plan)
+        end
+    end
+    table.sort(plans, function(a, b)
+        if a.movable ~= b.movable then
+            return a.movable
+        end
+        if a.action ~= b.action then
+            return a.action < b.action
+        end
+        if a.value ~= b.value then
+            return a.value > b.value
+        end
+        return (a.item.name or "") < (b.item.name or "")
+    end)
+    return plans
 end
 
 local function CreateButton(parent, text, width, height)
@@ -419,6 +1354,7 @@ local function GetExpansionOptions()
     local options = {
         { text = "All expansions",  value = EXPANSION_FILTER_ALL },
         { text = "Not current",     value = EXPANSION_FILTER_NOT_CURRENT },
+        { text = "Unknown expansion", value = EXPANSION_FILTER_UNKNOWN },
     }
     for expansionID = 0, Data.CurrentExpansionID do
         local expansion = Data.Expansions[expansionID]
@@ -446,23 +1382,368 @@ local function RaiseConsole()
     UI.frame:Raise()
 end
 
+local AddRule
+
+local function ShowTooltip(owner, lines)
+    GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+    for index, line in ipairs(lines) do
+        if index == 1 then
+            GameTooltip:AddLine(line, 1, 1, 1)
+        else
+            GameTooltip:AddLine(line, 0.75, 0.85, 1)
+        end
+    end
+    GameTooltip:Show()
+end
+
+local function CreateEmptyLabel(parent, text)
+    local label = CreateLabel(parent, text, "GameFontDisableLarge")
+    label:SetPoint("CENTER", parent, "CENTER", 0, 0)
+    label:SetJustifyH("CENTER")
+    label:Hide()
+    return label
+end
+
+local function SetEmptyLabel(label, isEmpty, text)
+    if not label then
+        return
+    end
+    if text then
+        label:SetText(text)
+    end
+    label:SetShown(isEmpty and true or false)
+end
+
+local function CreateRowRuleMenu(parent, width, options)
+    local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetFrameLevel(parent:GetFrameLevel() + 30)
+    menu:SetSize(width or 100, #options * 22 + 8)
+    menu:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    menu:Hide()
+
+    menu.buttons = {}
+    for index, option in ipairs(options) do
+        local button = CreateButton(menu, option.text, (width or 100) - 8, 20)
+        button:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 22)
+        button:SetScript("OnClick", function()
+            if menu.item then
+                AddRule(menu.item, option.ruleType)
+            end
+            menu:Hide()
+        end)
+        menu.buttons[index] = button
+    end
+
+    return menu
+end
+
+local function ToggleRowRuleMenu(row, item)
+    if not row.ruleMenu then
+        return
+    end
+    row.ruleMenu.item = item
+    row.ruleMenu:ClearAllPoints()
+    row.ruleMenu:SetPoint("TOPRIGHT", row.rule, "BOTTOMRIGHT", 0, -2)
+    row.ruleMenu:SetShown(not row.ruleMenu:IsShown())
+end
+
+local function ToggleConsole(tabName)
+    if UI.frame and UI.frame:IsShown() and (not tabName or UI.activeTab == tabName) then
+        UI.frame:Hide()
+        return
+    end
+    if tabName == "Organize" then
+        Core.ShowOrganizeUI()
+    elseif tabName == "Vendor" then
+        Core.ShowVendorUI()
+    elseif tabName == "Move" then
+        Core.ShowMoveUI()
+    else
+        Core.ShowSummaryUI()
+    end
+end
+
+local function CreateIconButton(name, parent, size, tooltipLines, onClick)
+    local button = CreateFrame("Button", name, parent)
+    button:SetSize(size or 28, size or 28)
+    button:RegisterForClicks("LeftButtonUp")
+    button:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+
+    button.icon = button:CreateTexture(nil, "ARTWORK")
+    button.icon:SetPoint("TOPLEFT", 3, -3)
+    button.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+    button.icon:SetTexture(ICON_TEXTURE)
+
+    button.border = button:CreateTexture(nil, "OVERLAY")
+    button.border:SetPoint("TOPLEFT")
+    button.border:SetPoint("BOTTOMRIGHT")
+    button.border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+
+    button:SetScript("OnClick", onClick)
+    button:SetScript("OnEnter", function(self) ShowTooltip(self, tooltipLines) end)
+    button:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    return button
+end
+
+local function GetLibDBIcon()
+    return LibStub and LibStub:GetLibrary("LibDBIcon-1.0", true) or nil
+end
+
+local function GetLibDataBroker()
+    return LibStub and LibStub:GetLibrary("LibDataBroker-1.1", true) or nil
+end
+
+local function EnsureMinimapIconDB()
+    ns.DB.ui.minimapIcon = ns.DB.ui.minimapIcon or {
+        hide = ns.DB.ui.showMinimapIcon == false,
+        minimapPos = 220,
+        lock = false,
+    }
+    ns.DB.ui.minimapIcon.hide = ns.DB.ui.showMinimapIcon == false
+    return ns.DB.ui.minimapIcon
+end
+
+local function CreateStandardMinimapButton()
+    local LDB = GetLibDataBroker()
+    local LDBIcon = GetLibDBIcon()
+    if not LDB or not LDBIcon then
+        return false
+    end
+
+    if not UI.minimapDataObject then
+        UI.minimapDataObject = LDB:NewDataObject(MINIMAP_LDB_NAME, {
+            type = "launcher",
+            text = DISPLAY_NAME,
+            icon = ICON_TEXTURE,
+            OnClick = function(_, button)
+                if button == "RightButton" then
+                    Core.CreateUI()
+                    UI.activeTab = "Settings"
+                    UI.frame:Show()
+                    Core.RefreshUI()
+                else
+                    ToggleConsole("Summary")
+                end
+            end,
+            OnTooltipShow = function(tooltip)
+                if not tooltip or not tooltip.AddLine then
+                    return
+                end
+                tooltip:AddLine(DISPLAY_NAME, 1, 1, 1)
+                tooltip:AddLine(" ")
+                tooltip:AddLine("Left-click to open the cleanup console.", 0.75, 0.85, 1)
+                tooltip:AddLine("Right-click for settings.", 0.75, 0.85, 1)
+            end,
+        })
+    end
+
+    local minimapIconDB = EnsureMinimapIconDB()
+    if not UI.minimapIconRegistered then
+        LDBIcon:Register(MINIMAP_LDB_NAME, UI.minimapDataObject, minimapIconDB)
+        UI.minimapIconRegistered = true
+    end
+
+    if ns.DB.ui.showMinimapIcon == false then
+        LDBIcon:Hide(MINIMAP_LDB_NAME)
+    else
+        LDBIcon:Show(MINIMAP_LDB_NAME)
+    end
+    if UI.minimapButton then
+        UI.minimapButton:Hide()
+    end
+    return true
+end
+
+local function GetStandardMinimapButton()
+    local LDBIcon = GetLibDBIcon()
+    if LDBIcon and UI.minimapIconRegistered and LDBIcon.GetMinimapButton then
+        return LDBIcon:GetMinimapButton(MINIMAP_LDB_NAME)
+    end
+    return nil
+end
+
+local function CreateMinimapButton()
+    if CreateStandardMinimapButton() then
+        return
+    end
+    if UI.minimapButton or not Minimap then
+        return
+    end
+
+    local button = CreateIconButton("ICantEvenRightNowMinimapButton", Minimap, 32, {
+        DISPLAY_NAME,
+        "Click to open or close the cleanup console.",
+        "Use /icanteven minimap to hide this button.",
+    }, function()
+        ToggleConsole("Summary")
+    end)
+    button:SetFrameStrata("FULLSCREEN_DIALOG")
+    button:SetFrameLevel(80)
+    UI.minimapButton = button
+end
+
+local function PositionMinimapButton()
+    if not UI.minimapButton then
+        return
+    end
+    UI.minimapButton:ClearAllPoints()
+    UI.minimapButton:SetPoint("CENTER", Minimap, "CENTER", 56, -56)
+end
+
+local function PositionFrameButton(button, parent)
+    button:SetParent(UIParent)
+    button:SetFrameStrata("FULLSCREEN_DIALOG")
+    button:SetFrameLevel(math.max((parent:GetFrameLevel() or 1) + 80, 90))
+    button:ClearAllPoints()
+    button:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -34, -30)
+end
+
+local function CreateBankButton(parent)
+    if UI.bankButton then
+        PositionFrameButton(UI.bankButton, parent)
+        return
+    end
+
+    UI.bankButton = CreateIconButton("ICantEvenRightNowBankButton", UIParent, 28, {
+        DISPLAY_NAME,
+        "Open the bank organizer.",
+        "Use /icanteven bankbutton to hide this button.",
+    }, function()
+        Core.ShowOrganizeUI()
+    end)
+    PositionFrameButton(UI.bankButton, parent)
+end
+
+local function CreateVendorButton(parent)
+    if UI.vendorButton then
+        PositionFrameButton(UI.vendorButton, parent)
+        return
+    end
+
+    UI.vendorButton = CreateIconButton("ICantEvenRightNowVendorButton", UIParent, 28, {
+        DISPLAY_NAME,
+        "Open vendor review.",
+        "Use /icanteven vendorbutton to hide this button.",
+    }, function()
+        Core.ShowVendorUI()
+    end)
+    PositionFrameButton(UI.vendorButton, parent)
+end
+
+local function GetShownGlobalFrame(names)
+    for _, name in ipairs(names) do
+        local frame = _G[name]
+        if frame and frame.IsShown and frame:IsShown() then
+            return frame
+        end
+    end
+    return nil
+end
+
+local function GetShownNamedFrameByPattern(namePatterns)
+    if not EnumerateFrames then
+        return nil
+    end
+
+    local frame = EnumerateFrames()
+    while frame do
+        if frame.GetName and frame.IsShown and frame:IsShown() then
+            local name = frame:GetName()
+            if name then
+                local lowerName = name:lower()
+                for _, pattern in ipairs(namePatterns) do
+                    if lowerName:find(pattern, 1, true) then
+                        return frame
+                    end
+                end
+            end
+        end
+        frame = EnumerateFrames(frame)
+    end
+    return nil
+end
+
+local function IsGlobalFrameShown(name)
+    local frame = _G[name]
+    return frame and frame.IsShown and frame:IsShown() or false
+end
+
+function Core.UpdateQuickAccessButtons()
+    if not ns.DB or not ns.DB.ui then
+        return
+    end
+
+    CreateMinimapButton()
+    if UI.minimapIconRegistered then
+        EnsureMinimapIconDB()
+    elseif UI.minimapButton then
+        PositionMinimapButton()
+        UI.minimapButton:SetShown(ns.DB.ui.showMinimapIcon ~= false)
+    end
+
+    -- Bank/vendor launchers are intentionally disabled.
+    if UI.bankButton then
+        UI.bankButton:Hide()
+    end
+    if UI.vendorButton then
+        UI.vendorButton:Hide()
+    end
+end
+
 function Core.UpdateContext()
     local context = ns.DB.context
-    context.bankOpen = BankFrame and BankFrame:IsShown() or false
-    context.reagentBankOpen = ReagentBankFrame and ReagentBankFrame:IsShown() or false
-    context.vendorOpen = MerchantFrame and MerchantFrame:IsShown() or false
-    context.auctionHouseOpen = AuctionHouseFrame and AuctionHouseFrame:IsShown() or false
-    context.mailboxOpen = MailFrame and MailFrame:IsShown() or false
+    context.bankOpen = (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
+    context.reagentBankOpen = IsGlobalFrameShown("ReagentBankFrame")
+    context.vendorOpen = IsGlobalFrameShown("MerchantFrame")
+    context.auctionHouseOpen = IsGlobalFrameShown("AuctionHouseFrame")
+    context.mailboxOpen = IsGlobalFrameShown("MailFrame")
     context.inCombat = InCombatLockdown() and true or false
 end
 
-local function ScanContainerBag(bagID, scope, output)
+function Core.PrintQuickAccessStatus()
+    Core.UpdateContext()
+    Core.UpdateQuickAccessButtons()
+    local minimapButton = GetStandardMinimapButton() or UI.minimapButton
+    local minimapMode = UI.minimapIconRegistered and "LibDBIcon" or "fallback"
+    Print("Quick access: minimap " .. tostring(ns.DB.ui.showMinimapIcon ~= false)
+        .. " / " .. minimapMode .. " button " .. tostring(minimapButton and minimapButton:IsShown())
+    .. "; bank launcher disabled; vendor launcher disabled")
+end
+
+local function ScheduleQuickAccessRefresh()
+    local function RefreshQuickAccess()
+        if ns.DB and ns.DB.context then
+            Core.UpdateContext()
+            Core.UpdateQuickAccessButtons()
+        end
+    end
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0, RefreshQuickAccess)
+        C_Timer.After(0.25, RefreshQuickAccess)
+        C_Timer.After(1.0, RefreshQuickAccess)
+        C_Timer.After(2.5, RefreshQuickAccess)
+    else
+        RefreshQuickAccess()
+    end
+end
+
+local function ScanContainerBag(bagID, scope, output, storageKind)
+    storageKind = storageKind or GetStorageKindForBagID(bagID, scope)
     local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
     for slot = 1, numSlots do
         local info = CContainer.GetContainerItemInfo(bagID, slot)
         local itemID = CContainer.GetContainerItemID(bagID, slot)
         if info and itemID then
             local name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName, maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID = GetItemInfo(itemID)
+            local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
             table.insert(output, {
                 itemID = itemID,
                 name = name or info.itemName or ("Item " .. itemID),
@@ -473,7 +1754,8 @@ local function ScanContainerBag(bagID, scope, output)
                 bagID = bagID,
                 slot = slot,
                 scope = scope,
-                location = scope == BAG_SCOPE and ("Bag " .. bagID .. " Slot " .. slot) or ("Bank " .. bagID .. " Slot " .. slot),
+                storageKind = storageKind,
+                location = FormatItemLocation(bagID, slot, scope, storageKind),
                 classID = classID,
                 subclassID = subclassID,
                 bindType = bindType,
@@ -485,7 +1767,11 @@ local function ScanContainerBag(bagID, scope, output)
                 maxStack = maxStack,
                 sellPrice = sellPrice,
                 expansionID = expansionID,
-                isBound = info.isBound and true or false,
+                isBound = bindingDetails.isBound,
+                isSoulbound = bindingDetails.isSoulbound,
+                isWarbandBound = bindingDetails.isWarbandBound,
+                accountBankAllowed = bindingDetails.accountBankAllowed,
+                bindingScope = bindingDetails.bindingScope,
             })
         end
     end
@@ -519,9 +1805,16 @@ function Core.ScanInventory(scope, quiet)
 
     if scanBank then
         local bankItems = {}
-        for _, bagID in ipairs(BANK_IDS) do
-            ScanContainerBag(bagID, BANK_SCOPE, bankItems)
+        for _, bagID in ipairs(PRIVATE_BANK_IDS) do
+            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_PRIVATE_BANK)
         end
+        for _, bagID in ipairs(REAGENT_BANK_IDS) do
+            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_REAGENT_BANK)
+        end
+        for _, bagID in ipairs(WARBAND_BANK_IDS) do
+            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_WARBAND_BANK)
+        end
+        NormalizeLegacyBankStorageKinds(bankItems)
         ns.DB.scans.bank = bankItems
         ns.DB.lastScan.bank = time()
         if not quiet then
@@ -607,7 +1900,7 @@ local function SetTab(tabName)
     Core.RefreshUI()
 end
 
-local function AddRule(item, ruleType)
+function AddRule(item, ruleType)
     local rule = EnsureRule(item.itemID)
     rule.createdFrom = item.name or "Move tab"
     if ruleType == "Protect" then
@@ -620,6 +1913,8 @@ local function AddRule(item, ruleType)
         rule.actionOverride = Data.Actions.RECALL
     elseif ruleType == "Never Move" then
         rule.neverMove = true
+    elseif ruleType == "Never Sell" then
+        rule.neverSell = true
     end
     Core.RefreshUI()
 end
@@ -665,8 +1960,11 @@ local function BuildSummaryTab(parent)
 end
 
 local function BuildMoveTab(parent)
+    parent.help = CreateLabel(parent, "Move flow: use checkboxes for batch actions, or act on a single eligible row.", "GameFontHighlight")
+    parent.help:SetPoint("TOPLEFT", 0, 0)
+
     parent.modeBank = CreateButton(parent, "Dump to Bank", 120)
-    parent.modeBank:SetPoint("TOPLEFT", 0, 0)
+    parent.modeBank:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -10)
     parent.modeBank:SetScript("OnClick", function()
         ns.DB.ui.mode = "Dump to Bank"
         Core.RefreshUI()
@@ -691,8 +1989,10 @@ local function BuildMoveTab(parent)
         { text = Data.ItemTypes.QUEST, value = Data.ItemTypes.QUEST },
         { text = Data.ItemTypes.SEASONAL, value = Data.ItemTypes.SEASONAL },
         { text = Data.ItemTypes.PROFESSION, value = Data.ItemTypes.PROFESSION },
+        { text = TYPE_FILTER_REAGENT, value = TYPE_FILTER_REAGENT },
         { text = Data.ItemTypes.CONSUMABLE, value = Data.ItemTypes.CONSUMABLE },
-        { text = Data.ItemTypes.BOE, value = Data.ItemTypes.BOE },
+        { text = TYPE_FILTER_BOE, value = TYPE_FILTER_BOE },
+        { text = TYPE_FILTER_WUE, value = TYPE_FILTER_WUE },
         { text = Data.ItemTypes.UNKNOWN, value = Data.ItemTypes.UNKNOWN },
     }, function(value)
         ns.DB.ui.typeFilter = value
@@ -720,10 +2020,12 @@ local function BuildMoveTab(parent)
         Core.RefreshUI()
     end)
 
+    parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
+    parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -14)
     parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     parent.search:SetSize(170, 24)
     parent.search:SetAutoFocus(false)
-    parent.search:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -10)
+    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
     parent.search:SetScript("OnTextChanged", function(self)
         ns.DB.ui.search = self:GetText() or ""
         UI.page = 1
@@ -740,6 +2042,8 @@ local function BuildMoveTab(parent)
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No bank organization plans.")
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No matching move candidates.")
 
     parent.rows = {}
     for i = 1, UI.pageSize do
@@ -755,20 +2059,22 @@ local function BuildMoveTab(parent)
         row.icon:SetPoint("LEFT", row.check, "RIGHT", -2, 0)
         row.nameText = CreateLabel(row, "", "GameFontHighlightSmall")
         row.nameText:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -4)
-        row.nameText:SetWidth(420)
+        row.nameText:SetWidth(460)
         row.nameText:SetWordWrap(false)
         row.detailText = CreateLabel(row, "", "GameFontDisableSmall")
         row.detailText:SetPoint("TOPLEFT", row.nameText, "BOTTOMLEFT", 0, -2)
-        row.detailText:SetWidth(420)
+        row.detailText:SetWidth(460)
         row.detailText:SetWordWrap(false)
-        row.bank = CreateButton(row, "Bank", 50, 22)
-        row.bank:SetPoint("RIGHT", row, "RIGHT", -180, 0)
-        row.recall = CreateButton(row, "Recall", 56, 22)
-        row.recall:SetPoint("RIGHT", row, "RIGHT", -120, 0)
-        row.protect = CreateButton(row, "Protect", 58, 22)
-        row.protect:SetPoint("RIGHT", row, "RIGHT", -60, 0)
-        row.ignore = CreateButton(row, "Ignore", 56, 22)
-        row.ignore:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        row.action = CreateButton(row, "Act", 60, 22)
+        row.action:SetPoint("RIGHT", row, "RIGHT", -86, 0)
+        row.rule = CreateButton(row, "+Rule", 70, 22)
+        row.rule:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        row.ruleMenu = CreateRowRuleMenu(row, 104, {
+            { text = "Always Bank", ruleType = "Always Bank" },
+            { text = "Always Recall", ruleType = "Always Recall" },
+            { text = "Protect", ruleType = "Protect" },
+            { text = "Ignore", ruleType = "Ignore" },
+        })
         parent.rows[i] = row
     end
 
@@ -789,7 +2095,7 @@ local function BuildMoveTab(parent)
     parent.selectRecommended:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -7)
     parent.selectRecommended:SetScript("OnClick", function() Core.SelectRecommended() end)
 
-    parent.selectVisible = CreateButton(parent, "Select Visible", 110)
+    parent.selectVisible = CreateButton(parent, "Select Page", 110)
     parent.selectVisible:SetParent(parent.footer)
     parent.selectVisible:SetPoint("LEFT", parent.selectRecommended, "RIGHT", 8, 0)
     parent.selectVisible:SetScript("OnClick", function() Core.SelectVisible() end)
@@ -828,23 +2134,319 @@ local function BuildMoveTab(parent)
     parent.pageText:SetPoint("LEFT", parent.next, "RIGHT", 8, 0)
 end
 
+local function BuildOrganizeTab(parent)
+    parent.help = CreateLabel(parent, "Bank organizer: move selected stacks between private and Warband bank storage.", "GameFontHighlight")
+    parent.help:SetPoint("TOPLEFT", 0, 0)
+
+    parent.rescan = CreateButton(parent, "Rescan Bank", 110)
+    parent.rescan:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -12)
+    parent.rescan:SetScript("OnClick", function() Core.ScanInventory("all") end)
+
+    parent.showAll = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.showAll:SetPoint("LEFT", parent.rescan, "RIGHT", 12, 0)
+    parent.showAllLabel = CreateLabel(parent, "Show already optimized", "GameFontHighlightSmall")
+    parent.showAllLabel:SetPoint("LEFT", parent.showAll, "RIGHT", -2, 0)
+    parent.showAll:SetScript("OnClick", function(self)
+        ns.DB.ui.organizerShowAll = self:GetChecked() and true or false
+        UI.page = 1
+        Core.RefreshUI()
+    end)
+
+    parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
+    parent.searchLabel:SetPoint("LEFT", parent.showAllLabel, "RIGHT", 18, 0)
+    parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.search:SetSize(160, 24)
+    parent.search:SetAutoFocus(false)
+    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
+    parent.search:SetScript("OnTextChanged", function(self)
+        ns.DB.ui.organizerSearch = self:GetText() or ""
+        UI.page = 1
+        Core.RefreshUI()
+    end)
+
+    parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.listFrame:SetSize(720, 348)
+    parent.listFrame:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No vendor plans.")
+
+    parent.rows = {}
+    for i = 1, ORGANIZE_PAGE_SIZE do
+        local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
+        row:SetSize(710, 38)
+        row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+        row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * 42)
+        row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        row.check:SetPoint("LEFT", 0, 0)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(24, 24)
+        row.icon:SetPoint("LEFT", row.check, "RIGHT", -2, 0)
+        row.nameText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.nameText:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -4)
+        row.nameText:SetWidth(620)
+        row.nameText:SetWordWrap(false)
+        row.detailText = CreateLabel(row, "", "GameFontDisableSmall")
+        row.detailText:SetPoint("TOPLEFT", row.nameText, "BOTTOMLEFT", 0, -2)
+        row.detailText:SetWidth(620)
+        row.detailText:SetWordWrap(false)
+        parent.rows[i] = row
+    end
+
+    parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.footer:SetSize(720, 54)
+    parent.footer:SetPoint("BOTTOMLEFT", 0, 0)
+    parent.footer:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+
+    parent.selectMovable = CreateButton(parent, "Select Page", 110)
+    parent.selectMovable:SetParent(parent.footer)
+    parent.selectMovable:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -7)
+    parent.selectMovable:SetScript("OnClick", function() Core.SelectOrganizerMovable() end)
+
+    parent.clear = CreateButton(parent, "Clear Selection", 120)
+    parent.clear:SetParent(parent.footer)
+    parent.clear:SetPoint("LEFT", parent.selectMovable, "RIGHT", 8, 0)
+    parent.clear:SetScript("OnClick", function()
+        UI.organizeSelected = {}
+        Core.RefreshUI()
+    end)
+
+    parent.move = CreateButton(parent, "Move Selected", 120)
+    parent.move:SetParent(parent.footer)
+    parent.move:SetPoint("LEFT", parent.clear, "RIGHT", 8, 0)
+    parent.move:SetScript("OnClick", function() Core.MoveOrganizerSelected() end)
+
+    parent.prev = CreateButton(parent, "Prev", 60)
+    parent.prev:SetParent(parent.footer)
+    parent.prev:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -29)
+    parent.prev:SetScript("OnClick", function()
+        UI.page = math.max(1, UI.page - 1)
+        Core.RefreshUI()
+    end)
+
+    parent.next = CreateButton(parent, "Next", 60)
+    parent.next:SetParent(parent.footer)
+    parent.next:SetPoint("LEFT", parent.prev, "RIGHT", 6, 0)
+    parent.next:SetScript("OnClick", function()
+        UI.page = UI.page + 1
+        Core.RefreshUI()
+    end)
+
+    parent.pageText = CreateLabel(parent, "", "GameFontHighlightSmall")
+    parent.pageText:SetParent(parent.footer)
+    parent.pageText:SetPoint("LEFT", parent.next, "RIGHT", 8, 0)
+end
+
+local function BuildVendorTab(parent)
+    parent.help = CreateLabel(parent, "Vendor flow: recall old low-value consumables from bank, then sell them at a vendor.", "GameFontHighlight")
+    parent.help:SetPoint("TOPLEFT", 0, 0)
+
+    parent.rescan = CreateButton(parent, "Rescan All", 100)
+    parent.rescan:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -12)
+    parent.rescan:SetScript("OnClick", function() Core.ScanInventory("all") end)
+
+    parent.showAll = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.showAll:SetPoint("LEFT", parent.rescan, "RIGHT", 12, 0)
+    parent.showAllLabel = CreateLabel(parent, "Show rejected items", "GameFontHighlightSmall")
+    parent.showAllLabel:SetPoint("LEFT", parent.showAll, "RIGHT", -2, 0)
+    parent.showAll:SetScript("OnClick", function(self)
+        ns.DB.ui.vendorShowAll = self:GetChecked() and true or false
+        UI.page = 1
+        Core.RefreshUI()
+    end)
+
+    parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
+    parent.searchLabel:SetPoint("LEFT", parent.showAllLabel, "RIGHT", 18, 0)
+    parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.search:SetSize(160, 24)
+    parent.search:SetAutoFocus(false)
+    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
+    parent.search:SetScript("OnTextChanged", function(self)
+        ns.DB.ui.vendorSearch = self:GetText() or ""
+        UI.page = 1
+        Core.RefreshUI()
+    end)
+
+    parent.context = CreateLabel(parent, "", "GameFontHighlightSmall")
+    parent.context:SetPoint("LEFT", parent.search, "RIGHT", 18, 0)
+
+    parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.listFrame:SetSize(720, 348)
+    parent.listFrame:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
+
+    parent.rows = {}
+    for i = 1, VENDOR_PAGE_SIZE do
+        local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
+        row:SetSize(710, 38)
+        row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+        row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * 42)
+        row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        row.check:SetPoint("LEFT", 0, 0)
+        row.icon = row:CreateTexture(nil, "ARTWORK")
+        row.icon:SetSize(24, 24)
+        row.icon:SetPoint("LEFT", row.check, "RIGHT", -2, 0)
+        row.nameText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.nameText:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -4)
+        row.nameText:SetWidth(500)
+        row.nameText:SetWordWrap(false)
+        row.detailText = CreateLabel(row, "", "GameFontDisableSmall")
+        row.detailText:SetPoint("TOPLEFT", row.nameText, "BOTTOMLEFT", 0, -2)
+        row.detailText:SetWidth(500)
+        row.detailText:SetWordWrap(false)
+        row.neverSell = CreateButton(row, "+Rule", 70, 22)
+        row.neverSell:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        parent.rows[i] = row
+    end
+
+    parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.footer:SetSize(720, 54)
+    parent.footer:SetPoint("BOTTOMLEFT", 0, 0)
+    parent.footer:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+
+    parent.selectReady = CreateButton(parent, "Select Page", 110)
+    parent.selectReady:SetParent(parent.footer)
+    parent.selectReady:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -7)
+    parent.selectReady:SetScript("OnClick", function() Core.SelectVendorReady() end)
+
+    parent.clear = CreateButton(parent, "Clear Selection", 120)
+    parent.clear:SetParent(parent.footer)
+    parent.clear:SetPoint("LEFT", parent.selectReady, "RIGHT", 8, 0)
+    parent.clear:SetScript("OnClick", function()
+        UI.vendorSelected = {}
+        Core.RefreshUI()
+    end)
+
+    parent.move = CreateButton(parent, "Process Selected", 130)
+    parent.move:SetParent(parent.footer)
+    parent.move:SetPoint("LEFT", parent.clear, "RIGHT", 8, 0)
+    parent.move:SetScript("OnClick", function() Core.ProcessVendorSelected() end)
+
+    parent.prev = CreateButton(parent, "Prev", 60)
+    parent.prev:SetParent(parent.footer)
+    parent.prev:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -29)
+    parent.prev:SetScript("OnClick", function()
+        UI.page = math.max(1, UI.page - 1)
+        Core.RefreshUI()
+    end)
+
+    parent.next = CreateButton(parent, "Next", 60)
+    parent.next:SetParent(parent.footer)
+    parent.next:SetPoint("LEFT", parent.prev, "RIGHT", 6, 0)
+    parent.next:SetScript("OnClick", function()
+        UI.page = UI.page + 1
+        Core.RefreshUI()
+    end)
+
+    parent.pageText = CreateLabel(parent, "", "GameFontHighlightSmall")
+    parent.pageText:SetParent(parent.footer)
+    parent.pageText:SetPoint("LEFT", parent.next, "RIGHT", 8, 0)
+end
+
 local function BuildRulesTab(parent)
     parent.help = CreateLabel(parent, "Item-ID rules created from Move rows. Rules are conservative and removable.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
-    parent.headers = CreateLabel(parent, "Item                         Rule type                         Created from", "GameFontNormalSmall")
-    parent.headers:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -14)
+
+    parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.listFrame:SetSize(720, 394)
+    parent.listFrame:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
+
+    parent.headers = CreateLabel(parent.listFrame, "Item                                      Rule type                                      Created from", "GameFontNormalSmall")
+    parent.headers:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 10, -8)
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No item rules yet.")
+
     parent.rows = {}
-    for i = 1, 13 do
-        local row = CreateFrame("Frame", nil, parent)
-        row:SetSize(700, 28)
-        row:SetPoint("TOPLEFT", parent.headers, "BOTTOMLEFT", 0, -4 - (i - 1) * 30)
+    for i = 1, 12 do
+        local row = CreateFrame("Frame", nil, parent.listFrame, "BackdropTemplate")
+        row:SetSize(710, 28)
+        row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
+        row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -30 - (i - 1) * 30)
         row.text = CreateLabel(row, "", "GameFontHighlightSmall")
-        row.text:SetPoint("LEFT", 0, 0)
-        row.text:SetWidth(560)
+        row.text:SetPoint("LEFT", 8, 0)
+        row.text:SetWidth(600)
         row.remove = CreateButton(row, "Remove", 70, 22)
-        row.remove:SetPoint("RIGHT", 0, 0)
+        row.remove:SetPoint("RIGHT", -4, 0)
         parent.rows[i] = row
     end
+
+    parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.footer:SetSize(720, 42)
+    parent.footer:SetPoint("BOTTOMLEFT", 0, 0)
+    parent.footer:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+
+    parent.countText = CreateLabel(parent.footer, "", "GameFontHighlightSmall")
+    parent.countText:SetPoint("LEFT", parent.footer, "LEFT", 8, 0)
+end
+
+local function BuildSettingsTab(parent)
+    parent.help = CreateLabel(parent, "Quick access and display settings.", "GameFontHighlight")
+    parent.help:SetPoint("TOPLEFT", 0, 0)
+
+    parent.minimap = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.minimap:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -18)
+    parent.minimapLabel = CreateLabel(parent, "Show minimap launcher", "GameFontHighlightSmall")
+    parent.minimapLabel:SetPoint("LEFT", parent.minimap, "RIGHT", -2, 0)
+    parent.minimap:SetScript("OnClick", function(self)
+        ns.DB.ui.showMinimapIcon = self:GetChecked() and true or false
+        Core.UpdateQuickAccessButtons()
+        Core.RefreshUI()
+    end)
+
+    parent.note = CreateLabel(parent, "Bank and vendor launchers are disabled in this version.", "GameFontDisableSmall")
+    parent.note:SetPoint("TOPLEFT", parent.minimap, "BOTTOMLEFT", 0, -10)
+
+    parent.refresh = CreateButton(parent, "Refresh Launchers", 140)
+    parent.refresh:SetPoint("TOPLEFT", parent.note, "BOTTOMLEFT", 0, -14)
+    parent.refresh:SetScript("OnClick", function()
+        Core.PrintQuickAccessStatus()
+        Core.RefreshUI()
+    end)
+
+    parent.status = CreateLabel(parent, "", "GameFontDisableSmall")
+    parent.status:SetPoint("TOPLEFT", parent.refresh, "BOTTOMLEFT", 0, -14)
+    parent.status:SetWidth(680)
 end
 
 function Core.CreateUI()
@@ -870,11 +2472,11 @@ function Core.CreateUI()
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
-    frame.title:SetText("I Can't Even Right Now")
+    frame.title:SetText(DISPLAY_NAME)
 
     frame.panels = {}
     local previous
-    for _, name in ipairs({ "Summary", "Move", "Rules" }) do
+    for _, name in ipairs({ "Summary", "Move", "Organize", "Vendor", "Rules", "Settings" }) do
         local tab = CreateButton(frame, name, 92, 24)
         tab:SetPoint("TOPLEFT", previous or frame, previous and "TOPRIGHT" or "TOPLEFT", previous and 4 or 14, previous and 0 or -34)
         tab:SetScript("OnClick", function() SetTab(name) end)
@@ -887,8 +2489,14 @@ function Core.CreateUI()
             BuildSummaryTab(panel)
         elseif name == "Move" then
             BuildMoveTab(panel)
-        else
+        elseif name == "Organize" then
+            BuildOrganizeTab(panel)
+        elseif name == "Vendor" then
+            BuildVendorTab(panel)
+        elseif name == "Rules" then
             BuildRulesTab(panel)
+        else
+            BuildSettingsTab(panel)
         end
     end
 
@@ -929,6 +2537,27 @@ function Core.GetFilteredVisible()
     return filtered
 end
 
+local function GetMoveSearchDiagnostics(searchText)
+    local searchMatches = 0
+    local recommendedMatches = 0
+    for _, item in ipairs(GetAllDecisions()) do
+        if TextMatchesSearch(searchText, {
+            item.name or "",
+            tostring(item.itemID or ""),
+            item.expansionName or "",
+            item.typeTag or "",
+            item.location or "",
+            item.reason or "",
+        }) then
+            searchMatches = searchMatches + 1
+            if item.recommendedAction == Data.Actions.BANK or item.recommendedAction == Data.Actions.RECALL then
+                recommendedMatches = recommendedMatches + 1
+            end
+        end
+    end
+    return searchMatches, recommendedMatches
+end
+
 function Core.RefreshMove()
     local panel = UI.frame.panels.Move
     local ui = ns.DB.ui
@@ -942,6 +2571,8 @@ function Core.RefreshMove()
         expansionLabel = "All expansions"
     elseif ui.expansionFilter == EXPANSION_FILTER_NOT_CURRENT then
         expansionLabel = "Not current"
+    elseif ui.expansionFilter == EXPANSION_FILTER_UNKNOWN then
+        expansionLabel = "Unknown expansion"
     else
         expansionLabel = GetExpansionName(ui.expansionFilter)
     end
@@ -952,6 +2583,18 @@ function Core.RefreshMove()
     if panel.search:GetText() ~= ui.search then
         panel.search:SetText(ui.search or "")
     end
+    local emptyText = "No move candidates to show."
+    if ui.search ~= "" then
+        local searchMatches, recommendedMatches = GetMoveSearchDiagnostics(ui.search)
+        if searchMatches == 0 then
+            emptyText = "No scanned items match your search. Scan bags if the item is visible in your inventory."
+        elseif ui.recommendedOnly and recommendedMatches == 0 then
+            emptyText = "Items match your search, but none are recommended. Clear Recommended only to review them."
+        else
+            emptyText = "Items match your search, but not the current filters. Try All expansions, Type: All, and Location: All."
+        end
+    end
+    SetEmptyLabel(panel.empty, #filtered == 0, emptyText)
 
     local maxPage = math.max(1, math.ceil(#filtered / UI.pageSize))
     UI.page = math.min(UI.page, maxPage)
@@ -964,7 +2607,7 @@ function Core.RefreshMove()
     end
     panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #filtered .. " visible, " .. selectedCount .. " selected)")
     panel.move:SetText(ui.mode == "Recall from Bank" and "Recall Selected" or "Bank Selected")
-    panel.move:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat)
+    panel.move:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat and selectedCount > 0)
 
     for i, row in ipairs(panel.rows) do
         local item = filtered[startIndex + i - 1]
@@ -972,22 +2615,40 @@ function Core.RefreshMove()
             row:Show()
             row.item = item
             row.icon:SetTexture(item.icon)
-            row.check:SetChecked(UI.selected[item.key] and true or false)
+            local blockReason = GetMoveBlockReason(item)
+            local moveEligible = IsMoveEligibleForCurrentMode(item) and not blockReason
+            if not moveEligible then
+                UI.selected[item.key] = nil
+            end
+            row.check:SetEnabled(moveEligible)
+            row.check:SetChecked(moveEligible and UI.selected[item.key] and true or false)
             row.check:SetScript("OnClick", function(self)
                 UI.selected[item.key] = self:GetChecked() and true or nil
+                Core.RefreshUI()
             end)
             row.nameText:SetText(item.name or ("Item " .. item.itemID))
+            local actionDetail = item.recommendedAction or "Review"
+            if item.recommendedAction == Data.Actions.BANK and item.bankTargetStorage then
+                actionDetail = "Bank -> " .. item.bankTargetStorage
+            end
             row.detailText:SetText(string.format("x%d  |  %s  |  %s  |  %s  |  %s  |  %s",
                 item.count or 1,
                 item.expansionName or "Unknown",
                 item.typeTag or "Unknown",
                 item.location or "",
-                item.recommendedAction or "Review",
+                actionDetail,
                 item.ruleStatus == "custom" and "custom rule" or "no rule"))
-            row.bank:SetScript("OnClick", function() AddRule(item, "Always Bank") end)
-            row.recall:SetScript("OnClick", function() AddRule(item, "Always Recall") end)
-            row.protect:SetScript("OnClick", function() AddRule(item, "Protect") end)
-            row.ignore:SetScript("OnClick", function() AddRule(item, "Ignore") end)
+            row.action:SetText(ui.mode == "Recall from Bank" and "Recall" or "Bank")
+            row.action:SetEnabled(moveEligible)
+            row.action:SetScript("OnClick", function()
+                if moveEligible then
+                    Core.MoveOneItem(item)
+                else
+                    local verb = ui.mode == "Recall from Bank" and "recall" or "bank"
+                    Print("Cannot " .. verb .. " " .. (item.name or ("Item " .. item.itemID)) .. ": " .. (blockReason or "not eligible for this mode"))
+                end
+            end)
+            row.rule:SetScript("OnClick", function() ToggleRowRuleMenu(row, item) end)
             row:SetScript("OnEnter", function(self)
                 GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
                 GameTooltip:SetHyperlink(item.link or ("item:" .. item.itemID))
@@ -996,14 +2657,172 @@ function Core.RefreshMove()
                 GameTooltip:AddLine("Source: " .. (item.curated and "CuratedTable" or "Item API/defaults"), 1, 1, 1)
                 GameTooltip:AddLine("Reason: " .. (item.reason or "Review"), 1, 1, 1)
                 if #item.blockedReasons > 0 then
-                    GameTooltip:AddLine("Blocked by: " .. table.concat(item.blockedReasons, ", "), 1, 0.35, 0.35)
+                    local label = moveEligible and "Policy note: " or "Blocked by: "
+                    GameTooltip:AddLine(label .. table.concat(item.blockedReasons, ", "), 1, 0.35, 0.35)
+                elseif blockReason then
+                    GameTooltip:AddLine("Cannot act: " .. blockReason, 1, 0.35, 0.35)
                 end
-                GameTooltip:AddLine("Actions: Protect, Ignore, Bank/Recall override via rules", 0.7, 0.85, 1)
+                GameTooltip:AddLine("The row button acts on this item now.", 0.7, 0.85, 1)
+                GameTooltip:AddLine("The checkbox includes this item in the footer action.", 0.7, 0.85, 1)
+                GameTooltip:AddLine("+Rule creates future handling rules.", 0.7, 0.85, 1)
                 GameTooltip:Show()
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
         else
             row.item = nil
+            if row.ruleMenu then
+                row.ruleMenu:Hide()
+            end
+            row:Hide()
+        end
+    end
+end
+
+function Core.RefreshOrganizer()
+    local panel = UI.frame.panels.Organize
+    local plans = {}
+    for _, plan in ipairs(GetOrganizationPlans(ns.DB.ui.organizerShowAll)) do
+        if PlanMatchesSearch(plan, ns.DB.ui.organizerSearch) then
+            table.insert(plans, plan)
+        end
+    end
+    UI.organizeVisible = plans
+    panel.showAll:SetChecked(ns.DB.ui.organizerShowAll)
+    if panel.search:GetText() ~= ns.DB.ui.organizerSearch then
+        panel.search:SetText(ns.DB.ui.organizerSearch or "")
+    end
+    panel.rescan:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat)
+    SetEmptyLabel(panel.empty, #plans == 0, ns.DB.ui.organizerSearch ~= "" and "No organization plans match your search." or "No bank organization plans to show.")
+
+    local maxPage = math.max(1, math.ceil(#plans / ORGANIZE_PAGE_SIZE))
+    UI.page = math.min(UI.page, maxPage)
+    local startIndex = (UI.page - 1) * ORGANIZE_PAGE_SIZE + 1
+    local selectedCount = 0
+    for _, selected in pairs(UI.organizeSelected) do
+        if selected then
+            selectedCount = selectedCount + 1
+        end
+    end
+    panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #plans .. " plans, " .. selectedCount .. " selected)")
+    panel.move:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat and selectedCount > 0)
+
+    for i, row in ipairs(panel.rows) do
+        local plan = plans[startIndex + i - 1]
+        if plan then
+            local item = plan.item
+            row:Show()
+            row.plan = plan
+            row.icon:SetTexture(item.icon)
+            row.check:SetEnabled(plan.movable)
+            row.check:SetChecked(plan.movable and UI.organizeSelected[plan.key] and true or false)
+            row.check:SetScript("OnClick", function(self)
+                UI.organizeSelected[plan.key] = self:GetChecked() and true or nil
+                Core.RefreshUI()
+            end)
+            row.nameText:SetText(item.name or ("Item " .. item.itemID))
+            row.detailText:SetText(string.format("%s -> %s  |  %s  |  %s",
+                plan.currentStorage,
+                plan.targetStorage,
+                plan.movable and "movable" or (plan.blockedReason or "already optimized"),
+                plan.reason))
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(item.link or ("item:" .. item.itemID))
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Current: " .. plan.currentStorage, 1, 1, 1)
+                GameTooltip:AddLine("Recommended: " .. plan.targetStorage, 1, 1, 1)
+                GameTooltip:AddLine("Reason: " .. plan.reason, 1, 1, 1)
+                GameTooltip:AddLine("Binding: " .. (item.bindingScope or "Unknown"), 1, 1, 1)
+                if plan.blockedReason then
+                    GameTooltip:AddLine("Blocked: " .. plan.blockedReason, 1, 0.35, 0.35)
+                end
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        else
+            row.plan = nil
+            row:Hide()
+        end
+    end
+end
+
+function Core.RefreshVendor()
+    local panel = UI.frame.panels.Vendor
+    local plans = {}
+    for _, plan in ipairs(GetVendorPlans(ns.DB.ui.vendorShowAll)) do
+        if PlanMatchesSearch(plan, ns.DB.ui.vendorSearch) then
+            table.insert(plans, plan)
+        end
+    end
+    UI.vendorVisible = plans
+    panel.showAll:SetChecked(ns.DB.ui.vendorShowAll)
+    if panel.search:GetText() ~= ns.DB.ui.vendorSearch then
+        panel.search:SetText(ns.DB.ui.vendorSearch or "")
+    end
+    panel.context:SetText("Context: " .. GetContextText())
+    SetEmptyLabel(panel.empty, #plans == 0, ns.DB.ui.vendorSearch ~= "" and "No vendor plans match your search." or "No vendor plans to show.")
+
+    local maxPage = math.max(1, math.ceil(#plans / VENDOR_PAGE_SIZE))
+    UI.page = math.min(UI.page, maxPage)
+    local startIndex = (UI.page - 1) * VENDOR_PAGE_SIZE + 1
+    local selectedCount = 0
+    local selectedValue = 0
+    for _, plan in ipairs(plans) do
+        if UI.vendorSelected[plan.key] then
+            selectedCount = selectedCount + 1
+            if plan.action == VENDOR_ACTION_SELL then
+                selectedValue = selectedValue + plan.value
+            end
+        end
+    end
+
+    local actionLabel = "Process Selected"
+    if ns.DB.context.vendorOpen then
+        actionLabel = "Sell Selected"
+    elseif ns.DB.context.bankOpen then
+        actionLabel = "Recall Selected"
+    end
+    panel.move:SetText(actionLabel)
+    panel.move:SetEnabled(not ns.DB.context.inCombat and selectedCount > 0)
+    panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #plans .. " plans, " .. selectedCount .. " selected, " .. FormatMoney(selectedValue) .. ")")
+
+    for i, row in ipairs(panel.rows) do
+        local plan = plans[startIndex + i - 1]
+        if plan then
+            local item = plan.item
+            row:Show()
+            row.plan = plan
+            row.icon:SetTexture(item.icon)
+            row.check:SetEnabled(plan.movable)
+            row.check:SetChecked(plan.movable and UI.vendorSelected[plan.key] and true or false)
+            row.check:SetScript("OnClick", function(self)
+                UI.vendorSelected[plan.key] = self:GetChecked() and true or nil
+                Core.RefreshUI()
+            end)
+            row.nameText:SetText(item.name or ("Item " .. item.itemID))
+            row.detailText:SetText(string.format("%s  |  %s  |  %s  |  %s",
+                plan.action,
+                item.location or "Unknown location",
+                FormatMoney(plan.value),
+                plan.movable and plan.reason or (plan.blockedReason or plan.reason)))
+            row.neverSell:SetScript("OnClick", function()
+                AddRule(item, "Never Sell")
+            end)
+            row:SetScript("OnEnter", function(self)
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(item.link or ("item:" .. item.itemID))
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddLine("Vendor action: " .. plan.action, 1, 1, 1)
+                GameTooltip:AddLine("Reason: " .. (plan.reason or "Review"), 1, 1, 1)
+                GameTooltip:AddLine("Value: " .. FormatMoney(plan.value), 1, 1, 1)
+                if plan.blockedReason then
+                    GameTooltip:AddLine("Blocked: " .. plan.blockedReason, 1, 0.35, 0.35)
+                end
+                GameTooltip:Show()
+            end)
+            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        else
+            row.plan = nil
             row:Hide()
         end
     end
@@ -1016,6 +2835,9 @@ function Core.RefreshRules()
         table.insert(rows, { itemID = itemID, rule = rule })
     end
     table.sort(rows, function(a, b) return tonumber(a.itemID) < tonumber(b.itemID) end)
+    SetEmptyLabel(panel.empty, #rows == 0, "No item rules yet. Add rules from Move or Vendor rows when you need exceptions.")
+    panel.headers:SetShown(#rows > 0)
+    panel.countText:SetText(#rows .. " item rules")
 
     for i, row in ipairs(panel.rows) do
         local data = rows[i]
@@ -1042,6 +2864,17 @@ function Core.RefreshRules()
     end
 end
 
+function Core.RefreshSettings()
+    local panel = UI.frame.panels.Settings
+    panel.minimap:SetChecked(ns.DB.ui.showMinimapIcon ~= false)
+
+    local minimapButton = GetStandardMinimapButton() or UI.minimapButton
+    local minimapMode = UI.minimapIconRegistered and "LibDBIcon" or "fallback"
+    panel.status:SetText("Minimap launcher (" .. minimapMode .. "): " .. tostring(minimapButton and minimapButton:IsShown())
+    .. " | Bank launcher: disabled"
+    .. " | Vendor launcher: disabled")
+end
+
 function Core.RefreshUI()
     if not UI.frame then
         return
@@ -1051,9 +2884,19 @@ function Core.RefreshUI()
         panel:SetShown(name == UI.activeTab)
         UI.tabs[name]:SetText(name == UI.activeTab and ("[" .. name .. "]") or name)
     end
-    Core.RefreshSummary()
-    Core.RefreshMove()
-    Core.RefreshRules()
+    if UI.activeTab == "Summary" then
+        Core.RefreshSummary()
+    elseif UI.activeTab == "Move" then
+        Core.RefreshMove()
+    elseif UI.activeTab == "Organize" then
+        Core.RefreshOrganizer()
+    elseif UI.activeTab == "Vendor" then
+        Core.RefreshVendor()
+    elseif UI.activeTab == "Rules" then
+        Core.RefreshRules()
+    elseif UI.activeTab == "Settings" then
+        Core.RefreshSettings()
+    end
 end
 
 function Core.ShowSummaryUI()
@@ -1070,10 +2913,30 @@ function Core.ShowMoveUI()
     Core.RefreshUI()
 end
 
+function Core.ShowOrganizeUI()
+    Core.CreateUI()
+    UI.activeTab = "Organize"
+    UI.frame:Show()
+    Core.RefreshUI()
+end
+
+function Core.ShowVendorUI()
+    Core.CreateUI()
+    UI.activeTab = "Vendor"
+    UI.frame:Show()
+    Core.RefreshUI()
+end
+
 function Core.SetExpansionFilterFromText(text)
     text = (text or ""):lower()
     if text == "" or text == "all" or text == "old" then
         ns.DB.ui.expansionFilter = 0
+        return
+    elseif text == "unknown" or text == "unknown expansion" then
+        ns.DB.ui.expansionFilter = EXPANSION_FILTER_UNKNOWN
+        return
+    elseif text == "not current" or text == "notcurrent" then
+        ns.DB.ui.expansionFilter = EXPANSION_FILTER_NOT_CURRENT
         return
     end
     for expansionID, expansion in pairs(Data.Expansions) do
@@ -1087,10 +2950,13 @@ end
 
 function Core.SelectRecommended()
     UI.selected = {}
-    for _, item in ipairs(UI.visible) do
-        local bankOK = ns.DB.ui.mode == "Dump to Bank" and item.recommendedAction == Data.Actions.BANK and item.scope == BAG_SCOPE
-        local recallOK = ns.DB.ui.mode == "Recall from Bank" and item.recommendedAction == Data.Actions.RECALL and item.scope == BANK_SCOPE
-        if bankOK or recallOK then
+    local startIndex = (UI.page - 1) * UI.pageSize + 1
+    local endIndex = math.min(#UI.visible, startIndex + UI.pageSize - 1)
+    for index = startIndex, endIndex do
+        local item = UI.visible[index]
+        local isRecommended = (ns.DB.ui.mode == "Dump to Bank" and item.recommendedAction == Data.Actions.BANK)
+            or (ns.DB.ui.mode == "Recall from Bank" and item.recommendedAction == Data.Actions.RECALL)
+        if isRecommended and IsMoveEligibleForCurrentMode(item) and not GetMoveBlockReason(item) then
             UI.selected[item.key] = true
         end
     end
@@ -1099,8 +2965,39 @@ end
 
 function Core.SelectVisible()
     UI.selected = {}
-    for _, item in ipairs(UI.visible) do
-        UI.selected[item.key] = true
+    local startIndex = (UI.page - 1) * UI.pageSize + 1
+    local endIndex = math.min(#UI.visible, startIndex + UI.pageSize - 1)
+    for index = startIndex, endIndex do
+        local item = UI.visible[index]
+        if IsMoveEligibleForCurrentMode(item) and not GetMoveBlockReason(item) then
+            UI.selected[item.key] = true
+        end
+    end
+    Core.RefreshUI()
+end
+
+function Core.SelectOrganizerMovable()
+    UI.organizeSelected = {}
+    local startIndex = (UI.page - 1) * ORGANIZE_PAGE_SIZE + 1
+    local endIndex = math.min(#UI.organizeVisible, startIndex + ORGANIZE_PAGE_SIZE - 1)
+    for index = startIndex, endIndex do
+        local plan = UI.organizeVisible[index]
+        if plan.movable then
+            UI.organizeSelected[plan.key] = true
+        end
+    end
+    Core.RefreshUI()
+end
+
+function Core.SelectVendorReady()
+    UI.vendorSelected = {}
+    local startIndex = (UI.page - 1) * VENDOR_PAGE_SIZE + 1
+    local endIndex = math.min(#UI.vendorVisible, startIndex + VENDOR_PAGE_SIZE - 1)
+    for index = startIndex, endIndex do
+        local plan = UI.vendorVisible[index]
+        if plan.movable then
+            UI.vendorSelected[plan.key] = true
+        end
     end
     Core.RefreshUI()
 end
@@ -1117,6 +3014,33 @@ local function RemoveMovedItemsFromScan(movedKeys)
     end
 end
 
+function Core.MoveOneItem(item)
+    Core.UpdateContext()
+    local blockReason = GetMoveBlockReason(item)
+    local canMove = IsMoveEligibleForCurrentMode(item) and not blockReason
+    local verb = ns.DB.ui.mode == "Recall from Bank" and "recall" or "bank"
+    if not canMove then
+        Print("Cannot " .. verb .. " " .. (item.name or ("Item " .. item.itemID)) .. ": " .. (blockReason or "not eligible for this mode"))
+        return
+    end
+
+    local moved, moveError
+    if ns.DB.ui.mode == "Recall from Bank" then
+        moved, moveError = MoveBankItemToNormalBag(item)
+    else
+        moved, moveError = MoveItemToBankTarget(item)
+    end
+    if not moved then
+        Print("Cannot " .. verb .. " " .. (item.name or ("Item " .. item.itemID)) .. ": " .. (moveError or "move failed"))
+        return
+    end
+    UI.selected[item.key] = nil
+    RemoveMovedItemsFromScan({ [item.key] = true })
+    Core.RefreshUI()
+    Print("Move run complete: 1 moved, 0 blocked.")
+    Core.ScheduleRescanAfterMove()
+end
+
 function Core.MoveSelected()
     Core.UpdateContext()
     if ns.DB.context.inCombat then
@@ -1130,16 +3054,28 @@ function Core.MoveSelected()
 
     local moved, blocked = 0, 0
     local movedKeys = {}
+    local takenSlots = {}
+    local blockedDetails = {}
     for _, item in ipairs(GetAllDecisions()) do
         if UI.selected[item.key] then
-            local canMove = ns.DB.ui.mode == "Dump to Bank" and item.eligibleForBankMove
-            canMove = canMove or (ns.DB.ui.mode == "Recall from Bank" and item.eligibleForRecall)
-            if canMove and CContainer.UseContainerItem then
-                CContainer.UseContainerItem(item.bagID, item.slot)
+            local blockReason = GetMoveBlockReason(item)
+            local canMove = IsMoveEligibleForCurrentMode(item) and not blockReason
+            local didMove, moveError = false, nil
+            if canMove then
+                if ns.DB.ui.mode == "Dump to Bank" then
+                    didMove, moveError = MoveItemToBankTarget(item, takenSlots)
+                else
+                    didMove, moveError = MoveBankItemToNormalBag(item, takenSlots)
+                end
+            end
+            if didMove then
                 movedKeys[item.key] = true
                 moved = moved + 1
             else
                 blocked = blocked + 1
+                if #blockedDetails < 3 then
+                    table.insert(blockedDetails, (item.name or ("Item " .. item.itemID)) .. ": " .. (blockReason or moveError or "not eligible for this mode"))
+                end
             end
         end
     end
@@ -1147,7 +3083,106 @@ function Core.MoveSelected()
     RemoveMovedItemsFromScan(movedKeys)
     Core.RefreshUI()
     Print("Move run complete: " .. moved .. " moved, " .. blocked .. " blocked.")
+    if #blockedDetails > 0 then
+        Print("Blocked details: " .. table.concat(blockedDetails, "; "))
+    end
     Core.ScheduleRescanAfterMove()
+end
+
+function Core.MoveOrganizerSelected()
+    Core.UpdateContext()
+    if ns.DB.context.inCombat then
+        Print("Cannot move items in combat.")
+        return
+    end
+    if not ns.DB.context.bankOpen then
+        Print("Open the bank before organizing bank storage.")
+        return
+    end
+
+    local moved, blocked = 0, 0
+    local movedKeys = {}
+    local takenSlots = {}
+    local blockedDetails = {}
+    for _, plan in ipairs(GetOrganizationPlans(true)) do
+        if UI.organizeSelected[plan.key] then
+            local item = plan.item
+            local didMove, moveError = false, nil
+            if plan.movable then
+                didMove, moveError = MoveBankItemToStorageTarget(item, plan.targetStorage, takenSlots)
+            else
+                moveError = plan.blockedReason or "not movable"
+            end
+            if didMove then
+                movedKeys[item.key] = true
+                moved = moved + 1
+            else
+                blocked = blocked + 1
+                if #blockedDetails < 3 then
+                    table.insert(blockedDetails, (item.name or ("Item " .. item.itemID)) .. ": " .. (moveError or "move failed"))
+                end
+            end
+        end
+    end
+
+    UI.organizeSelected = {}
+    RemoveMovedItemsFromScan(movedKeys)
+    Core.RefreshUI()
+    Print("Organizer run complete: " .. moved .. " moved, " .. blocked .. " blocked.")
+    if #blockedDetails > 0 then
+        Print("Blocked details: " .. table.concat(blockedDetails, "; "))
+    end
+    Core.ScheduleRescanAfterMove()
+end
+
+function Core.ProcessVendorSelected()
+    Core.UpdateContext()
+    if ns.DB.context.inCombat then
+        Print("Cannot process vendor items in combat.")
+        return
+    end
+    if not ns.DB.context.bankOpen and not ns.DB.context.vendorOpen then
+        Print("Open the bank to recall candidates, or a vendor to sell bag candidates.")
+        return
+    end
+
+    local moved, blocked, sold, recalled = 0, 0, 0, 0
+    local movedKeys = {}
+    for _, plan in ipairs(GetVendorPlans(true)) do
+        if UI.vendorSelected[plan.key] then
+            local item = plan.item
+            if plan.movable then
+                local didMove = false
+                if plan.action == VENDOR_ACTION_RECALL then
+                    didMove = MoveBankItemToNormalBag(item)
+                elseif CContainer.UseContainerItem then
+                    CContainer.UseContainerItem(item.bagID, item.slot)
+                    didMove = true
+                end
+                if not didMove then
+                    blocked = blocked + 1
+                else
+                    movedKeys[item.key] = true
+                    moved = moved + 1
+                    if plan.action == VENDOR_ACTION_SELL then
+                        sold = sold + 1
+                    else
+                        recalled = recalled + 1
+                    end
+                end
+            else
+                blocked = blocked + 1
+            end
+        end
+    end
+
+    UI.vendorSelected = {}
+    RemoveMovedItemsFromScan(movedKeys)
+    Core.RefreshUI()
+    Print("Vendor run complete: " .. sold .. " sold, " .. recalled .. " recalled, " .. blocked .. " blocked.")
+    if moved > 0 then
+        Core.ScheduleRescanAfterMove()
+    end
 end
 
 function Core.RegisterSlashCommands()
@@ -1156,6 +3191,12 @@ function Core.RegisterSlashCommands()
     SlashCmdList["ICANTEVEN"] = function(msg)
         Core.HandleSlashCommand(msg)
     end
+end
+
+local function ToggleQuickAccessSetting(key, label)
+    ns.DB.ui[key] = not ns.DB.ui[key]
+    Core.UpdateQuickAccessButtons()
+    Print(label .. ": " .. (ns.DB.ui[key] and "shown" or "hidden"))
 end
 
 function Core.HandleSlashCommand(msg)
@@ -1178,6 +3219,25 @@ function Core.HandleSlashCommand(msg)
         ns.DB.ui.mode = "Recall from Bank"
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
+    elseif cmd == "organize" or cmd == "organizer" then
+        Core.ShowOrganizeUI()
+    elseif cmd == "vendor" or cmd == "sell" then
+        Core.ShowVendorUI()
+    elseif cmd == "settings" or cmd == "options" then
+        Core.CreateUI()
+        UI.activeTab = "Settings"
+        UI.frame:Show()
+        Core.RefreshUI()
+    elseif cmd == "minimap" then
+        ToggleQuickAccessSetting("showMinimapIcon", "Minimap button")
+    elseif cmd == "bankbutton" then
+        Print("Bank launcher is disabled in this version.")
+    elseif cmd == "vendorbutton" then
+        Print("Vendor launcher is disabled in this version.")
+    elseif cmd == "buttons" or cmd == "quickaccess" then
+        Core.PrintQuickAccessStatus()
+    elseif cmd == "bankdiag" or cmd == "bankids" then
+        Core.PrintBankContainerDiagnostics()
     elseif cmd == "rules" or cmd == "config" or cmd == "protect" then
         Core.CreateUI()
         UI.activeTab = "Rules"
@@ -1189,22 +3249,31 @@ function Core.HandleSlashCommand(msg)
     elseif cmd == "diag" then
         Debug.RunDiagnosticDump()
     else
-        Print("Commands: /icanteven, scan [bags|bank|all], summary, move, rules, debug, diag")
+        Print("Commands: /icanteven, scan [bags|bank|all], summary, move, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag")
     end
 end
 
 function Core.OnAddonLoaded()
     ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, ICantEvenRightNowDB)
     ns.DB = ICantEvenRightNowDB
+    ns.DB.ui.showBankButton = false
+    ns.DB.ui.showVendorButton = false
+    NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)
     Core.RegisterSlashCommands()
     Core.UpdateContext()
+    Core.UpdateQuickAccessButtons()
+    ScheduleQuickAccessRefresh()
     Print("Loaded. Type /icanteven to open the cleanup console.")
 end
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("ADDON_LOADED")
+eventFrame:RegisterEvent("PLAYER_LOGIN")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("BANKFRAME_OPENED")
 eventFrame:RegisterEvent("BANKFRAME_CLOSED")
+eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
+eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
 eventFrame:RegisterEvent("MERCHANT_SHOW")
 eventFrame:RegisterEvent("MERCHANT_CLOSED")
 eventFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
@@ -1219,12 +3288,18 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         local addonName = ...
         if addonName == ADDON_NAME then
             Core.OnAddonLoaded()
+        elseif ns.DB and addonName and addonName:lower():find("betterbags", 1, true) then
+            ScheduleQuickAccessRefresh()
         end
     elseif ns.DB and ns.DB.context then
         Core.UpdateContext()
-        if event == "BANKFRAME_OPENED" then
+        local interactionType = ...
+        local bankInteraction = Enum and Enum.PlayerInteractionType
+            and (interactionType == Enum.PlayerInteractionType.Banker or interactionType == Enum.PlayerInteractionType.AccountBanker)
+        if event == "BANKFRAME_OPENED" or (event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" and bankInteraction) then
             Core.ScanInventory("all", true)
         end
+        ScheduleQuickAccessRefresh()
         if UI.frame and UI.frame:IsShown() then
             Core.RefreshUI()
         end

@@ -41,6 +41,7 @@ ns.Data.ItemTypes = {
 ns.Data.Recommendations = {
     BANK = "BankCandidate",
     RECALL = "RecallCandidate",
+    SELL = "SellCandidate",
     REVIEW = "NeedsReview",
     PROTECTED = "Protected",
     IGNORED = "Ignored",
@@ -50,6 +51,7 @@ ns.Data.Recommendations = {
 ns.Data.Actions = {
     BANK = "Bank",
     RECALL = "Recall",
+    SELL = "Sell",
     REVIEW = "Review",
     NONE = "None",
 }
@@ -63,6 +65,26 @@ ns.Data.CuratedItems = {
         -- Add more curated items as needed
     },
     -- Other expansions will be added here
+}
+
+-- Map profession skill line IDs to the item subclass IDs (classID 7) that profession uses.
+-- Skill line IDs match the 7th return value of GetProfessionInfo().
+-- Item subclass IDs (classID 7, Trade Goods):
+--   1=Parts  2=Explosives  3=Devices  4=Jewelcrafting  5=Cloth  6=Leather
+--   7=Metal & Stone  8=Cooking  9=Herb  10=Elemental  11=Other  12=Enchanting  14=Inscription
+ns.Data.ProfessionSubclasses = {
+    [164] = { 7, 10 },           -- Blacksmithing:  Metal & Stone, Elemental
+    [202] = { 1, 2, 3, 7, 10 },  -- Engineering:    Parts, Explosives, Devices, Metal & Stone, Elemental
+    [186] = { 7 },               -- Mining:         Metal & Stone
+    [165] = { 6, 10 },           -- Leatherworking: Leather, Elemental
+    [393] = { 6 },               -- Skinning:       Leather
+    [197] = { 5, 10 },           -- Tailoring:      Cloth, Elemental
+    [333] = { 12 },              -- Enchanting:     Enchanting
+    [171] = { 9, 10 },           -- Alchemy:        Herb, Elemental
+    [182] = { 9 },               -- Herbalism:      Herb
+    [755] = { 4, 7, 10 },        -- Jewelcrafting:  Jewelcrafting, Metal & Stone, Elemental
+    [773] = { 14, 9 },           -- Inscription:    Inscription, Herb
+    [185] = { 8 },               -- Cooking:        Cooking
 }
 
 -- Default database structure
@@ -94,6 +116,18 @@ ns.Data.DefaultDB = {
         rarityFilter = "All",
         locationFilter = "All",
         recommendedOnly = true,
+        organizerShowAll = false,
+        vendorShowAll = false,
+        organizerSearch = "",
+        vendorSearch = "",
+        showMinimapIcon = true,
+        minimapIcon = {
+            hide = false,
+            minimapPos = 220,
+            lock = false,
+        },
+        showBankButton = false,
+        showVendorButton = false,
         search = "",
     },
 }
