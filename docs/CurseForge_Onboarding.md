@@ -23,22 +23,22 @@ The CurseForge project ID is set in `ICantEvenRightNow.toc`:
 
 The release workflow uses `BigWigsMods/packager@v2` and reads packaging settings from `.pkgmeta`.
 
-Before tagging the first release:
+Before tagging a release:
 
 1. Create a CurseForge API token at <https://wow.curseforge.com/account/api-tokens>.
 2. Add it to the GitHub repository secrets as `CF_API_KEY`.
 3. Confirm `X-Curse-Project-ID` in `ICantEvenRightNow.toc` is `1534906`.
 4. Make sure `CHANGELOG.md` has a dated release section for the version.
-5. Tag the release with `v0.1.0` or the next addon version.
+5. Tag the release with `vX.Y.Z` that matches `## Version:` in `ICantEvenRightNow.toc`.
 
 The workflow will create the packaged addon zip and publish it through the packager. If `X-Curse-Project-ID` is blank, CurseForge upload is skipped/not possible, but GitHub packaging can still run.
 
 ## Manual First Upload Option
 
-If CurseForge requires the first file to be uploaded manually during project review, build a local zip with:
+If CurseForge requires a manual file upload (for example, first-project review), build a local zip with:
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 0.1.0
+.\scripts\Build-Release.ps1 -Version 0.2.0
 ```
 
 Upload the generated file from `build/` as a Retail release.
@@ -51,3 +51,5 @@ Upload the generated file from `build/` as a Retail release.
 4. Confirm `## X-Curse-Project-ID:` is set.
 5. Push a `vX.Y.Z` tag.
 6. Check the GitHub Actions release run and CurseForge file status.
+
+For the full repeatable process, see `docs/Release_Process.md`.
