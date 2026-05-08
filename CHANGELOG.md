@@ -13,6 +13,23 @@ Release note rules:
 
 - No changes yet.
 
+## [0.3.0] - 2026-05-08
+
+### Added
+
+- Unified Transfer tab replaces the separate Move, Organize, and Vendor tabs.
+- Transfer tab supports any combination of Source and Destination: Bags, Private Bank, Reagent Bank, Warband Bank, or Vendor.
+- From/To dropdowns let you pick exactly what to move where, without switching between three separate UIs.
+- Per-item block reason display: items that cannot be transferred show why (bank closed, vendor closed, no slots, rules, etc.).
+- Actionable-only toggle to hide blocked items and focus on what can be moved now.
+- Select Movable and Select Page shortcuts for batch selection.
+- Slash command presets (`/icanteven dump`, `recall`, `organize`, `vendor`) now pre-configure the Transfer tab Source and Destination and open it directly.
+
+### Changed
+
+- Navigation simplified to four tabs: Summary, Transfer, Rules, Settings.
+- Summary tab "Open Move Tab" button updated to open the new Transfer tab.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added
