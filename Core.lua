@@ -13,6 +13,7 @@ local DISPLAY_NAME = "I Can't Even Right Now (With My Bags and Bank)"
 local ICON_TEXTURE = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow.png"
 
 local CContainer = C_Container
+local TAB_ORDER = { "Summary", "Move", "Organize", "Vendor", "Rules", "Settings" }
 local UI = {
     frame = nil,
     minimapButton = nil,
@@ -30,8 +31,14 @@ local UI = {
     vendorSelected = {},
     vendorVisible = {},
     visible = {},
+    bankContextOpen = false,
+    bankContextClosed = false,
+    vendorContextOpen = false,
+    vendorContextClosed = false,
+    hadBankContext = false,
+    hadVendorContext = false,
     page = 1,
-    pageSize = 7,
+    pageSize = 6,
 }
 
 local BAG_SCOPE = "bags"
@@ -39,8 +46,8 @@ local BANK_SCOPE = "bank"
 local EXPANSION_FILTER_ALL = 0
 local EXPANSION_FILTER_NOT_CURRENT = -1
 local EXPANSION_FILTER_UNKNOWN = -2
-local ORGANIZE_PAGE_SIZE = 8
-local VENDOR_PAGE_SIZE = 8
+local ORGANIZE_PAGE_SIZE = 6
+local VENDOR_PAGE_SIZE = 6
 local STORAGE_BAGS = "Bags"
 local STORAGE_PRIVATE_BANK = "Private Bank"
 local STORAGE_REAGENT_BANK = "Reagent Bank"
@@ -48,6 +55,13 @@ local STORAGE_WARBAND_BANK = "Warband Bank"
 local TYPE_FILTER_REAGENT = "Reagent"
 local TYPE_FILTER_BOE = "BoE"
 local TYPE_FILTER_WUE = "WuE"
+local TYPE_FILTER_VENDOR_SELLABLE = "Vendor Sellable"
+local BIND_FILTER_ALL = "All"
+local BIND_FILTER_BOE = "BoE"
+local BIND_FILTER_WUE = "WuE"
+local BIND_FILTER_SOULBOUND = "Soulbound"
+local BIND_FILTER_WARBAND = "Warbound"
+local BIND_FILTER_BOP = "BoP"
 local VENDOR_ACTION_RECALL = "Recall to Bags"
 local VENDOR_ACTION_SELL = "Sell at Vendor"
 local MINIMAP_LDB_NAME = "ICantEvenRightNow"
@@ -60,18 +74,29 @@ local BANK_FRAME_NAMES = {
     "LiteBagBankPanel",
     "InventorianBankFrame",
     "BankFrame",
+    "BankPanelFrame",
     "BankPanel",
+    "BankPanelContainerFrame",
     "AccountBankPanel",
+    "AccountBankFrame",
+    "AccountBankPanelFrame",
+    "WarbandBankFrame",
+    "WarbandBankPanel",
+    "WarbandBankPanelFrame",
     "BetterBagsBankFrame",
     "BetterBags_BankFrame",
     "BetterBagsBank",
 }
 local BANK_FRAME_PATTERNS = {
     "betterbagsbagbank",
+    "bank",
     "bagnonframebank",
     "combuctorframebank",
     "litebagbank",
     "inventorianbank",
+    "bankpanel",
+    "accountbank",
+    "warbandbank",
     "adibagsbank",
     "sortedbank",
 }
@@ -291,6 +316,39 @@ function Core.PrintBankContainerDiagnostics()
         Print("Enum.BagIndex: " .. (#enumParts > 0 and table.concat(enumParts, "; ") or "(no numeric fields found)"))
     else
         Print("Enum.BagIndex unavailable")
+    end
+
+    if C_PlayerInteractionManager and C_PlayerInteractionManager.IsInteractingWithNpcOfType and Enum and Enum.PlayerInteractionType then
+        local bankerOK, bankerActive = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, Enum.PlayerInteractionType.Banker)
+        local accountBanker = rawget(Enum.PlayerInteractionType, "AccountBanker")
+        local accountOK, accountActive = false, false
+        if accountBanker ~= nil then
+            accountOK, accountActive = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, accountBanker)
+        end
+        Print("Player interaction: Banker=" .. tostring(bankerOK and bankerActive) .. "; AccountBanker=" .. tostring(accountOK and accountActive))
+    else
+        Print("Player interaction bank probe unavailable")
+    end
+
+    if C_Bank then
+        if C_Bank.AreAnyBankTypesViewable then
+            local ok, viewable = pcall(C_Bank.AreAnyBankTypesViewable)
+            Print("C_Bank.AreAnyBankTypesViewable: " .. tostring(ok and viewable))
+        end
+        if C_Bank.FetchViewableBankTypes then
+            local ok, bankTypes = pcall(C_Bank.FetchViewableBankTypes)
+            local count = 0
+            if ok and type(bankTypes) == "table" then
+                for _, bankType in pairs(bankTypes) do
+                    if bankType ~= nil then count = count + 1 end
+                end
+            elseif ok and bankTypes ~= nil then
+                count = 1
+            end
+            Print("C_Bank.FetchViewableBankTypes count: " .. tostring(ok and count or "unavailable"))
+        end
+    else
+        Print("C_Bank unavailable")
     end
 
     Print("Resolved private IDs: " .. JoinBagIDs(PRIVATE_BANK_IDS))
@@ -785,72 +843,6 @@ end
 
 local IsItemWarboundUntilEquipped
 
-local function MatchesFilter(item)
-    local ui = ns.DB.ui
-    if ui.mode == "Dump to Bank" and item.scope ~= BAG_SCOPE then
-        return false
-    elseif ui.mode == "Recall from Bank" and item.scope ~= BANK_SCOPE then
-        return false
-    end
-    if ui.recommendedOnly then
-        if ui.mode == "Dump to Bank" and item.recommendedAction ~= Data.Actions.BANK then
-            return false
-        elseif ui.mode == "Recall from Bank" and item.recommendedAction ~= Data.Actions.RECALL then
-            return false
-        elseif item.recommendedAction == Data.Actions.NONE or item.recommendedAction == Data.Actions.REVIEW then
-            return false
-        end
-    end
-    if ui.expansionFilter == EXPANSION_FILTER_NOT_CURRENT then
-        if not IsOldExpansion(item.expansionID) then
-            return false
-        end
-    elseif ui.expansionFilter == EXPANSION_FILTER_UNKNOWN then
-        if not IsUnknownExpansion(item.expansionID) then
-            return false
-        end
-    elseif ui.expansionFilter and ui.expansionFilter ~= EXPANSION_FILTER_ALL and item.expansionID ~= ui.expansionFilter then
-        return false
-    end
-    if ui.typeFilter and ui.typeFilter ~= "All" then
-        if ui.typeFilter == TYPE_FILTER_REAGENT then
-            local isInReagentBank = item.storageKind == STORAGE_REAGENT_BANK
-            local goesToReagentBank = item.bankTargetStorage == STORAGE_REAGENT_BANK
-            local isProfessionMaterial = item.typeTag == Data.ItemTypes.PROFESSION
-            if not isInReagentBank and not goesToReagentBank and not isProfessionMaterial then
-                return false
-            end
-        elseif ui.typeFilter == TYPE_FILTER_BOE then
-            if item.typeTag ~= Data.ItemTypes.BOE or IsItemWarboundUntilEquipped(item) then
-                return false
-            end
-        elseif ui.typeFilter == TYPE_FILTER_WUE then
-            if not IsItemWarboundUntilEquipped(item) then
-                return false
-            end
-        elseif item.typeTag ~= ui.typeFilter then
-            return false
-        end
-    end
-    if ui.locationFilter == "Bags" and item.scope ~= BAG_SCOPE then
-        return false
-    elseif ui.locationFilter == "Bank" and item.scope ~= BANK_SCOPE then
-        return false
-    end
-    local search = ui.search and ui.search:lower() or ""
-    if search ~= "" then
-        local haystack = table.concat({
-            item.name or "",
-            tostring(item.itemID or ""),
-            item.expansionName or "",
-            item.typeTag or "",
-            item.reason or "",
-        }, " "):lower()
-        return haystack:find(search, 1, true) ~= nil
-    end
-    return true
-end
-
 IsItemWarboundUntilEquipped = function(item)
     if item.bindingScope == "Warbound Until Equipped" then
         return true
@@ -875,6 +867,259 @@ IsItemWarboundUntilEquipped = function(item)
     return ok and isWuE and true or false
 end
 
+local function EnsureFilterBranch(filters, key)
+    filters[key] = filters[key] or {}
+    return filters[key]
+end
+
+local function EnsureTabFilters(tabName)
+    ns.DB.ui.tabFilters = ns.DB.ui.tabFilters or {}
+    ns.DB.ui.tabFilters[tabName] = ns.DB.ui.tabFilters[tabName] or {}
+    local filters = ns.DB.ui.tabFilters[tabName]
+    local expansion = EnsureFilterBranch(filters, "expansion")
+    local itemType = EnsureFilterBranch(filters, "type")
+    local bind = EnsureFilterBranch(filters, "bind")
+    local location = EnsureFilterBranch(filters, "location")
+    local name = EnsureFilterBranch(filters, "name")
+    if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
+    if itemType.include == nil then itemType.include = "All" end
+    if bind.include == nil then bind.include = BIND_FILTER_ALL end
+    if location.include == nil then location.include = "All" end
+    name.includeText = name.includeText or ""
+    name.excludeText = name.excludeText or ""
+    filters.hideBlocked = filters.hideBlocked and true or false
+    filters.advancedEnabled = filters.advancedEnabled and true or false
+    return filters
+end
+
+local function MigrateLegacyTabFilters()
+    local moveFilters = EnsureTabFilters("Move")
+    if not moveFilters.migratedFromLegacy then
+        moveFilters.expansion.include = ns.DB.ui.expansionFilter or EXPANSION_FILTER_ALL
+        moveFilters.type.include = ns.DB.ui.typeFilter or "All"
+        moveFilters.location.include = ns.DB.ui.locationFilter or "All"
+        moveFilters.name.includeText = ns.DB.ui.search or ""
+        moveFilters.migratedFromLegacy = true
+    end
+
+    local organizeFilters = EnsureTabFilters("Organize")
+    if not organizeFilters.migratedFromLegacy then
+        organizeFilters.name.includeText = ns.DB.ui.organizerSearch or ""
+        organizeFilters.migratedFromLegacy = true
+    end
+
+    local vendorFilters = EnsureTabFilters("Vendor")
+    if not vendorFilters.migratedFromLegacy then
+        vendorFilters.name.includeText = ns.DB.ui.vendorSearch or ""
+        vendorFilters.migratedFromLegacy = true
+    end
+end
+
+local function SetFilterInclude(tabName, key, value)
+    local filters = EnsureTabFilters(tabName)
+    EnsureFilterBranch(filters, key).include = value
+    if tabName == "Move" then
+        if key == "expansion" then
+            ns.DB.ui.expansionFilter = value
+        elseif key == "type" then
+            ns.DB.ui.typeFilter = value
+        elseif key == "location" then
+            ns.DB.ui.locationFilter = value
+        end
+    end
+    UI.page = 1
+end
+
+local IsAllFilterValue
+local GetExpansionFilterLabel
+
+local function SetFilterSearch(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    filters.name.includeText = value or ""
+    if tabName == "Move" then
+        ns.DB.ui.search = filters.name.includeText
+    elseif tabName == "Organize" then
+        ns.DB.ui.organizerSearch = filters.name.includeText
+    elseif tabName == "Vendor" then
+        ns.DB.ui.vendorSearch = filters.name.includeText
+    end
+    UI.page = 1
+end
+
+local function SetFilterHideBlocked(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    filters.hideBlocked = value and true or false
+    UI.page = 1
+end
+
+local function ResetTabFilters(tabName)
+    local filters = EnsureTabFilters(tabName)
+    filters.expansion.include = EXPANSION_FILTER_ALL
+    filters.type.include = "All"
+    filters.bind.include = BIND_FILTER_ALL
+    filters.location.include = "All"
+    filters.name.includeText = ""
+    filters.name.excludeText = ""
+    filters.hideBlocked = false
+    filters.advancedEnabled = false
+    if tabName == "Move" then
+        ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
+        ns.DB.ui.typeFilter = "All"
+        ns.DB.ui.locationFilter = "All"
+        ns.DB.ui.search = ""
+    elseif tabName == "Organize" then
+        ns.DB.ui.organizerSearch = ""
+    elseif tabName == "Vendor" then
+        ns.DB.ui.vendorSearch = ""
+    end
+    UI.page = 1
+end
+
+local function BuildFilterSummary(tabName)
+    local filters = EnsureTabFilters(tabName)
+    local parts = {}
+    if not IsAllFilterValue(filters.expansion.include) then
+        table.insert(parts, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
+    end
+    if not IsAllFilterValue(filters.type.include) then
+        table.insert(parts, "Type: " .. tostring(filters.type.include))
+    end
+    if not IsAllFilterValue(filters.bind.include) then
+        table.insert(parts, "Bind: " .. tostring(filters.bind.include))
+    end
+    if not IsAllFilterValue(filters.location.include) then
+        table.insert(parts, "Location: " .. tostring(filters.location.include))
+    end
+    if filters.name.includeText ~= "" then
+        table.insert(parts, "Search: " .. filters.name.includeText)
+    end
+    if filters.name.excludeText ~= "" then
+        table.insert(parts, "Excluding: " .. filters.name.excludeText)
+    end
+    if filters.hideBlocked then
+        table.insert(parts, "Actionable only")
+    end
+    return #parts > 0 and table.concat(parts, "  |  ") or "Filters: All"
+end
+
+IsAllFilterValue = function(value)
+    return value == nil or value == "All" or value == EXPANSION_FILTER_ALL or value == BIND_FILTER_ALL
+end
+
+local function FilterMatchesInclude(include, matcher)
+    if IsAllFilterValue(include) then
+        return true
+    end
+    if type(include) == "table" then
+        local hasSpecificValue = false
+        for key, value in pairs(include) do
+            local actual = value == true and key or value
+            if not IsAllFilterValue(actual) then
+                hasSpecificValue = true
+                if matcher(actual) then
+                    return true
+                end
+            end
+        end
+        return not hasSpecificValue
+    end
+    return matcher(include)
+end
+
+local function FilterIncludesValue(include, expected)
+    if include == expected then
+        return true
+    end
+    if type(include) == "table" then
+        for key, value in pairs(include) do
+            local actual = value == true and key or value
+            if actual == expected then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function MatchesExpansionInclude(item, include)
+    return FilterMatchesInclude(include, function(value)
+        if value == EXPANSION_FILTER_NOT_CURRENT then
+            return IsOldExpansion(item.expansionID)
+        elseif value == EXPANSION_FILTER_UNKNOWN then
+            return IsUnknownExpansion(item.expansionID)
+        end
+        return item.expansionID == value
+    end)
+end
+
+local function IsVendorSellable(item)
+    return (item.sellPrice or 0) >= 1
+end
+
+local function MatchesTypeInclude(item, include)
+    return FilterMatchesInclude(include, function(value)
+        if value == TYPE_FILTER_REAGENT then
+            local isInReagentBank = item.storageKind == STORAGE_REAGENT_BANK
+            local goesToReagentBank = item.bankTargetStorage == STORAGE_REAGENT_BANK
+            local isProfessionMaterial = item.typeTag == Data.ItemTypes.PROFESSION
+            return isInReagentBank or goesToReagentBank or isProfessionMaterial
+        elseif value == TYPE_FILTER_BOE then
+            return item.typeTag == Data.ItemTypes.BOE and not IsItemWarboundUntilEquipped(item)
+        elseif value == TYPE_FILTER_WUE then
+            return IsItemWarboundUntilEquipped(item)
+        elseif value == TYPE_FILTER_VENDOR_SELLABLE then
+            return IsVendorSellable(item)
+        end
+        return item.typeTag == value
+    end)
+end
+
+local function MatchesBindInclude(item, include)
+    return FilterMatchesInclude(include, function(value)
+        if value == BIND_FILTER_BOE then
+            return (item.bindingScope == "BoE" or item.bindType == 2) and not IsItemWarboundUntilEquipped(item)
+        elseif value == BIND_FILTER_WUE then
+            return IsItemWarboundUntilEquipped(item)
+        elseif value == BIND_FILTER_SOULBOUND then
+            return item.isSoulbound or item.bindingScope == "Soulbound"
+        elseif value == BIND_FILTER_WARBAND then
+            return item.isWarbandBound or item.bindingScope == "Warbound" or item.bindingScope == "Warbound Until Equipped"
+        elseif value == BIND_FILTER_BOP then
+            return item.bindType == 1 or item.bindingScope == "Soulbound" or item.isSoulbound
+        end
+        return true
+    end)
+end
+
+local function MatchesLocationInclude(item, include)
+    return FilterMatchesInclude(include, function(value)
+        if value == "Bags" then
+            return item.scope == BAG_SCOPE
+        elseif value == "Bank" then
+            return item.scope == BANK_SCOPE
+        elseif value == STORAGE_PRIVATE_BANK or value == STORAGE_REAGENT_BANK or value == STORAGE_WARBAND_BANK then
+            return item.storageKind == value
+        end
+        return true
+    end)
+end
+
+local function BuildItemSearchParts(item, extraParts)
+    local parts = {
+        item.name or "",
+        tostring(item.itemID or ""),
+        item.expansionName or "",
+        item.typeTag or "",
+        item.location or "",
+        item.reason or "",
+        item.bindingScope or "",
+    }
+    for _, part in ipairs(extraParts or {}) do
+        table.insert(parts, part or "")
+    end
+    return parts
+end
+
 local function TextMatchesSearch(searchText, parts)
     local search = searchText and searchText:lower() or ""
     if search == "" then
@@ -884,14 +1129,101 @@ local function TextMatchesSearch(searchText, parts)
     return haystack:find(search, 1, true) ~= nil
 end
 
-local function PlanMatchesSearch(plan, searchText)
+local function MatchesTabFilters(item, tabName, extraParts)
+    local filters = EnsureTabFilters(tabName)
+    if not MatchesExpansionInclude(item, filters.expansion.include) then
+        return false
+    elseif not MatchesTypeInclude(item, filters.type.include) then
+        return false
+    elseif not MatchesBindInclude(item, filters.bind.include) then
+        return false
+    elseif not MatchesLocationInclude(item, filters.location.include) then
+        return false
+    elseif not TextMatchesSearch(filters.name.includeText, BuildItemSearchParts(item, extraParts)) then
+        return false
+    elseif filters.name.excludeText ~= "" and TextMatchesSearch(filters.name.excludeText, { item.name or "" }) then
+        return false
+    end
+    return true
+end
+
+local function MatchesMoveFilter(item)
+    local ui = ns.DB.ui
+    if ui.mode == "Dump to Bank" and item.scope ~= BAG_SCOPE then
+        return false
+    elseif ui.mode == "Recall from Bank" and item.scope ~= BANK_SCOPE then
+        return false
+    end
+    if ui.recommendedOnly then
+        if ui.mode == "Dump to Bank" and item.recommendedAction ~= Data.Actions.BANK then
+            return false
+        elseif ui.mode == "Recall from Bank" and item.recommendedAction ~= Data.Actions.RECALL then
+            return false
+        elseif item.recommendedAction == Data.Actions.NONE or item.recommendedAction == Data.Actions.REVIEW then
+            return false
+        end
+    end
+    local filters = EnsureTabFilters("Move")
+    if filters.hideBlocked then
+        if ui.mode == "Dump to Bank" and not item.eligibleForBankMove then
+            return false
+        elseif ui.mode == "Recall from Bank" and not item.eligibleForRecall then
+            return false
+        end
+    end
+    return MatchesTabFilters(item, "Move")
+end
+
+GetExpansionFilterLabel = function(value)
+    if value == EXPANSION_FILTER_ALL then
+        return "All expansions"
+    elseif value == EXPANSION_FILTER_NOT_CURRENT then
+        return "Not current"
+    elseif value == EXPANSION_FILTER_UNKNOWN then
+        return "Unknown expansion"
+    end
+    return GetExpansionName(value)
+end
+
+local function GetTypeFilterOptions()
+    return {
+        { text = "All", value = "All" },
+        { text = Data.ItemTypes.REPUTATION, value = Data.ItemTypes.REPUTATION },
+        { text = Data.ItemTypes.QUEST, value = Data.ItemTypes.QUEST },
+        { text = Data.ItemTypes.SEASONAL, value = Data.ItemTypes.SEASONAL },
+        { text = Data.ItemTypes.PROFESSION, value = Data.ItemTypes.PROFESSION },
+        { text = TYPE_FILTER_REAGENT, value = TYPE_FILTER_REAGENT },
+        { text = Data.ItemTypes.CONSUMABLE, value = Data.ItemTypes.CONSUMABLE },
+        { text = TYPE_FILTER_BOE, value = TYPE_FILTER_BOE },
+        { text = TYPE_FILTER_WUE, value = TYPE_FILTER_WUE },
+        { text = TYPE_FILTER_VENDOR_SELLABLE, value = TYPE_FILTER_VENDOR_SELLABLE },
+        { text = Data.ItemTypes.UNKNOWN, value = Data.ItemTypes.UNKNOWN },
+    }
+end
+
+local function GetBindFilterOptions()
+    return {
+        { text = "All", value = BIND_FILTER_ALL },
+        { text = BIND_FILTER_BOE, value = BIND_FILTER_BOE },
+        { text = BIND_FILTER_WUE, value = BIND_FILTER_WUE },
+        { text = BIND_FILTER_SOULBOUND, value = BIND_FILTER_SOULBOUND },
+        { text = BIND_FILTER_WARBAND, value = BIND_FILTER_WARBAND },
+        { text = BIND_FILTER_BOP, value = BIND_FILTER_BOP },
+    }
+end
+
+local function GetBankLocationFilterOptions()
+    return {
+        { text = "All", value = "All" },
+        { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK },
+        { text = STORAGE_REAGENT_BANK, value = STORAGE_REAGENT_BANK },
+        { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK },
+    }
+end
+
+local function PlanMatchesTabFilters(plan, tabName)
     local item = plan.item or {}
-    return TextMatchesSearch(searchText, {
-        item.name or "",
-        tostring(item.itemID or ""),
-        item.expansionName or "",
-        item.typeTag or "",
-        item.location or "",
+    return MatchesTabFilters(item, tabName, {
         plan.currentStorage or "",
         plan.targetStorage or "",
         plan.action or "",
@@ -1200,7 +1532,7 @@ end
 local function GetOrganizationPlans(showAll)
     local charProfSubclasses = GetCharacterProfessionSubclasses()
     local plans = {}
-    for _, item in ipairs(GetAllDecisions()) do
+    for _, item in ipairs(GetAllDecisions() or {}) do
         local plan = BuildOrganizationPlan(item, charProfSubclasses)
         if plan and (showAll or plan.needsMove) then
             table.insert(plans, plan)
@@ -1265,7 +1597,7 @@ end
 
 local function GetVendorPlans(showAll)
     local plans = {}
-    for _, item in ipairs(GetAllDecisions()) do
+    for _, item in ipairs(GetAllDecisions() or {}) do
         local plan = BuildVendorPlan(item)
         if plan and (showAll or plan.isCandidate) then
             table.insert(plans, plan)
@@ -1412,6 +1744,66 @@ local function SetEmptyLabel(label, isEmpty, text)
         label:SetText(text)
     end
     label:SetShown(isEmpty and true or false)
+end
+
+local function CreateContextNotice(parent)
+    local label = CreateLabel(parent, "", "GameFontDisableSmall")
+    label:SetPoint("TOPRIGHT", 0, 0)
+    label:SetWidth(250)
+    label:SetJustifyH("RIGHT")
+    label:Hide()
+    return label
+end
+
+local function SetContextNotice(label, text)
+    if not label then
+        return
+    end
+    label:SetText(text or "")
+    label:SetShown(text and text ~= "")
+end
+
+local function GetTabAvailability(tabName)
+    if tabName == "Move" then
+        if ns.DB.context.bankOpen then
+            return true, nil
+        end
+        return false, "Open the bank to move selected rows."
+    elseif tabName == "Organize" then
+        if ns.DB.context.bankOpen then
+            return true, nil
+        end
+        return false, "Open the bank to organize storage."
+    elseif tabName == "Vendor" then
+        if ns.DB.context.vendorOpen then
+            return true, nil
+        end
+        return false, "Open a vendor to sell selected rows."
+    end
+    return true, nil
+end
+
+local function ApplyTabVisualState(tab, tabName, isActive)
+    local isAvailable, reason = GetTabAvailability(tabName)
+    tab:SetText(tabName)
+    tab:SetEnabled(true)
+    tab:SetAlpha(isActive and 1 or (isAvailable and 0.82 or 0.55))
+    if isActive and tab.LockHighlight then
+        tab:LockHighlight()
+    elseif tab.UnlockHighlight then
+        tab:UnlockHighlight()
+    end
+    local fontString = tab:GetFontString()
+    if fontString and fontString.SetTextColor then
+        if isActive then
+            fontString:SetTextColor(1, 0.86, 0.1)
+        elseif not isAvailable then
+            fontString:SetTextColor(0.95, 0.55, 0.25)
+        else
+            fontString:SetTextColor(0.9, 0.82, 0.55)
+        end
+    end
+    tab.availabilityReason = reason
 end
 
 local function CreateRowRuleMenu(parent, width, options)
@@ -1676,6 +2068,135 @@ local function IsGlobalFrameShown(name)
     return frame and frame.IsShown and frame:IsShown() or false
 end
 
+local function IsBankViewableByAPI()
+    if not C_Bank then
+        return false
+    end
+
+    if C_Bank.AreAnyBankTypesViewable then
+        local ok, viewable = pcall(C_Bank.AreAnyBankTypesViewable)
+        if ok and viewable then
+            return true
+        end
+    end
+
+    if C_Bank.FetchViewableBankTypes then
+        local ok, bankTypes = pcall(C_Bank.FetchViewableBankTypes)
+        if ok and type(bankTypes) == "table" then
+            for _, bankType in pairs(bankTypes) do
+                if bankType ~= nil then
+                    return true
+                end
+            end
+        elseif ok and bankTypes ~= nil then
+            return true
+        end
+    end
+
+    if C_Bank.IsBankTypeViewable and Enum and Enum.BankType then
+        local bankTypes = {
+            rawget(Enum.BankType, "Character"),
+            rawget(Enum.BankType, "Account"),
+        }
+        for _, bankType in ipairs(bankTypes) do
+            if bankType ~= nil then
+                local ok, viewable = pcall(C_Bank.IsBankTypeViewable, bankType)
+                if ok and viewable then
+                    return true
+                end
+            end
+        end
+    end
+
+    if C_Bank.CanViewBank and Enum and Enum.BankType then
+        local bankTypes = {
+            rawget(Enum.BankType, "Character"),
+            rawget(Enum.BankType, "Account"),
+        }
+        for _, bankType in ipairs(bankTypes) do
+            if bankType ~= nil then
+                local ok, canView = pcall(C_Bank.CanViewBank, bankType)
+                if ok and canView then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function IsBankStorageAccessible()
+    if not CContainer then
+        return false
+    end
+
+    -- GetContainerNumFreeSlots only returns valid data when the bank is actually
+    -- open and the server has sent container contents. GetContainerNumSlots returns
+    -- the static slot count regardless of bank state, so we use free slots instead.
+    if CContainer.GetContainerNumFreeSlots then
+        local storageIDLists = { PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }
+        for _, ids in ipairs(storageIDLists) do
+            for _, bagID in ipairs(ids or {}) do
+                local ok, freeSlots = pcall(CContainer.GetContainerNumFreeSlots, bagID)
+                if ok and type(freeSlots) == "number" and freeSlots >= 0 then
+                    return true
+                end
+            end
+        end
+    end
+
+    -- Fallback: probe slot 1 of each bank bag for any item info response
+    if CContainer.GetContainerItemInfo then
+        local storageIDLists = { PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }
+        for _, ids in ipairs(storageIDLists) do
+            for _, bagID in ipairs(ids or {}) do
+                local ok, info = pcall(CContainer.GetContainerItemInfo, bagID, 1)
+                if ok and info ~= nil then
+                    return true
+                end
+            end
+        end
+    end
+
+    return false
+end
+
+local function IsBankInteractionType(interactionType)
+    if not Enum or not Enum.PlayerInteractionType then
+        return false
+    end
+    return interactionType == Enum.PlayerInteractionType.Banker
+        or interactionType == rawget(Enum.PlayerInteractionType, "AccountBanker")
+end
+
+local function IsPlayerBankInteractionActive()
+    if not C_PlayerInteractionManager or not C_PlayerInteractionManager.IsInteractingWithNpcOfType or not Enum or not Enum.PlayerInteractionType then
+        return false
+    end
+
+    local interactionTypes = {
+        Enum.PlayerInteractionType.Banker,
+        rawget(Enum.PlayerInteractionType, "AccountBanker"),
+    }
+    for _, interactionType in ipairs(interactionTypes) do
+        if interactionType ~= nil then
+            local ok, active = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, interactionType)
+            if ok and active then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function IsBankContextDetected()
+    return IsPlayerBankInteractionActive()
+        or (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
+        or IsBankViewableByAPI()
+        or IsBankStorageAccessible()
+end
+
 function Core.UpdateQuickAccessButtons()
     if not ns.DB or not ns.DB.ui then
         return
@@ -1700,12 +2221,18 @@ end
 
 function Core.UpdateContext()
     local context = ns.DB.context
-    context.bankOpen = (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
+    context.bankOpen = UI.bankContextOpen or IsBankContextDetected()
     context.reagentBankOpen = IsGlobalFrameShown("ReagentBankFrame")
-    context.vendorOpen = IsGlobalFrameShown("MerchantFrame")
+    context.vendorOpen = UI.vendorContextOpen or (IsGlobalFrameShown("MerchantFrame") and not UI.vendorContextClosed)
     context.auctionHouseOpen = IsGlobalFrameShown("AuctionHouseFrame")
     context.mailboxOpen = IsGlobalFrameShown("MailFrame")
     context.inCombat = InCombatLockdown() and true or false
+    if context.bankOpen then
+        UI.hadBankContext = true
+    end
+    if context.vendorOpen then
+        UI.hadVendorContext = true
+    end
 end
 
 function Core.PrintQuickAccessStatus()
@@ -1723,6 +2250,9 @@ local function ScheduleQuickAccessRefresh()
         if ns.DB and ns.DB.context then
             Core.UpdateContext()
             Core.UpdateQuickAccessButtons()
+            if UI.frame and UI.frame:IsShown() then
+                Core.RefreshUI()
+            end
         end
     end
     if C_Timer and C_Timer.After then
@@ -1875,7 +2405,7 @@ local function CountSummary()
         unknown = 0,
         protected = 0,
     }
-    for _, item in ipairs(GetAllDecisions()) do
+    for _, item in ipairs(GetAllDecisions() or {}) do
         if IsOldExpansion(item.expansionID) and item.scope == BAG_SCOPE then
             counts.oldBags = counts.oldBags + 1
         elseif IsOldExpansion(item.expansionID) and item.scope == BANK_SCOPE then
@@ -1897,7 +2427,9 @@ end
 local function SetTab(tabName)
     UI.activeTab = tabName
     UI.page = 1
+    Core.UpdateContext()
     Core.RefreshUI()
+    Core.ScheduleDeferredUIRefresh()
 end
 
 function AddRule(item, ruleType)
@@ -1962,6 +2494,7 @@ end
 local function BuildMoveTab(parent)
     parent.help = CreateLabel(parent, "Move flow: use checkboxes for batch actions, or act on a single eligible row.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
+    parent.contextNotice = CreateContextNotice(parent)
 
     parent.modeBank = CreateButton(parent, "Dump to Bank", 120)
     parent.modeBank:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -10)
@@ -1977,38 +2510,29 @@ local function BuildMoveTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.expansionFilter = CreateDropdown(parent, 170, GetExpansionOptions(), function(value)
-        ns.DB.ui.expansionFilter = value
-        UI.page = 1
+    parent.expansionFilter = CreateDropdown(parent, 160, GetExpansionOptions(), function(value)
+        SetFilterInclude("Move", "expansion", value)
     end)
     parent.expansionFilter:SetPoint("TOPLEFT", parent.modeBank, "BOTTOMLEFT", 0, -10)
 
-    parent.typeFilter = CreateDropdown(parent, 150, {
-        { text = "All", value = "All" },
-        { text = Data.ItemTypes.REPUTATION, value = Data.ItemTypes.REPUTATION },
-        { text = Data.ItemTypes.QUEST, value = Data.ItemTypes.QUEST },
-        { text = Data.ItemTypes.SEASONAL, value = Data.ItemTypes.SEASONAL },
-        { text = Data.ItemTypes.PROFESSION, value = Data.ItemTypes.PROFESSION },
-        { text = TYPE_FILTER_REAGENT, value = TYPE_FILTER_REAGENT },
-        { text = Data.ItemTypes.CONSUMABLE, value = Data.ItemTypes.CONSUMABLE },
-        { text = TYPE_FILTER_BOE, value = TYPE_FILTER_BOE },
-        { text = TYPE_FILTER_WUE, value = TYPE_FILTER_WUE },
-        { text = Data.ItemTypes.UNKNOWN, value = Data.ItemTypes.UNKNOWN },
-    }, function(value)
-        ns.DB.ui.typeFilter = value
-        UI.page = 1
+    parent.typeFilter = CreateDropdown(parent, 135, GetTypeFilterOptions(), function(value)
+        SetFilterInclude("Move", "type", value)
     end)
     parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 8, 0)
 
-    parent.locationFilter = CreateDropdown(parent, 130, {
+    parent.bindFilter = CreateDropdown(parent, 115, GetBindFilterOptions(), function(value)
+        SetFilterInclude("Move", "bind", value)
+    end)
+    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
+
+    parent.locationFilter = CreateDropdown(parent, 115, {
         { text = "All", value = "All" },
         { text = "Bags", value = "Bags" },
         { text = "Bank", value = "Bank" },
     }, function(value)
-        ns.DB.ui.locationFilter = value
-        UI.page = 1
+        SetFilterInclude("Move", "location", value)
     end)
-    parent.locationFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
+    parent.locationFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 8, 0)
 
     parent.recommended = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
     parent.recommended:SetPoint("LEFT", parent.locationFilter, "RIGHT", 12, 0)
@@ -2027,14 +2551,34 @@ local function BuildMoveTab(parent)
     parent.search:SetAutoFocus(false)
     parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
     parent.search:SetScript("OnTextChanged", function(self)
-        ns.DB.ui.search = self:GetText() or ""
-        UI.page = 1
+        SetFilterSearch("Move", self:GetText())
         Core.RefreshUI()
     end)
 
+    parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.actionableOnly:SetPoint("LEFT", parent.search, "RIGHT", 14, 0)
+    parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
+    parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
+    parent.actionableOnly:SetScript("OnClick", function(self)
+        SetFilterHideBlocked("Move", self:GetChecked())
+        Core.RefreshUI()
+    end)
+
+    parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
+    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
+    parent.clearFilters:SetScript("OnClick", function()
+        ResetTabFilters("Move")
+        Core.RefreshUI()
+    end)
+
+    parent.filterSummary = CreateLabel(parent, "", "GameFontDisableSmall")
+    parent.filterSummary:SetPoint("TOPLEFT", parent.searchLabel, "BOTTOMLEFT", -6, -6)
+    parent.filterSummary:SetWidth(700)
+    parent.filterSummary:SetWordWrap(false)
+
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetSize(720, 306)
-    parent.listFrame:SetPoint("TOPLEFT", parent.search, "BOTTOMLEFT", -6, -14)
+    parent.listFrame:SetSize(720, 264)
+    parent.listFrame:SetPoint("TOPLEFT", parent.filterSummary, "BOTTOMLEFT", 0, -8)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2137,9 +2681,30 @@ end
 local function BuildOrganizeTab(parent)
     parent.help = CreateLabel(parent, "Bank organizer: move selected stacks between private and Warband bank storage.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
+    parent.contextNotice = CreateContextNotice(parent)
+
+    parent.expansionFilter = CreateDropdown(parent, 160, GetExpansionOptions(), function(value)
+        SetFilterInclude("Organize", "expansion", value)
+    end)
+    parent.expansionFilter:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -12)
+
+    parent.typeFilter = CreateDropdown(parent, 135, GetTypeFilterOptions(), function(value)
+        SetFilterInclude("Organize", "type", value)
+    end)
+    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 8, 0)
+
+    parent.bindFilter = CreateDropdown(parent, 115, GetBindFilterOptions(), function(value)
+        SetFilterInclude("Organize", "bind", value)
+    end)
+    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
+
+    parent.locationFilter = CreateDropdown(parent, 135, GetBankLocationFilterOptions(), function(value)
+        SetFilterInclude("Organize", "location", value)
+    end)
+    parent.locationFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 8, 0)
 
     parent.rescan = CreateButton(parent, "Rescan Bank", 110)
-    parent.rescan:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -12)
+    parent.rescan:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 0, -10)
     parent.rescan:SetScript("OnClick", function() Core.ScanInventory("all") end)
 
     parent.showAll = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -2159,14 +2724,34 @@ local function BuildOrganizeTab(parent)
     parent.search:SetAutoFocus(false)
     parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
     parent.search:SetScript("OnTextChanged", function(self)
-        ns.DB.ui.organizerSearch = self:GetText() or ""
-        UI.page = 1
+        SetFilterSearch("Organize", self:GetText())
         Core.RefreshUI()
     end)
 
+    parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.actionableOnly:SetPoint("LEFT", parent.search, "RIGHT", 14, 0)
+    parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
+    parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
+    parent.actionableOnly:SetScript("OnClick", function(self)
+        SetFilterHideBlocked("Organize", self:GetChecked())
+        Core.RefreshUI()
+    end)
+
+    parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
+    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
+    parent.clearFilters:SetScript("OnClick", function()
+        ResetTabFilters("Organize")
+        Core.RefreshUI()
+    end)
+
+    parent.filterSummary = CreateLabel(parent, "", "GameFontDisableSmall")
+    parent.filterSummary:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -8)
+    parent.filterSummary:SetWidth(700)
+    parent.filterSummary:SetWordWrap(false)
+
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetSize(720, 348)
-    parent.listFrame:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetSize(720, 264)
+    parent.listFrame:SetPoint("TOPLEFT", parent.filterSummary, "BOTTOMLEFT", 0, -8)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2174,7 +2759,7 @@ local function BuildOrganizeTab(parent)
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
-    parent.empty = CreateEmptyLabel(parent.listFrame, "No vendor plans.")
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No organization plans.")
 
     parent.rows = {}
     for i = 1, ORGANIZE_PAGE_SIZE do
@@ -2253,6 +2838,7 @@ end
 local function BuildVendorTab(parent)
     parent.help = CreateLabel(parent, "Vendor flow: recall old low-value consumables from bank, then sell them at a vendor.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
+    parent.contextNotice = CreateContextNotice(parent)
 
     parent.rescan = CreateButton(parent, "Rescan All", 100)
     parent.rescan:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -12)
@@ -2268,24 +2854,59 @@ local function BuildVendorTab(parent)
         Core.RefreshUI()
     end)
 
+    parent.expansionFilter = CreateDropdown(parent, 160, GetExpansionOptions(), function(value)
+        SetFilterInclude("Vendor", "expansion", value)
+    end)
+    parent.expansionFilter:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -10)
+
+    parent.typeFilter = CreateDropdown(parent, 135, GetTypeFilterOptions(), function(value)
+        SetFilterInclude("Vendor", "type", value)
+    end)
+    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 8, 0)
+
+    parent.bindFilter = CreateDropdown(parent, 115, GetBindFilterOptions(), function(value)
+        SetFilterInclude("Vendor", "bind", value)
+    end)
+    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
+
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
-    parent.searchLabel:SetPoint("LEFT", parent.showAllLabel, "RIGHT", 18, 0)
+    parent.searchLabel:SetPoint("LEFT", parent.bindFilter, "RIGHT", 18, 0)
     parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     parent.search:SetSize(160, 24)
     parent.search:SetAutoFocus(false)
     parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
     parent.search:SetScript("OnTextChanged", function(self)
-        ns.DB.ui.vendorSearch = self:GetText() or ""
-        UI.page = 1
+        SetFilterSearch("Vendor", self:GetText())
+        Core.RefreshUI()
+    end)
+
+    parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.actionableOnly:SetPoint("LEFT", parent.search, "RIGHT", 14, 0)
+    parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
+    parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
+    parent.actionableOnly:SetScript("OnClick", function(self)
+        SetFilterHideBlocked("Vendor", self:GetChecked())
+        Core.RefreshUI()
+    end)
+
+    parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
+    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
+    parent.clearFilters:SetScript("OnClick", function()
+        ResetTabFilters("Vendor")
         Core.RefreshUI()
     end)
 
     parent.context = CreateLabel(parent, "", "GameFontHighlightSmall")
-    parent.context:SetPoint("LEFT", parent.search, "RIGHT", 18, 0)
+    parent.context:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 0, -8)
+
+    parent.filterSummary = CreateLabel(parent, "", "GameFontDisableSmall")
+    parent.filterSummary:SetPoint("TOPLEFT", parent.context, "BOTTOMLEFT", 0, -6)
+    parent.filterSummary:SetWidth(700)
+    parent.filterSummary:SetWordWrap(false)
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetSize(720, 348)
-    parent.listFrame:SetPoint("TOPLEFT", parent.rescan, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetSize(720, 264)
+    parent.listFrame:SetPoint("TOPLEFT", parent.filterSummary, "BOTTOMLEFT", 0, -8)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -2293,6 +2914,7 @@ local function BuildVendorTab(parent)
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
     parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
+    parent.empty = CreateEmptyLabel(parent.listFrame, "No vendor plans.")
 
     parent.rows = {}
     for i = 1, VENDOR_PAGE_SIZE do
@@ -2476,8 +3098,9 @@ function Core.CreateUI()
 
     frame.panels = {}
     local previous
-    for _, name in ipairs({ "Summary", "Move", "Organize", "Vendor", "Rules", "Settings" }) do
-        local tab = CreateButton(frame, name, 92, 24)
+    for _, name in ipairs(TAB_ORDER) do
+        local tab = CreateButton(frame, name, 92, 26)
+        tab:SetFrameLevel(frame:GetFrameLevel() + 8)
         tab:SetPoint("TOPLEFT", previous or frame, previous and "TOPRIGHT" or "TOPLEFT", previous and 4 or 14, previous and 0 or -34)
         tab:SetScript("OnClick", function() SetTab(name) end)
         UI.tabs[name] = tab
@@ -2508,7 +3131,7 @@ function Core.RefreshSummary()
     local counts = CountSummary()
     panel.context:SetText("Context: " .. GetContextText())
     panel.lastScan:SetText("Last scan: Bags " .. FormatTimestamp(ns.DB.lastScan.bags) .. " | Bank " .. FormatTimestamp(ns.DB.lastScan.bank))
-    panel.scanBank:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat)
+    panel.scanBank:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat)
 
     local cards = {
         { "Old-content items in bags", counts.oldBags },
@@ -2528,8 +3151,8 @@ end
 
 function Core.GetFilteredVisible()
     local filtered = {}
-    for _, item in ipairs(GetAllDecisions()) do
-        if MatchesFilter(item) then
+    for _, item in ipairs(GetAllDecisions() or {}) do
+        if MatchesMoveFilter(item) then
             table.insert(filtered, item)
         end
     end
@@ -2540,7 +3163,7 @@ end
 local function GetMoveSearchDiagnostics(searchText)
     local searchMatches = 0
     local recommendedMatches = 0
-    for _, item in ipairs(GetAllDecisions()) do
+    for _, item in ipairs(GetAllDecisions() or {}) do
         if TextMatchesSearch(searchText, {
             item.name or "",
             tostring(item.itemID or ""),
@@ -2561,31 +3184,29 @@ end
 function Core.RefreshMove()
     local panel = UI.frame.panels.Move
     local ui = ns.DB.ui
+    local filters = EnsureTabFilters("Move")
     local filtered = Core.GetFilteredVisible()
     UI.visible = filtered
+    local noticeText = (UI.bankContextOpen or IsBankContextDetected()) and "" or "Bank closed: move actions are unavailable."
+    SetContextNotice(panel.contextNotice, noticeText ~= "" and noticeText or nil)
 
     panel.modeBank:SetText(ui.mode == "Dump to Bank" and "[Dump to Bank]" or "Dump to Bank")
     panel.modeRecall:SetText(ui.mode == "Recall from Bank" and "[Recall from Bank]" or "Recall from Bank")
-    local expansionLabel
-    if ui.expansionFilter == EXPANSION_FILTER_ALL then
-        expansionLabel = "All expansions"
-    elseif ui.expansionFilter == EXPANSION_FILTER_NOT_CURRENT then
-        expansionLabel = "Not current"
-    elseif ui.expansionFilter == EXPANSION_FILTER_UNKNOWN then
-        expansionLabel = "Unknown expansion"
-    else
-        expansionLabel = GetExpansionName(ui.expansionFilter)
-    end
+    local expansionLabel = GetExpansionFilterLabel(filters.expansion.include)
     SetDropdownText(panel.expansionFilter, "Expansion: " .. expansionLabel)
-    SetDropdownText(panel.typeFilter, "Type: " .. ui.typeFilter)
-    SetDropdownText(panel.locationFilter, "Location: " .. ui.locationFilter)
+    SetDropdownText(panel.typeFilter, "Type: " .. tostring(filters.type.include or "All"))
+    SetDropdownText(panel.bindFilter, "Bind: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
+    SetDropdownText(panel.locationFilter, "Location: " .. tostring(filters.location.include or "All"))
     panel.recommended:SetChecked(ui.recommendedOnly)
-    if panel.search:GetText() ~= ui.search then
-        panel.search:SetText(ui.search or "")
+    panel.actionableOnly:SetChecked(filters.hideBlocked)
+    panel.filterSummary:SetText(BuildFilterSummary("Move"))
+    local searchText = filters.name.includeText or ""
+    if panel.search:GetText() ~= searchText then
+        panel.search:SetText(searchText)
     end
     local emptyText = "No move candidates to show."
-    if ui.search ~= "" then
-        local searchMatches, recommendedMatches = GetMoveSearchDiagnostics(ui.search)
+    if searchText ~= "" then
+        local searchMatches, recommendedMatches = GetMoveSearchDiagnostics(searchText)
         if searchMatches == 0 then
             emptyText = "No scanned items match your search. Scan bags if the item is visible in your inventory."
         elseif ui.recommendedOnly and recommendedMatches == 0 then
@@ -2607,7 +3228,7 @@ function Core.RefreshMove()
     end
     panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #filtered .. " visible, " .. selectedCount .. " selected)")
     panel.move:SetText(ui.mode == "Recall from Bank" and "Recall Selected" or "Bank Selected")
-    panel.move:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat and selectedCount > 0)
+    panel.move:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat and selectedCount > 0)
 
     for i, row in ipairs(panel.rows) do
         local item = filtered[startIndex + i - 1]
@@ -2680,19 +3301,45 @@ end
 
 function Core.RefreshOrganizer()
     local panel = UI.frame.panels.Organize
+    local filters = EnsureTabFilters("Organize")
+    local noticeText = (UI.bankContextOpen or IsBankContextDetected()) and "" or "Bank closed: organization actions are unavailable."
+    SetContextNotice(panel.contextNotice, noticeText ~= "" and noticeText or nil)
+    SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
+    SetDropdownText(panel.typeFilter, "Type: " .. tostring(filters.type.include or "All"))
+    SetDropdownText(panel.bindFilter, "Bind: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
+    SetDropdownText(panel.locationFilter, "Location: " .. tostring(filters.location.include or "All"))
+    local showAll = ns.DB.ui.organizerShowAll
+    local allPlans = GetOrganizationPlans(true)
     local plans = {}
-    for _, plan in ipairs(GetOrganizationPlans(ns.DB.ui.organizerShowAll)) do
-        if PlanMatchesSearch(plan, ns.DB.ui.organizerSearch) then
+    local displayableBeforeFilters = 0
+    for _, plan in ipairs(allPlans) do
+        if showAll or plan.needsMove then
+            displayableBeforeFilters = displayableBeforeFilters + 1
+        end
+        if (showAll or plan.needsMove) and (not filters.hideBlocked or plan.movable) and PlanMatchesTabFilters(plan, "Organize") then
             table.insert(plans, plan)
         end
     end
     UI.organizeVisible = plans
-    panel.showAll:SetChecked(ns.DB.ui.organizerShowAll)
-    if panel.search:GetText() ~= ns.DB.ui.organizerSearch then
-        panel.search:SetText(ns.DB.ui.organizerSearch or "")
+    panel.showAll:SetChecked(showAll)
+    panel.actionableOnly:SetChecked(filters.hideBlocked)
+    panel.filterSummary:SetText(BuildFilterSummary("Organize"))
+    local searchText = filters.name.includeText or ""
+    if panel.search:GetText() ~= searchText then
+        panel.search:SetText(searchText)
     end
-    panel.rescan:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat)
-    SetEmptyLabel(panel.empty, #plans == 0, ns.DB.ui.organizerSearch ~= "" and "No organization plans match your search." or "No bank organization plans to show.")
+    panel.rescan:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat)
+    local emptyText = "No bank organization plans to show."
+    if searchText ~= "" then
+        emptyText = "No organization plans match your search."
+    elseif #allPlans == 0 then
+        emptyText = "No scanned bank items. Open the bank and rescan."
+    elseif displayableBeforeFilters == 0 then
+        emptyText = "No bank moves needed. Enable Show already optimized to review scanned bank rows."
+    elseif #plans == 0 then
+        emptyText = "No organization plans match the current filters."
+    end
+    SetEmptyLabel(panel.empty, #plans == 0, emptyText)
 
     local maxPage = math.max(1, math.ceil(#plans / ORGANIZE_PAGE_SIZE))
     UI.page = math.min(UI.page, maxPage)
@@ -2704,7 +3351,7 @@ function Core.RefreshOrganizer()
         end
     end
     panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #plans .. " plans, " .. selectedCount .. " selected)")
-    panel.move:SetEnabled(ns.DB.context.bankOpen and not ns.DB.context.inCombat and selectedCount > 0)
+    panel.move:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat and selectedCount > 0)
 
     for i, row in ipairs(panel.rows) do
         local plan = plans[startIndex + i - 1]
@@ -2748,19 +3395,32 @@ end
 
 function Core.RefreshVendor()
     local panel = UI.frame.panels.Vendor
+    local filters = EnsureTabFilters("Vendor")
+    local vendorNotice
+    if not ns.DB.context.vendorOpen then
+        vendorNotice = ns.DB.context.bankOpen and "Vendor closed: sell actions are unavailable; bank recall prep is available." or "Vendor closed: sell actions are unavailable."
+    end
+    SetContextNotice(panel.contextNotice, vendorNotice)
+    local showRejected = ns.DB.ui.vendorShowAll or FilterIncludesValue(filters.type.include, TYPE_FILTER_VENDOR_SELLABLE)
     local plans = {}
-    for _, plan in ipairs(GetVendorPlans(ns.DB.ui.vendorShowAll)) do
-        if PlanMatchesSearch(plan, ns.DB.ui.vendorSearch) then
+    for _, plan in ipairs(GetVendorPlans(true)) do
+        if (showRejected or plan.isCandidate) and (not filters.hideBlocked or plan.movable) and PlanMatchesTabFilters(plan, "Vendor") then
             table.insert(plans, plan)
         end
     end
     UI.vendorVisible = plans
     panel.showAll:SetChecked(ns.DB.ui.vendorShowAll)
-    if panel.search:GetText() ~= ns.DB.ui.vendorSearch then
-        panel.search:SetText(ns.DB.ui.vendorSearch or "")
+    panel.actionableOnly:SetChecked(filters.hideBlocked)
+    panel.filterSummary:SetText(BuildFilterSummary("Vendor"))
+    SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
+    SetDropdownText(panel.typeFilter, "Type: " .. tostring(filters.type.include or "All"))
+    SetDropdownText(panel.bindFilter, "Bind: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
+    local searchText = filters.name.includeText or ""
+    if panel.search:GetText() ~= searchText then
+        panel.search:SetText(searchText)
     end
     panel.context:SetText("Context: " .. GetContextText())
-    SetEmptyLabel(panel.empty, #plans == 0, ns.DB.ui.vendorSearch ~= "" and "No vendor plans match your search." or "No vendor plans to show.")
+    SetEmptyLabel(panel.empty, #plans == 0, searchText ~= "" and "No vendor plans match your search." or "No vendor plans to show.")
 
     local maxPage = math.max(1, math.ceil(#plans / VENDOR_PAGE_SIZE))
     UI.page = math.min(UI.page, maxPage)
@@ -2882,20 +3542,27 @@ function Core.RefreshUI()
     Core.UpdateContext()
     for name, panel in pairs(UI.frame.panels) do
         panel:SetShown(name == UI.activeTab)
-        UI.tabs[name]:SetText(name == UI.activeTab and ("[" .. name .. "]") or name)
+        ApplyTabVisualState(UI.tabs[name], name, name == UI.activeTab)
     end
+    local refreshFn
     if UI.activeTab == "Summary" then
-        Core.RefreshSummary()
+        refreshFn = Core.RefreshSummary
     elseif UI.activeTab == "Move" then
-        Core.RefreshMove()
+        refreshFn = Core.RefreshMove
     elseif UI.activeTab == "Organize" then
-        Core.RefreshOrganizer()
+        refreshFn = Core.RefreshOrganizer
     elseif UI.activeTab == "Vendor" then
-        Core.RefreshVendor()
+        refreshFn = Core.RefreshVendor
     elseif UI.activeTab == "Rules" then
-        Core.RefreshRules()
+        refreshFn = Core.RefreshRules
     elseif UI.activeTab == "Settings" then
-        Core.RefreshSettings()
+        refreshFn = Core.RefreshSettings
+    end
+    if refreshFn then
+        local ok, err = pcall(refreshFn)
+        if not ok then
+            Print("|cffff4444RefreshUI error (" .. tostring(UI.activeTab) .. "): " .. tostring(err) .. "|r")
+        end
     end
 end
 
@@ -2906,11 +3573,29 @@ function Core.ShowSummaryUI()
     Core.RefreshUI()
 end
 
+function Core.ScheduleDeferredUIRefresh()
+    if C_Timer and C_Timer.After then
+        C_Timer.After(0.3, function()
+            if ns.DB and ns.DB.context and UI.frame and UI.frame:IsShown() then
+                Core.UpdateContext()
+                Core.RefreshUI()
+            end
+        end)
+        C_Timer.After(1.0, function()
+            if ns.DB and ns.DB.context and UI.frame and UI.frame:IsShown() then
+                Core.UpdateContext()
+                Core.RefreshUI()
+            end
+        end)
+    end
+end
+
 function Core.ShowMoveUI()
     Core.CreateUI()
     UI.activeTab = "Move"
     UI.frame:Show()
     Core.RefreshUI()
+    Core.ScheduleDeferredUIRefresh()
 end
 
 function Core.ShowOrganizeUI()
@@ -2918,6 +3603,7 @@ function Core.ShowOrganizeUI()
     UI.activeTab = "Organize"
     UI.frame:Show()
     Core.RefreshUI()
+    Core.ScheduleDeferredUIRefresh()
 end
 
 function Core.ShowVendorUI()
@@ -2925,23 +3611,27 @@ function Core.ShowVendorUI()
     UI.activeTab = "Vendor"
     UI.frame:Show()
     Core.RefreshUI()
+    Core.ScheduleDeferredUIRefresh()
 end
 
 function Core.SetExpansionFilterFromText(text)
     text = (text or ""):lower()
+    local function SetMoveExpansionFilter(value)
+        SetFilterInclude("Move", "expansion", value)
+    end
     if text == "" or text == "all" or text == "old" then
-        ns.DB.ui.expansionFilter = 0
+        SetMoveExpansionFilter(EXPANSION_FILTER_ALL)
         return
     elseif text == "unknown" or text == "unknown expansion" then
-        ns.DB.ui.expansionFilter = EXPANSION_FILTER_UNKNOWN
+        SetMoveExpansionFilter(EXPANSION_FILTER_UNKNOWN)
         return
     elseif text == "not current" or text == "notcurrent" then
-        ns.DB.ui.expansionFilter = EXPANSION_FILTER_NOT_CURRENT
+        SetMoveExpansionFilter(EXPANSION_FILTER_NOT_CURRENT)
         return
     end
     for expansionID, expansion in pairs(Data.Expansions) do
         if expansion.name:lower():find(text, 1, true) then
-            ns.DB.ui.expansionFilter = expansionID
+            SetMoveExpansionFilter(expansionID)
             return
         end
     end
@@ -3056,7 +3746,7 @@ function Core.MoveSelected()
     local movedKeys = {}
     local takenSlots = {}
     local blockedDetails = {}
-    for _, item in ipairs(GetAllDecisions()) do
+    for _, item in ipairs(GetAllDecisions() or {}) do
         if UI.selected[item.key] then
             local blockReason = GetMoveBlockReason(item)
             local canMove = IsMoveEligibleForCurrentMode(item) and not blockReason
@@ -3238,6 +3928,30 @@ function Core.HandleSlashCommand(msg)
         Core.PrintQuickAccessStatus()
     elseif cmd == "bankdiag" or cmd == "bankids" then
         Core.PrintBankContainerDiagnostics()
+    elseif cmd == "ctx" then
+        Core.UpdateContext()
+        Print("=== ctx diagnostic ===")
+        Print("UI.bankContextOpen=" .. tostring(UI.bankContextOpen))
+        Print("IsPlayerBankInteractionActive=" .. tostring(IsPlayerBankInteractionActive()))
+        Print("IsBankViewableByAPI=" .. tostring(IsBankViewableByAPI()))
+        Print("IsBankStorageAccessible=" .. tostring(IsBankStorageAccessible()))
+        local frameResult = GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)
+        Print("FrameDetected=" .. tostring(frameResult ~= nil) .. " (" .. tostring(frameResult) .. ")")
+        Print("IsBankContextDetected=" .. tostring(IsBankContextDetected()))
+        Print("context.bankOpen=" .. tostring(ns.DB.context.bankOpen))
+        if CContainer and CContainer.GetContainerNumFreeSlots then
+            local parts = {}
+            local allIDs = {}
+            for _, ids in ipairs({ PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }) do
+                for _, bagID in ipairs(ids or {}) do table.insert(allIDs, bagID) end
+            end
+            for _, bagID in ipairs(allIDs) do
+                local ok, free = pcall(CContainer.GetContainerNumFreeSlots, bagID)
+                table.insert(parts, tostring(bagID) .. "=" .. tostring(ok and free or "err"))
+            end
+            Print("FreeSlots: " .. table.concat(parts, ", "))
+        end
+        Print("=== ctx end ===")
     elseif cmd == "rules" or cmd == "config" or cmd == "protect" then
         Core.CreateUI()
         UI.activeTab = "Rules"
@@ -3256,6 +3970,7 @@ end
 function Core.OnAddonLoaded()
     ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, ICantEvenRightNowDB)
     ns.DB = ICantEvenRightNowDB
+    MigrateLegacyTabFilters()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
     NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)
@@ -3292,16 +4007,44 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             ScheduleQuickAccessRefresh()
         end
     elseif ns.DB and ns.DB.context then
-        Core.UpdateContext()
         local interactionType = ...
-        local bankInteraction = Enum and Enum.PlayerInteractionType
-            and (interactionType == Enum.PlayerInteractionType.Banker or interactionType == Enum.PlayerInteractionType.AccountBanker)
-        if event == "BANKFRAME_OPENED" or (event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" and bankInteraction) then
-            Core.ScanInventory("all", true)
+        local bankInteraction = IsBankInteractionType(interactionType)
+        local bankContextOpened = event == "BANKFRAME_OPENED" or (event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" and bankInteraction)
+        local bankContextClosed = event == "BANKFRAME_CLOSED" or (event == "PLAYER_INTERACTION_MANAGER_FRAME_HIDE" and bankInteraction)
+        local vendorContextOpened = event == "MERCHANT_SHOW"
+        local vendorContextClosed = event == "MERCHANT_CLOSED"
+
+        if bankContextOpened then
+            UI.bankContextOpen = true
+            UI.bankContextClosed = false
+            UI.hadBankContext = true
+        elseif bankContextClosed then
+            UI.bankContextOpen = false
+            UI.bankContextClosed = true
+        end
+
+        if vendorContextOpened then
+            UI.vendorContextOpen = true
+            UI.vendorContextClosed = false
+            UI.hadVendorContext = true
+        elseif vendorContextClosed then
+            UI.vendorContextOpen = false
+            UI.vendorContextClosed = true
+        end
+
+        Core.UpdateContext()
+        if ((bankContextClosed and UI.hadBankContext) or (vendorContextClosed and UI.hadVendorContext)) and UI.frame and UI.frame:IsShown() then
+            UI.frame:Hide()
+        end
+        if bankContextClosed then
+            UI.hadBankContext = false
+        end
+        if vendorContextClosed then
+            UI.hadVendorContext = false
+        end
+        if bankContextOpened then
+            pcall(Core.ScanInventory, "all", true)
         end
         ScheduleQuickAccessRefresh()
-        if UI.frame and UI.frame:IsShown() then
-            Core.RefreshUI()
-        end
     end
 end)
