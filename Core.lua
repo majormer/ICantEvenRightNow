@@ -3163,6 +3163,52 @@ function Core.SetExpansionFilterFromText(text)
     Print("Unknown expansion filter: " .. text)
 end
 
+local function ShowAndRefresh(tab)
+    Core.CreateUI()
+    UI.activeTab = tab
+    UI.frame:Show()
+    Core.RefreshUI()
+end
+
+function Core.ShowSummaryUI()
+    ShowAndRefresh("Summary")
+end
+
+function Core.ShowTransferUI()
+    ShowAndRefresh("Transfer")
+end
+
+function Core.ShowMoveUI()
+    ShowAndRefresh("Transfer")
+end
+
+function Core.ShowOrganizeUI()
+    ShowAndRefresh("Transfer")
+end
+
+function Core.ShowVendorUI()
+    ShowAndRefresh("Transfer")
+end
+
+function Core.RefreshUI()
+    if not UI.frame then return end
+    local tab = UI.activeTab
+    for _, tabName in ipairs(TAB_ORDER) do
+        local panel = UI.frame.panels[tabName]
+        if panel then
+            panel:SetShown(tabName == tab)
+        end
+        local tabBtn = UI.tabs and UI.tabs[tabName]
+        if tabBtn then
+            tabBtn:SetEnabled(tabName ~= tab)
+        end
+    end
+    if tab == "Summary" then
+        Core.RefreshSummary()
+    elseif tab == "Transfer" then
+        Core.RefreshTransfer()
+    end
+end
 
 function Core.RegisterSlashCommands()
     SLASH_ICANTEVEN1 = "/icanteven"
