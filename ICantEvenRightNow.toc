@@ -17,6 +17,3 @@
 Data.lua
 Debug.lua
 Core.lua
-modules\Scanner.lua
-modules\UI.lua
-modules\Actions.lua
