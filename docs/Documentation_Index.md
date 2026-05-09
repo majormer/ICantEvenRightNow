@@ -7,6 +7,7 @@ This folder contains implementation and product documentation for I Can't Even R
 - Technical architecture: `Technical_Architecture.md`
 - User flows and use cases: `User_Flows_and_Use_Cases.md`
 - UX roadmap and design recommendations: `UX_Improvement_Roadmap.md`
+- 0.3.0 filter-first scope plan: `0.3.0_Filter_First_Action_Model_Plan.md`
 - Release runbook: `Release_Process.md`
 - Existing handoff context: `HANDOFF.md`
 - CurseForge docs: `CurseForge_Description.md`, `CurseForge_Onboarding.md`

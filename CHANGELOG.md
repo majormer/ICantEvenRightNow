@@ -13,6 +13,29 @@ Release note rules:
 
 - No changes yet.
 
+## [0.3.0] - 2026-05-08
+
+### Added
+
+- Unified Transfer tab replaces the separate Move, Organize, and Vendor tabs.
+- Transfer tab supports any combination of Source and Destination: Bags, Private Bank, Reagent Bank, Warband Bank, or Vendor.
+- From/To dropdowns let you pick exactly what to move where, without switching between three separate UIs.
+- Per-item block reason display: items that cannot be transferred show why (bank closed, vendor closed, no slots, rules, etc.).
+- Actionable-only toggle to hide blocked items and focus on what can be moved now.
+- Select Movable and Select Page shortcuts for batch selection.
+- Slash command presets (`/icanteven dump`, `recall`, `organize`, `vendor`) now pre-configure the Transfer tab Source and Destination and open it directly.
+- Rules tab now shows all active per-item rules with name, flags (Protect / Ignore / Never Sell), origin, and a Remove button per rule.
+- Summary tab now shows inventory scope counts: items in bags, items in bank, old-content in bags, old-content in bank, Warband bank items, active rules, unclassified items, and last scan time.
+- Error logging captures Lua errors to SavedVariables (`/icanteven errors` to view, `/icanteven clearerrors` to reset).
+- Bank (All Tabs) source/destination covers all character bank tabs in a single selection.
+
+### Changed
+
+- Navigation simplified to four tabs: Summary, Transfer, Rules, Settings.
+- Summary tab redesigned around inventory scope counts rather than recommendation-driven card groups.
+- Per-item rule flags reduced to three: Protect, Ignore, Never Sell. Never Move and Action Override have been removed as they were superseded by the Source/Destination pipeline.
+- Item evaluator no longer assigns recommendation groups or recommended actions; transfer intent is driven entirely by the player-selected Source and Destination.
+
 ## [0.2.0] - 2026-05-06
 
 ### Added

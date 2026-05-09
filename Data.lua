@@ -38,16 +38,6 @@ ns.Data.ItemTypes = {
     UNKNOWN = "Unknown",
 }
 
-ns.Data.Recommendations = {
-    BANK = "BankCandidate",
-    RECALL = "RecallCandidate",
-    SELL = "SellCandidate",
-    REVIEW = "NeedsReview",
-    PROTECTED = "Protected",
-    IGNORED = "Ignored",
-    BLOCKED = "Blocked",
-}
-
 ns.Data.Actions = {
     BANK = "Bank",
     RECALL = "Recall",
@@ -120,6 +110,38 @@ ns.Data.DefaultDB = {
         vendorShowAll = false,
         organizerSearch = "",
         vendorSearch = "",
+        tabFilters = {
+            Move = {
+                expansion = { include = 0 },
+                type = { include = "All" },
+                bind = { include = "All" },
+                location = { include = "All" },
+                name = { includeText = "", excludeText = "" },
+                hideBlocked = false,
+                advancedEnabled = false,
+                migratedFromLegacy = false,
+            },
+            Organize = {
+                expansion = { include = 0 },
+                type = { include = "All" },
+                bind = { include = "All" },
+                location = { include = "All" },
+                name = { includeText = "", excludeText = "" },
+                hideBlocked = false,
+                advancedEnabled = false,
+                migratedFromLegacy = false,
+            },
+            Vendor = {
+                expansion = { include = 0 },
+                type = { include = "All" },
+                bind = { include = "All" },
+                location = { include = "All" },
+                name = { includeText = "", excludeText = "" },
+                hideBlocked = false,
+                advancedEnabled = false,
+                migratedFromLegacy = false,
+            },
+        },
         showMinimapIcon = true,
         minimapIcon = {
             hide = false,
@@ -130,4 +152,5 @@ ns.Data.DefaultDB = {
         showVendorButton = false,
         search = "",
     },
+    errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
 }

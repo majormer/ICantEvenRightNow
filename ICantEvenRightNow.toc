@@ -2,7 +2,7 @@
 ## Title: I Can't Even Right Now (With My Bags and Bank)
 ## Notes: Intelligent inventory cleanup - bank old content items, recall relevant items, and manage inventory clutter
 ## Author: majormer
-## Version: 0.2.0
+## Version: 0.3.0
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\ICantEvenRightNow\ICantEvenRightNow.png
 ## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
