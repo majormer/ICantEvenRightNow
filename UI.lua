@@ -55,11 +55,13 @@ local SetFilterSearch           = P.SetFilterSearch
 local SetFilterHideBlocked      = P.SetFilterHideBlocked
 local SetFilterItemLevel        = P.SetFilterItemLevel
 local SetFilterSlot             = P.SetFilterSlot
+local SetFilterUpgrade          = P.SetFilterUpgrade
 local ResetTabFilters           = P.ResetTabFilters
 local GetTypeFilterOptions      = P.GetTypeFilterOptions
 local GetBindFilterOptions      = P.GetBindFilterOptions
 local GetExpansionOptions       = P.GetExpansionOptions
 local GetSlotFilterOptions      = P.GetSlotFilterOptions
+local GetUpgradeFilterOptions   = P.GetUpgradeFilterOptions
 
 local GetTransferCandidates     = P.GetTransferCandidates
 local GetTransferBlockReason    = P.GetTransferBlockReason
@@ -875,6 +877,11 @@ local function BuildTransferTab(parent)
     end)
     parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 6, 0)
 
+    parent.upgradeFilter = CreateDropdown(parent, 100, GetUpgradeFilterOptions(), function(value)
+        SetFilterUpgrade("Transfer", value)
+    end)
+    parent.upgradeFilter:SetPoint("LEFT", parent.slotFilter, "RIGHT", 6, 0)
+
     -- Filter row 2: search / ilvl range / actionable toggle / clear
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
     parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -16)
@@ -1117,6 +1124,8 @@ function Core.RefreshTransfer()
     SetDropdownText(panel.bindFilter, "Binding: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
     SetMultiDropdownValue(panel.slotFilter, filters.slot and filters.slot.include or "All")
     SetDropdownText(panel.slotFilter, "Slot: " .. GetMultiSelectLabel(filters.slot and filters.slot.include or "All", "All"))
+    local upgradeVal = filters.upgrade and filters.upgrade.include or "All"
+    SetDropdownText(panel.upgradeFilter, upgradeVal == "All" and "Upgrade: All" or upgradeVal)
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     -- filterSummary removed; filter state is visible in the dropdown button labels
     local searchText = filters.name.includeText or ""

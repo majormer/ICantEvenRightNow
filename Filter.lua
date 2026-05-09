@@ -116,11 +116,13 @@ local function EnsureTabFilters(tabName)
     local name      = EnsureFilterBranch(filters, "name")
     local itemLevel = EnsureFilterBranch(filters, "itemLevel")
     local slot      = EnsureFilterBranch(filters, "slot")
+    local upgrade   = EnsureFilterBranch(filters, "upgrade")
     if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
     if itemType.include == nil  then itemType.include  = "All" end
     if bind.include == nil      then bind.include      = BIND_FILTER_ALL end
     if location.include == nil  then location.include  = "All" end
     if slot.include == nil      then slot.include      = "All" end
+    if upgrade.include == nil   then upgrade.include   = "All" end
     -- itemLevel.min and itemLevel.max default to nil (no filter)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
@@ -270,6 +272,9 @@ local function ResetTabFilters(tabName)
     if filters.slot then
         filters.slot.include = "All"
     end
+    if filters.upgrade then
+        filters.upgrade.include = "All"
+    end
     if tabName == "Move" then
         ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
         ns.DB.ui.typeFilter      = "All"
@@ -282,11 +287,17 @@ local function ResetTabFilters(tabName)
     end
 end
 
+local function SetFilterUpgrade(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    filters.upgrade.include = value
+end
+
 P.SetFilterInclude     = SetFilterInclude
 P.SetFilterSearch      = SetFilterSearch
 P.SetFilterHideBlocked = SetFilterHideBlocked
 P.SetFilterItemLevel   = SetFilterItemLevel
 P.SetFilterSlot        = SetFilterSlot
+P.SetFilterUpgrade     = SetFilterUpgrade
 P.ResetTabFilters      = ResetTabFilters
 
 -- ===========================================================================
@@ -487,6 +498,18 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.slot and not IsAllFilterValue(filters.slot.include) then
         if not MatchesSlotInclude(item, filters.slot.include) then return false end
     end
+    -- Upgrade filter: compares item level against equipped items in the same slot(s).
+    -- Non-equippable or items with uncached data (itemLevel nil) pass through.
+    if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
+        if IsEquippable(item) and item.itemLevel and item.itemLevel > 0 then
+            local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
+            if equippedIlvl ~= nil then
+                local isUpgrade = item.itemLevel > equippedIlvl
+                if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
+                if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
+            end
+        end
+    end
     -- Item level filter: when active, restricts to equippable gear within the range.
     -- Items without cached GetItemInfo data (equipLoc/itemLevel nil) pass through;
     -- non-equippable items with known type are hidden entirely.
@@ -623,4 +646,13 @@ P.GetTypeFilterOptions       = GetTypeFilterOptions
 P.GetBindFilterOptions       = GetBindFilterOptions
 P.GetBankLocationFilterOptions = GetBankLocationFilterOptions
 P.GetExpansionOptions        = GetExpansionOptions
+local function GetUpgradeFilterOptions()
+    return {
+        { text = "All",         value = "All" },
+        { text = "Upgrade",     value = "Upgrade" },
+        { text = "Not Upgrade", value = "Not Upgrade" },
+    }
+end
+
 P.GetSlotFilterOptions       = GetSlotFilterOptions
+P.GetUpgradeFilterOptions    = GetUpgradeFilterOptions
