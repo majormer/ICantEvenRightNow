@@ -11,7 +11,26 @@ Release note rules:
 
 ## [Unreleased]
 
-- No changes yet.
+### Added
+
+- Transfer tab now uses a scrollable list for all items instead of a paginated presentation.
+- Saved Filters ("Favorites"): save a named combination of Expansion, Binding, and Type filter selections, then load any saved filter from a dropdown.
+- Item Level filter in the Transfer tab, applicable to equippable gear only.
+
+### Changed
+
+- "Bind" filter label renamed to "Binding" to match WoW tooltip language and reduce ambiguity.
+- BoE removed from the Type filter; it is already covered by the Binding filter.
+- Bank and Vendor options in Source/Destination dropdowns are now hidden when the respective context is not available, preventing inaccessible transfer configurations.
+
+### Fixed
+
+- Soulbound detection corrected to reliably identify soulbound items across all scanned locations.
+- Transfer tab now refreshes bag and bank counts after every action, including vendor sales.
+
+### Maintenance
+
+- Core.lua split into logical modules (UI, Evaluator, Scanner, Actions) for long-term maintainability.
 
 ## [0.3.0] - 2026-05-08
 

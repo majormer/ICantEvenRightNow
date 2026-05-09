@@ -16,4 +16,10 @@
 
 Data.lua
 Debug.lua
+Shared.lua
+Evaluator.lua
+Filter.lua
+Scanner.lua
+Transfer.lua
+UI.lua
 Core.lua
