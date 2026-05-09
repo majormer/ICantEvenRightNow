@@ -262,7 +262,7 @@ end
 local function CreatePanel(parent)
     local panel = CreateFrame("Frame", nil, parent)
     panel:SetFrameLevel(parent:GetFrameLevel() + 5)
-    panel:SetPoint("TOPLEFT", 14, -64)
+    panel:SetPoint("TOPLEFT", 14, -72)
     panel:SetPoint("BOTTOMRIGHT", -14, 14)
     return panel
 end
@@ -854,60 +854,42 @@ local function BuildTransferTab(parent)
     parent.scanBank:SetPoint("LEFT", parent.scanBags, "RIGHT", 8, 0)
     parent.scanBank:SetScript("OnClick", function() Core.ScanInventory(BANK_SCOPE) end)
 
-    parent.expansionFilter = CreateDropdown(parent, 160, GetExpansionOptions(), function(value)
+    -- Filter row 1: expansion / type / binding / slot dropdowns
+    parent.expansionFilter = CreateDropdown(parent, 155, GetExpansionOptions(), function(value)
         SetFilterInclude("Transfer", "expansion", value)
     end)
-    parent.expansionFilter:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -10)
+    parent.expansionFilter:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -16)
 
-    parent.typeFilter = CreateMultiSelectDropdown(parent, 135, GetTypeFilterOptions(), function(value)
+    parent.typeFilter = CreateMultiSelectDropdown(parent, 120, GetTypeFilterOptions(), function(value)
         SetFilterInclude("Transfer", "type", value)
     end)
-    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 8, 0)
+    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 6, 0)
 
-    parent.bindFilter = CreateDropdown(parent, 115, GetBindFilterOptions(), function(value)
+    parent.bindFilter = CreateDropdown(parent, 110, GetBindFilterOptions(), function(value)
         SetFilterInclude("Transfer", "bind", value)
     end)
-    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
+    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 6, 0)
 
-    parent.slotFilter = CreateMultiSelectDropdown(parent, 115, GetSlotFilterOptions(), function(value)
+    parent.slotFilter = CreateMultiSelectDropdown(parent, 110, GetSlotFilterOptions(), function(value)
         SetFilterSlot("Transfer", value)
     end)
-    parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 8, 0)
+    parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 6, 0)
 
-    parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    parent.actionableOnly:SetPoint("LEFT", parent.slotFilter, "RIGHT", 10, 0)
-    parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
-    parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
-    parent.actionableOnly:SetScript("OnClick", function(self)
-        SetFilterHideBlocked("Transfer", self:GetChecked())
-        Core.RefreshUI()
-    end)
-
-    parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
-    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
-    parent.clearFilters:SetScript("OnClick", function()
-        ResetTabFilters("Transfer")
-        Core.RefreshUI()
-    end)
-
+    -- Filter row 2: search / ilvl range / actionable toggle / clear
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
-    parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -14)
+    parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -16)
+
     parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.search:SetSize(200, 24)
+    parent.search:SetSize(180, 24)
     parent.search:SetAutoFocus(false)
-    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 8, 0)
+    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 6, 0)
     parent.search:SetScript("OnTextChanged", function(self)
         SetFilterSearch("Transfer", self:GetText())
         Core.RefreshUI()
     end)
 
-    parent.filterSummary = CreateLabel(parent, "", "GameFontDisableSmall")
-    parent.filterSummary:SetPoint("LEFT", parent.search, "RIGHT", 14, 0)
-    parent.filterSummary:SetWidth(240)
-    parent.filterSummary:SetWordWrap(false)
-
     parent.ilvlLabel = CreateLabel(parent, "iLvl:", "GameFontHighlightSmall")
-    parent.ilvlLabel:SetPoint("LEFT", parent.filterSummary, "RIGHT", 14, 0)
+    parent.ilvlLabel:SetPoint("LEFT", parent.search, "RIGHT", 12, 0)
 
     parent.ilvlMin = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     parent.ilvlMin:SetSize(52, 24)
@@ -934,9 +916,26 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
+    parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+    parent.actionableOnly:SetPoint("LEFT", parent.ilvlMax, "RIGHT", 16, 0)
+    parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
+    parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
+    parent.actionableOnly:SetScript("OnClick", function(self)
+        SetFilterHideBlocked("Transfer", self:GetChecked())
+        Core.RefreshUI()
+    end)
+
+    parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
+    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
+    parent.clearFilters:SetScript("OnClick", function()
+        ResetTabFilters("Transfer")
+        Core.RefreshUI()
+    end)
+
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetSize(720, 264)
-    parent.listFrame:SetPoint("TOPLEFT", parent.searchLabel, "BOTTOMLEFT", -6, -8)
+    parent.listFrame:SetWidth(706)
+    parent.listFrame:SetPoint("TOPLEFT", parent.searchLabel, "BOTTOMLEFT", -6, -10)
+    parent.listFrame:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 54)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -948,10 +947,10 @@ local function BuildTransferTab(parent)
 
     -- Scrollable list using FauxScrollFrame
     local ROW_HEIGHT = 42
-    local VISIBLE_ROWS = 6
+    local VISIBLE_ROWS = 8
     parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
     parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     5,   -5)
-    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -21,  5)
+    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -29,  5)
     parent.scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
         FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() Core.RefreshUI() end)
     end)
@@ -959,7 +958,7 @@ local function BuildTransferTab(parent)
     parent.rows = {}
     for i = 1, VISIBLE_ROWS do
         local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
-        row:SetSize(694, 40)
+        row:SetSize(680, 40)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
         row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * ROW_HEIGHT)
@@ -1119,7 +1118,7 @@ function Core.RefreshTransfer()
     SetMultiDropdownValue(panel.slotFilter, filters.slot and filters.slot.include or "All")
     SetDropdownText(panel.slotFilter, "Slot: " .. GetMultiSelectLabel(filters.slot and filters.slot.include or "All", "All"))
     panel.actionableOnly:SetChecked(filters.hideBlocked)
-    panel.filterSummary:SetText(BuildFilterSummary("Transfer"))
+    -- filterSummary removed; filter state is visible in the dropdown button labels
     local searchText = filters.name.includeText or ""
     if panel.search:GetText() ~= searchText then
         panel.search:SetText(searchText)
