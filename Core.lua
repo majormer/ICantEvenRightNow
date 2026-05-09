@@ -276,12 +276,6 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         UI.bankContextClosed = true
     end
 
-    if event == "BANK_TAB_SETTINGS_UPDATED" then
-        RefreshBankTabData()
-        Core.RefreshTransferDropdowns()
-        Core.RefreshUI()
-    end
-
     if vendorContextOpened then
         UI.vendorContextOpen = true
         UI.vendorContextClosed = false
@@ -292,6 +286,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     Core.UpdateContext()
+
+    -- Refresh dropdowns whenever bank or vendor context changes
+    if bankContextOpened or bankContextClosed or vendorContextOpened or vendorContextClosed then
+        Core.RefreshTransferDropdowns()
+    end
 
     if ((bankContextClosed and UI.hadBankContext) or (vendorContextClosed and UI.hadVendorContext)) and UI.frame and UI.frame:IsShown() then
         UI.frame:Hide()
@@ -304,6 +303,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RefreshBankTabData()
         Core.RefreshTransferDropdowns()
         pcall(Core.ScanInventory, "all", true)
+    end
+
+    if event == "BANK_TAB_SETTINGS_UPDATED" then
+        RefreshBankTabData()
+        Core.RefreshUI()
     end
 
     ScheduleQuickAccessRefresh()

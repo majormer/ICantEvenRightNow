@@ -501,22 +501,32 @@ P.SafeCopyDefaults   = SafeCopyDefaults
 
 local function GetTransferSourceOptions()
     local opts = { { text = "Bags", value = "Bags" } }
-    if #BANK_TAB_DATA > 0 then
-        table.insert(opts, { text = STORAGE_ALL_BANK_TABS, value = STORAGE_ALL_BANK_TABS })
-        for _, tab in ipairs(BANK_TAB_DATA) do
-            local key = BankTabStorageKey(tab.bagID)
-            table.insert(opts, { text = GetBankTabLabel(tab), value = key })
+    local bankOpen = ns.DB and ns.DB.context and ns.DB.context.bankOpen
+    if bankOpen then
+        if #BANK_TAB_DATA > 0 then
+            table.insert(opts, { text = STORAGE_ALL_BANK_TABS, value = STORAGE_ALL_BANK_TABS })
+            for _, tab in ipairs(BANK_TAB_DATA) do
+                local key = BankTabStorageKey(tab.bagID)
+                table.insert(opts, { text = GetBankTabLabel(tab), value = key })
+            end
+        else
+            table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
         end
-    else
-        table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
+        table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
     end
-    table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
     return opts
 end
 
 local function GetTransferDestOptions()
     local opts = GetTransferSourceOptions()
-    table.insert(opts, { text = "Vendor", value = "Vendor" })
+    local bankOpen = ns.DB and ns.DB.context and ns.DB.context.bankOpen
+    if bankOpen then
+        -- bank options already included by GetTransferSourceOptions
+    end
+    local vendorOpen = ns.DB and ns.DB.context and ns.DB.context.vendorOpen
+    if vendorOpen then
+        table.insert(opts, { text = "Vendor", value = "Vendor" })
+    end
     return opts
 end
 

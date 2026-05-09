@@ -21,7 +21,6 @@ local BIND_FILTER_WARBAND   = P.BIND_FILTER_WARBAND
 local BIND_FILTER_BOP       = P.BIND_FILTER_BOP
 
 local TYPE_FILTER_REAGENT         = P.TYPE_FILTER_REAGENT
-local TYPE_FILTER_BOE             = P.TYPE_FILTER_BOE
 local TYPE_FILTER_WUE             = P.TYPE_FILTER_WUE
 local TYPE_FILTER_VENDOR_SELLABLE = P.TYPE_FILTER_VENDOR_SELLABLE
 
@@ -282,8 +281,6 @@ local function MatchesTypeInclude(item, include)
             local goesToReagentBank = item.bankTargetStorage == STORAGE_REAGENT_BANK
             local isProfMaterial    = item.typeTag == Data.ItemTypes.PROFESSION
             return isInReagentBank or goesToReagentBank or isProfMaterial
-        elseif value == TYPE_FILTER_BOE then
-            return item.typeTag == Data.ItemTypes.BOE and not IsItemWarboundUntilEquipped(item)
         elseif value == TYPE_FILTER_WUE then
             return IsItemWarboundUntilEquipped(item)
         elseif value == TYPE_FILTER_VENDOR_SELLABLE then
@@ -398,7 +395,6 @@ local function GetTypeFilterOptions()
         { text = Data.ItemTypes.PROFESSION,       value = Data.ItemTypes.PROFESSION },
         { text = TYPE_FILTER_REAGENT,             value = TYPE_FILTER_REAGENT },
         { text = Data.ItemTypes.CONSUMABLE,       value = Data.ItemTypes.CONSUMABLE },
-        { text = TYPE_FILTER_BOE,                 value = TYPE_FILTER_BOE },
         { text = TYPE_FILTER_VENDOR_SELLABLE,     value = TYPE_FILTER_VENDOR_SELLABLE },
         { text = Data.ItemTypes.UNKNOWN,          value = Data.ItemTypes.UNKNOWN },
     }

@@ -1087,7 +1087,7 @@ function Core.RefreshTransfer()
     SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
     SetMultiDropdownValue(panel.typeFilter, filters.type.include)
     SetDropdownText(panel.typeFilter, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
-    SetDropdownText(panel.bindFilter, "Bind: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
+    SetDropdownText(panel.bindFilter, "Binding: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     panel.filterSummary:SetText(BuildFilterSummary("Transfer"))
     local searchText = filters.name.includeText or ""
