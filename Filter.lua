@@ -120,7 +120,6 @@ local function SetFilterInclude(tabName, key, value)
             ns.DB.ui.locationFilter = value
         end
     end
-    UI.page = 1
 end
 
 local function SetFilterSearch(tabName, value)
@@ -133,13 +132,11 @@ local function SetFilterSearch(tabName, value)
     elseif tabName == "Vendor" then
         ns.DB.ui.vendorSearch = filters.name.includeText
     end
-    UI.page = 1
 end
 
 local function SetFilterHideBlocked(tabName, value)
     local filters = EnsureTabFilters(tabName)
     filters.hideBlocked = value and true or false
-    UI.page = 1
 end
 
 local function ResetTabFilters(tabName)
@@ -162,7 +159,6 @@ local function ResetTabFilters(tabName)
     elseif tabName == "Vendor" then
         ns.DB.ui.vendorSearch = ""
     end
-    UI.page = 1
 end
 
 P.SetFilterInclude    = SetFilterInclude

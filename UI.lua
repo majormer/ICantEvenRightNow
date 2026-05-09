@@ -671,7 +671,6 @@ end
 
 local function SetTab(tabName)
     UI.activeTab = tabName
-    UI.page = 1
     Core.UpdateContext()
     Core.RefreshUI()
 end
@@ -911,13 +910,23 @@ local function BuildTransferTab(parent)
     parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
     parent.empty = CreateEmptyLabel(parent.listFrame, "No transfer candidates.")
 
+    -- Scrollable list using FauxScrollFrame
+    local ROW_HEIGHT = 42
+    local VISIBLE_ROWS = 6
+    parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
+    parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     5,   -5)
+    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -21,  5)
+    parent.scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
+        FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() Core.RefreshUI() end)
+    end)
+
     parent.rows = {}
-    for i = 1, UI.pageSize do
+    for i = 1, VISIBLE_ROWS do
         local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
-        row:SetSize(710, 40)
+        row:SetSize(694, 40)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
-        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * 42)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * ROW_HEIGHT)
         row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         row.check:SetPoint("LEFT", 0, 0)
         row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -969,15 +978,13 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.selectPage = CreateButton(parent, "Select Page", 100)
+    parent.selectPage = CreateButton(parent, "Select Visible", 110)
     parent.selectPage:SetParent(parent.footer)
     parent.selectPage:SetPoint("LEFT", parent.selectAll, "RIGHT", 8, 0)
     parent.selectPage:SetScript("OnClick", function()
         local vis = UI.transferVisible or {}
-        local maxPage = math.max(1, math.ceil(#vis / UI.pageSize))
-        local page = math.min(UI.page, maxPage)
-        local startIndex = (page - 1) * UI.pageSize + 1
-        for i = startIndex, math.min(startIndex + UI.pageSize - 1, #vis) do
+        local offset = FauxScrollFrame_GetOffset(parent.scrollFrame)
+        for i = offset + 1, math.min(offset + 6, #vis) do
             local plan = vis[i]
             if plan and plan.movable then
                 UI.transferSelected[plan.key] = true
@@ -999,25 +1006,10 @@ local function BuildTransferTab(parent)
     parent.execute:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
     parent.execute:SetScript("OnClick", function() Core.ExecuteTransferSelected() end)
 
-    parent.prev = CreateButton(parent, "Prev", 60)
-    parent.prev:SetParent(parent.footer)
-    parent.prev:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -29)
-    parent.prev:SetScript("OnClick", function()
-        UI.page = math.max(1, UI.page - 1)
-        Core.RefreshUI()
-    end)
-
-    parent.next = CreateButton(parent, "Next", 60)
-    parent.next:SetParent(parent.footer)
-    parent.next:SetPoint("LEFT", parent.prev, "RIGHT", 6, 0)
-    parent.next:SetScript("OnClick", function()
-        UI.page = UI.page + 1
-        Core.RefreshUI()
-    end)
-
-    parent.pageText = CreateLabel(parent, "", "GameFontHighlightSmall")
-    parent.pageText:SetParent(parent.footer)
-    parent.pageText:SetPoint("LEFT", parent.next, "RIGHT", 8, 0)
+    parent.itemCount = CreateLabel(parent, "", "GameFontHighlightSmall")
+    parent.itemCount:SetParent(parent.footer)
+    parent.itemCount:SetPoint("LEFT", parent.execute, "RIGHT", 12, 0)
+    parent.itemCount:SetWidth(260)
 end
 
 -- ===========================================================================
@@ -1110,20 +1102,22 @@ function Core.RefreshTransfer()
         or "No items match the current filters."
     SetEmptyLabel(panel.empty, #visible == 0, emptyMsg)
 
-    local maxPage = math.max(1, math.ceil(#visible / UI.pageSize))
-    UI.page = math.min(UI.page, maxPage)
-    local startIndex = (UI.page - 1) * UI.pageSize + 1
     local selectedCount = 0
     for _, plan in ipairs(visible) do
         if UI.transferSelected[plan.key] then
             selectedCount = selectedCount + 1
         end
     end
-    panel.pageText:SetText("Page " .. UI.page .. "/" .. maxPage .. " (" .. #visible .. " items, " .. selectedCount .. " selected)")
 
     local actionLabel = dest == "Vendor" and "Sell Selected" or "Transfer Selected"
     panel.execute:SetText(actionLabel)
     panel.execute:SetEnabled(not ns.DB.context.inCombat and selectedCount > 0)
+
+    local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
+    FauxScrollFrame_Update(panel.scrollFrame, #visible, 6, 42)
+    local startIndex = offset + 1
+
+    panel.itemCount:SetText(#visible .. " item" .. (#visible == 1 and "" or "s") .. ", " .. selectedCount .. " selected")
 
     for i, row in ipairs(panel.rows) do
         local plan = visible[startIndex + i - 1]

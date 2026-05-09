@@ -127,8 +127,6 @@ P.UI = {
     vendorContextClosed = false,
     hadBankContext = false,
     hadVendorContext = false,
-    page = 1,
-    pageSize = 6,
 }
 
 -- ---------------------------------------------------------------------------
