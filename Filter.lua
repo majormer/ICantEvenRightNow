@@ -115,10 +115,12 @@ local function EnsureTabFilters(tabName)
     local location  = EnsureFilterBranch(filters, "location")
     local name      = EnsureFilterBranch(filters, "name")
     local itemLevel = EnsureFilterBranch(filters, "itemLevel")
+    local slot      = EnsureFilterBranch(filters, "slot")
     if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
     if itemType.include == nil  then itemType.include  = "All" end
     if bind.include == nil      then bind.include      = BIND_FILTER_ALL end
     if location.include == nil  then location.include  = "All" end
+    if slot.include == nil      then slot.include      = "All" end
     -- itemLevel.min and itemLevel.max default to nil (no filter)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
@@ -200,11 +202,55 @@ local function SetFilterHideBlocked(tabName, value)
     filters.hideBlocked = value and true or false
 end
 
+-- Maps equipLoc -> canonical slot label used by the slot filter.
+local EQUIPLOC_TO_SLOT_LABEL = {
+    INVTYPE_HEAD             = "Head",
+    INVTYPE_NECK             = "Neck",
+    INVTYPE_SHOULDER         = "Shoulder",
+    INVTYPE_BODY             = "Shirt",
+    INVTYPE_CHEST            = "Chest",
+    INVTYPE_ROBE             = "Chest",
+    INVTYPE_WAIST            = "Waist",
+    INVTYPE_LEGS             = "Legs",
+    INVTYPE_FEET             = "Feet",
+    INVTYPE_WRIST            = "Wrist",
+    INVTYPE_HAND             = "Hands",
+    INVTYPE_FINGER           = "Finger",
+    INVTYPE_TRINKET          = "Trinket",
+    INVTYPE_CLOAK            = "Back",
+    INVTYPE_WEAPON           = "One-Hand",
+    INVTYPE_WEAPONMAINHAND   = "One-Hand",
+    INVTYPE_WEAPONOFFHAND    = "Off-Hand",
+    INVTYPE_HOLDABLE         = "Off-Hand",
+    INVTYPE_2HWEAPON         = "Two-Hand",
+    INVTYPE_SHIELD           = "Off-Hand",
+    INVTYPE_RANGED           = "Ranged",
+    INVTYPE_RANGEDRIGHT      = "Ranged",
+    INVTYPE_TABARD           = "Tabard",
+}
+P.EQUIPLOC_TO_SLOT_LABEL = EQUIPLOC_TO_SLOT_LABEL
+
+local function GetSlotLabel(item)
+    return item.equipLoc and EQUIPLOC_TO_SLOT_LABEL[item.equipLoc]
+end
+
+local function MatchesSlotInclude(item, include)
+    return FilterMatchesInclude(include, function(value)
+        return GetSlotLabel(item) == value
+    end)
+end
+
 local function SetFilterItemLevel(tabName, min, max)
     local filters = EnsureTabFilters(tabName)
     EnsureFilterBranch(filters, "itemLevel")
     filters.itemLevel.min = (min and min ~= "") and tonumber(min) or nil
     filters.itemLevel.max = (max and max ~= "") and tonumber(max) or nil
+end
+
+local function SetFilterSlot(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    EnsureFilterBranch(filters, "slot")
+    filters.slot.include = value
 end
 
 local function ResetTabFilters(tabName)
@@ -220,6 +266,9 @@ local function ResetTabFilters(tabName)
     if filters.itemLevel then
         filters.itemLevel.min = nil
         filters.itemLevel.max = nil
+    end
+    if filters.slot then
+        filters.slot.include = "All"
     end
     if tabName == "Move" then
         ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
@@ -237,6 +286,7 @@ P.SetFilterInclude     = SetFilterInclude
 P.SetFilterSearch      = SetFilterSearch
 P.SetFilterHideBlocked = SetFilterHideBlocked
 P.SetFilterItemLevel   = SetFilterItemLevel
+P.SetFilterSlot        = SetFilterSlot
 P.ResetTabFilters      = ResetTabFilters
 
 -- ===========================================================================
@@ -289,6 +339,10 @@ local function BuildFilterSummary(tabName)
     end
     if filters.hideBlocked then
         table.insert(parts, "Actionable only")
+    end
+    if filters.slot and not IsAllFilterValue(filters.slot.include) then
+        local label = GetMultiSelectLabel(filters.slot.include, "All")
+        table.insert(parts, "Slot: " .. label)
     end
     if filters.itemLevel then
         local ilvl = filters.itemLevel
@@ -430,12 +484,34 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if not MatchesTypeInclude(item, filters.type.include)           then return false end
     if not MatchesBindInclude(item, filters.bind.include)           then return false end
     if not MatchesLocationInclude(item, filters.location.include)   then return false end
-    -- Item level filter: only restricts equippable items; non-gear always passes.
+    if filters.slot and not IsAllFilterValue(filters.slot.include) then
+        if not MatchesSlotInclude(item, filters.slot.include) then return false end
+    end
+    -- Item level filter: when active, restricts to equippable gear within the range.
+    -- Items without cached GetItemInfo data (equipLoc/itemLevel nil) pass through;
+    -- non-equippable items with known type are hidden entirely.
     local ilvl = filters.itemLevel
-    if ilvl and (ilvl.min or ilvl.max) and IsEquippable(item) then
-        local level = item.itemLevel or 0
-        if ilvl.min and level < ilvl.min then return false end
-        if ilvl.max and level > ilvl.max then return false end
+    if ilvl and (ilvl.min or ilvl.max) then
+        local hasGearData = item.equipLoc and item.equipLoc ~= ""
+        if hasGearData then
+            -- Known non-equippable: hide
+            if not IsEquippable(item) then return false end
+            -- Known equippable: apply range if level is available
+            local level = item.itemLevel
+            if level and level > 0 then
+                if ilvl.min and level < ilvl.min then return false end
+                if ilvl.max and level > ilvl.max then return false end
+            end
+            -- itemLevel nil or 0 with valid equipLoc = uncached data; pass through
+        else
+            -- equipLoc nil = either non-gear or uncached; hide only if other gear signals absent
+            -- Use classID 2 (Weapon) or 4 (Armor) as fallback signal
+            if item.classID == 2 or item.classID == 4 then
+                -- Gear by classID but no equipLoc/ilvl data yet; pass through
+            else
+                return false
+            end
+        end
     end
     local searchParts = BuildItemSearchParts(item, extraParts)
     if not TextMatchesSearch(filters.name.includeText, searchParts) then return false end
@@ -519,7 +595,32 @@ local function GetExpansionOptions()
     return options
 end
 
+local function GetSlotFilterOptions()
+    return {
+        { text = "All",      value = "All" },
+        { text = "Head",     value = "Head" },
+        { text = "Neck",     value = "Neck" },
+        { text = "Shoulder", value = "Shoulder" },
+        { text = "Back",     value = "Back" },
+        { text = "Chest",    value = "Chest" },
+        { text = "Wrist",    value = "Wrist" },
+        { text = "Hands",    value = "Hands" },
+        { text = "Waist",    value = "Waist" },
+        { text = "Legs",     value = "Legs" },
+        { text = "Feet",     value = "Feet" },
+        { text = "Finger",   value = "Finger" },
+        { text = "Trinket",  value = "Trinket" },
+        { text = "One-Hand", value = "One-Hand" },
+        { text = "Two-Hand", value = "Two-Hand" },
+        { text = "Off-Hand", value = "Off-Hand" },
+        { text = "Ranged",   value = "Ranged" },
+        { text = "Shirt",    value = "Shirt" },
+        { text = "Tabard",   value = "Tabard" },
+    }
+end
+
 P.GetTypeFilterOptions       = GetTypeFilterOptions
 P.GetBindFilterOptions       = GetBindFilterOptions
 P.GetBankLocationFilterOptions = GetBankLocationFilterOptions
 P.GetExpansionOptions        = GetExpansionOptions
+P.GetSlotFilterOptions       = GetSlotFilterOptions

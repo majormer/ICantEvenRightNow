@@ -54,10 +54,12 @@ local SetFilterInclude          = P.SetFilterInclude
 local SetFilterSearch           = P.SetFilterSearch
 local SetFilterHideBlocked      = P.SetFilterHideBlocked
 local SetFilterItemLevel        = P.SetFilterItemLevel
+local SetFilterSlot             = P.SetFilterSlot
 local ResetTabFilters           = P.ResetTabFilters
 local GetTypeFilterOptions      = P.GetTypeFilterOptions
 local GetBindFilterOptions      = P.GetBindFilterOptions
 local GetExpansionOptions       = P.GetExpansionOptions
+local GetSlotFilterOptions      = P.GetSlotFilterOptions
 
 local GetTransferCandidates     = P.GetTransferCandidates
 local GetTransferBlockReason    = P.GetTransferBlockReason
@@ -867,8 +869,13 @@ local function BuildTransferTab(parent)
     end)
     parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 8, 0)
 
+    parent.slotFilter = CreateMultiSelectDropdown(parent, 115, GetSlotFilterOptions(), function(value)
+        SetFilterSlot("Transfer", value)
+    end)
+    parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 8, 0)
+
     parent.actionableOnly = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    parent.actionableOnly:SetPoint("LEFT", parent.bindFilter, "RIGHT", 10, 0)
+    parent.actionableOnly:SetPoint("LEFT", parent.slotFilter, "RIGHT", 10, 0)
     parent.actionableOnlyLabel = CreateLabel(parent, "Actionable only", "GameFontHighlightSmall")
     parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
     parent.actionableOnly:SetScript("OnClick", function(self)
@@ -1109,6 +1116,8 @@ function Core.RefreshTransfer()
     SetMultiDropdownValue(panel.typeFilter, filters.type.include)
     SetDropdownText(panel.typeFilter, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
     SetDropdownText(panel.bindFilter, "Binding: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
+    SetMultiDropdownValue(panel.slotFilter, filters.slot and filters.slot.include or "All")
+    SetDropdownText(panel.slotFilter, "Slot: " .. GetMultiSelectLabel(filters.slot and filters.slot.include or "All", "All"))
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     panel.filterSummary:SetText(BuildFilterSummary("Transfer"))
     local searchText = filters.name.includeText or ""

@@ -61,9 +61,12 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
         local info = CContainer.GetContainerItemInfo(bagID, slot)
         local itemID = CContainer.GetContainerItemID(bagID, slot)
         if info and itemID then
+            -- Prefer the hyperlink from container info: it carries upgrade-level suffixes
+            -- and is more likely to trigger a cache hit than a bare itemID.
+            local infoKey = info.hyperlink or itemID
             local name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
-                = GetItemInfo(itemID)
+                = GetItemInfo(infoKey)
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
             table.insert(output, {
                 itemID        = itemID,
