@@ -38,6 +38,65 @@ local GetExpansionName      = P.GetExpansionName
 local IsItemWarboundUntilEquipped = P.IsItemWarboundUntilEquipped
 
 -- ===========================================================================
+-- Equip slot → inventory slot mapping
+-- Used now for ilvl filtering; ready for "Upgrade for current character" feature.
+-- For slots with two positions (rings, trinkets), both are listed so we can
+-- compare against the weaker of the two when checking upgrade potential.
+-- ===========================================================================
+
+local INVTYPE_TO_SLOTS = {
+    INVTYPE_HEAD           = {1},
+    INVTYPE_NECK           = {2},
+    INVTYPE_SHOULDER       = {3},
+    INVTYPE_BODY           = {4},   -- shirt
+    INVTYPE_CHEST          = {5},
+    INVTYPE_ROBE           = {5},
+    INVTYPE_WAIST          = {6},
+    INVTYPE_LEGS           = {7},
+    INVTYPE_FEET           = {8},
+    INVTYPE_WRIST          = {9},
+    INVTYPE_HAND           = {10},
+    INVTYPE_FINGER         = {11, 12},
+    INVTYPE_TRINKET        = {13, 14},
+    INVTYPE_CLOAK          = {15},
+    INVTYPE_WEAPON         = {16},
+    INVTYPE_WEAPONMAINHAND = {16},
+    INVTYPE_2HWEAPON       = {16},
+    INVTYPE_SHIELD         = {17},
+    INVTYPE_WEAPONOFFHAND  = {17},
+    INVTYPE_HOLDABLE       = {17},
+    INVTYPE_RANGED         = {18},
+    INVTYPE_RANGEDRIGHT    = {18},
+}
+
+-- Returns true if the item can be equipped (has a valid equipLoc).
+local function IsEquippable(item)
+    local loc = item.equipLoc
+    return loc and loc ~= "" and loc ~= "INVTYPE_NON_EQUIP" and loc ~= "INVTYPE_NON_EQUIP_IGNORE"
+end
+
+-- Returns the effective item level of the currently equipped item in the slot(s)
+-- for the given equipLoc, or nil if no mapping or no item is equipped.
+-- For two-slot types (rings, trinkets) returns the LOWER of the two, so an
+-- item that beats it is a genuine upgrade.
+local function GetEquippedItemLevel(equipLoc)
+    local slots = INVTYPE_TO_SLOTS[equipLoc]
+    if not slots then return nil end
+    local result = nil
+    for _, slotID in ipairs(slots) do
+        local ilvl = GetInventoryItemLevel("player", slotID) or 0
+        if result == nil or ilvl < result then
+            result = ilvl
+        end
+    end
+    return result
+end
+
+P.INVTYPE_TO_SLOTS       = INVTYPE_TO_SLOTS
+P.IsEquippable           = IsEquippable
+P.GetEquippedItemLevel   = GetEquippedItemLevel
+
+-- ===========================================================================
 -- Filter branch helpers
 -- ===========================================================================
 
@@ -55,10 +114,12 @@ local function EnsureTabFilters(tabName)
     local bind      = EnsureFilterBranch(filters, "bind")
     local location  = EnsureFilterBranch(filters, "location")
     local name      = EnsureFilterBranch(filters, "name")
+    local itemLevel = EnsureFilterBranch(filters, "itemLevel")
     if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
     if itemType.include == nil  then itemType.include  = "All" end
     if bind.include == nil      then bind.include      = BIND_FILTER_ALL end
     if location.include == nil  then location.include  = "All" end
+    -- itemLevel.min and itemLevel.max default to nil (no filter)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
     filters.hideBlocked    = filters.hideBlocked    and true or false
@@ -139,6 +200,13 @@ local function SetFilterHideBlocked(tabName, value)
     filters.hideBlocked = value and true or false
 end
 
+local function SetFilterItemLevel(tabName, min, max)
+    local filters = EnsureTabFilters(tabName)
+    EnsureFilterBranch(filters, "itemLevel")
+    filters.itemLevel.min = (min and min ~= "") and tonumber(min) or nil
+    filters.itemLevel.max = (max and max ~= "") and tonumber(max) or nil
+end
+
 local function ResetTabFilters(tabName)
     local filters = EnsureTabFilters(tabName)
     filters.expansion.include = EXPANSION_FILTER_ALL
@@ -149,6 +217,10 @@ local function ResetTabFilters(tabName)
     filters.name.excludeText  = ""
     filters.hideBlocked       = false
     filters.advancedEnabled   = false
+    if filters.itemLevel then
+        filters.itemLevel.min = nil
+        filters.itemLevel.max = nil
+    end
     if tabName == "Move" then
         ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
         ns.DB.ui.typeFilter      = "All"
@@ -161,10 +233,11 @@ local function ResetTabFilters(tabName)
     end
 end
 
-P.SetFilterInclude    = SetFilterInclude
-P.SetFilterSearch     = SetFilterSearch
+P.SetFilterInclude     = SetFilterInclude
+P.SetFilterSearch      = SetFilterSearch
 P.SetFilterHideBlocked = SetFilterHideBlocked
-P.ResetTabFilters     = ResetTabFilters
+P.SetFilterItemLevel   = SetFilterItemLevel
+P.ResetTabFilters      = ResetTabFilters
 
 -- ===========================================================================
 -- Label helpers
@@ -216,6 +289,16 @@ local function BuildFilterSummary(tabName)
     end
     if filters.hideBlocked then
         table.insert(parts, "Actionable only")
+    end
+    if filters.itemLevel then
+        local ilvl = filters.itemLevel
+        if ilvl.min and ilvl.max then
+            table.insert(parts, "iLvl: " .. ilvl.min .. "-" .. ilvl.max)
+        elseif ilvl.min then
+            table.insert(parts, "iLvl: ≥" .. ilvl.min)
+        elseif ilvl.max then
+            table.insert(parts, "iLvl: ≤" .. ilvl.max)
+        end
     end
     return #parts > 0 and table.concat(parts, "  |  ") or "Filters: All"
 end
@@ -347,6 +430,13 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if not MatchesTypeInclude(item, filters.type.include)           then return false end
     if not MatchesBindInclude(item, filters.bind.include)           then return false end
     if not MatchesLocationInclude(item, filters.location.include)   then return false end
+    -- Item level filter: only restricts equippable items; non-gear always passes.
+    local ilvl = filters.itemLevel
+    if ilvl and (ilvl.min or ilvl.max) and IsEquippable(item) then
+        local level = item.itemLevel or 0
+        if ilvl.min and level < ilvl.min then return false end
+        if ilvl.max and level > ilvl.max then return false end
+    end
     local searchParts = BuildItemSearchParts(item, extraParts)
     if not TextMatchesSearch(filters.name.includeText, searchParts) then return false end
     if filters.name.excludeText ~= "" and TextMatchesSearch(filters.name.excludeText, { item.name or "" }) then

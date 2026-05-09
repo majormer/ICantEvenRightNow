@@ -53,6 +53,7 @@ local MatchesTabFilters         = P.MatchesTabFilters
 local SetFilterInclude          = P.SetFilterInclude
 local SetFilterSearch           = P.SetFilterSearch
 local SetFilterHideBlocked      = P.SetFilterHideBlocked
+local SetFilterItemLevel        = P.SetFilterItemLevel
 local ResetTabFilters           = P.ResetTabFilters
 local GetTypeFilterOptions      = P.GetTypeFilterOptions
 local GetBindFilterOptions      = P.GetBindFilterOptions
@@ -895,8 +896,36 @@ local function BuildTransferTab(parent)
 
     parent.filterSummary = CreateLabel(parent, "", "GameFontDisableSmall")
     parent.filterSummary:SetPoint("LEFT", parent.search, "RIGHT", 14, 0)
-    parent.filterSummary:SetWidth(440)
+    parent.filterSummary:SetWidth(240)
     parent.filterSummary:SetWordWrap(false)
+
+    parent.ilvlLabel = CreateLabel(parent, "iLvl:", "GameFontHighlightSmall")
+    parent.ilvlLabel:SetPoint("LEFT", parent.filterSummary, "RIGHT", 14, 0)
+
+    parent.ilvlMin = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.ilvlMin:SetSize(52, 24)
+    parent.ilvlMin:SetAutoFocus(false)
+    parent.ilvlMin:SetMaxLetters(5)
+    parent.ilvlMin:SetNumeric(true)
+    parent.ilvlMin:SetPoint("LEFT", parent.ilvlLabel, "RIGHT", 6, 0)
+    parent.ilvlMin:SetScript("OnTextChanged", function(self)
+        SetFilterItemLevel("Transfer", self:GetText(), parent.ilvlMax:GetText())
+        Core.RefreshUI()
+    end)
+
+    parent.ilvlSep = CreateLabel(parent, "–", "GameFontHighlightSmall")
+    parent.ilvlSep:SetPoint("LEFT", parent.ilvlMin, "RIGHT", 4, 0)
+
+    parent.ilvlMax = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.ilvlMax:SetSize(52, 24)
+    parent.ilvlMax:SetAutoFocus(false)
+    parent.ilvlMax:SetMaxLetters(5)
+    parent.ilvlMax:SetNumeric(true)
+    parent.ilvlMax:SetPoint("LEFT", parent.ilvlSep, "RIGHT", 4, 0)
+    parent.ilvlMax:SetScript("OnTextChanged", function(self)
+        SetFilterItemLevel("Transfer", parent.ilvlMin:GetText(), self:GetText())
+        Core.RefreshUI()
+    end)
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     parent.listFrame:SetSize(720, 264)
@@ -1086,6 +1115,12 @@ function Core.RefreshTransfer()
     if panel.search:GetText() ~= searchText then
         panel.search:SetText(searchText)
     end
+    local ilvlMinVal = filters.itemLevel and filters.itemLevel.min
+    local ilvlMaxVal = filters.itemLevel and filters.itemLevel.max
+    local ilvlMinStr = ilvlMinVal and tostring(ilvlMinVal) or ""
+    local ilvlMaxStr = ilvlMaxVal and tostring(ilvlMaxVal) or ""
+    if panel.ilvlMin:GetText() ~= ilvlMinStr then panel.ilvlMin:SetText(ilvlMinStr) end
+    if panel.ilvlMax:GetText() ~= ilvlMaxStr then panel.ilvlMax:SetText(ilvlMaxStr) end
     panel.scanBank:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat)
 
     local allCandidates = GetTransferCandidates(source, dest)
