@@ -153,4 +153,6 @@ ns.Data.DefaultDB = {
         search = "",
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
+    savedFilters = {},       -- User-named filter presets: array of { name, expansion, bind, type, slot, upgrade }
+    savedFiltersSeeded = false, -- Set true after default presets are written once
 }

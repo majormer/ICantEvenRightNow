@@ -11,7 +11,28 @@ Release note rules:
 
 ## [Unreleased]
 
-- No changes yet.
+### Added
+
+- Transfer tab now uses a scrollable list for all items instead of a paginated presentation.
+- Item Level filter in the Transfer tab: filter equippable gear by a minimum and/or maximum item level.
+- Slot filter in the Transfer tab: narrow the list to a specific gear slot (Head, Chest, Finger, etc.).
+- Upgrade filter in the Transfer tab: show only gear that is a strict item level upgrade over what the character currently has equipped. For two-slot types (rings, trinkets), the weaker of the two equipped items is used as the baseline.
+- Saved Filter presets ("Favorites"): save a named combination of Expansion, Binding, Type, Slot, and Upgrade filter selections, then reload any saved preset from a dropdown. Two presets ship by default and can be removed: "Old Gear Dump" (Expansion: Not current) and "Upgrade Check" (Upgrade: Upgrade).
+
+### Changed
+
+- "Bind" filter label renamed to "Binding" to match WoW tooltip language and reduce ambiguity.
+- BoE removed from the Type filter; it is already covered by the Binding filter.
+- Bank and Vendor options in Source/Destination dropdowns are now hidden when the respective context is not available, preventing inaccessible transfer configurations.
+
+### Fixed
+
+- Soulbound detection corrected to reliably identify soulbound items across all scanned locations.
+- Transfer tab now refreshes bag and bank counts after every action, including vendor sales.
+
+### Maintenance
+
+- Core.lua split into focused modules (Shared, Evaluator, Filter, Scanner, Transfer, UI) for long-term maintainability.
 
 ## [0.3.0] - 2026-05-08
 

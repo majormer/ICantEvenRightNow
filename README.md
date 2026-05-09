@@ -19,14 +19,12 @@ The addon is intentionally cautious. Unknown, quest, legendary, and protected it
 
 ### Cleanup Console UI
 
-The addon has six tabs:
+The addon has four tabs:
 
-1. **Summary** - Current context, scan status, and category totals.
-2. **Move** - Bank old content or recall relevant items with expansion/type filters and scoped selection.
-3. **Organize** - Review searchable bank-to-bank moves that group items into more sensible storage locations.
-4. **Vendor** - Review searchable safe sell candidates and recall-to-bags steps for vendoring.
-5. **Rules** - Teach the addon item-ID rules for protect, ignore, never move, never sell, always bank, and similar overrides.
-6. **Settings** - Configure the minimap launcher and inspect quick-access status.
+1. **Summary** - Inventory scope counts: items in bags, items in bank, old-content counts, Warband bank items, active rules, and last scan timestamps.
+2. **Transfer** - Move items between any combination of Bags, Private Bank, Warband Bank, Vendor, or individual Bank tabs. Filter by Expansion, Binding, Type, Slot, Upgrade, item level, or name. Save named filter presets to reload common setups instantly. Per-item block reasons and an actionable-only toggle keep the list focused.
+3. **Rules** - Item-ID overrides: Protect, Ignore, or Never Sell. Each rule shows its origin and can be removed individually.
+4. **Settings** - Configure the minimap launcher and inspect quick-access status.
 
 Quick access uses a minimap launcher. The minimap launcher uses LibDataBroker/LibDBIcon when available so minimap button organizers can collect it.
 
@@ -63,16 +61,18 @@ Actions are enabled only when the related game context is available:
 - `/icanteven` or `/icant` - Open the cleanup console.
 - `/icanteven scan [bags|bank|all]` - Scan inventory.
 - `/icanteven summary` - Open the Summary tab.
-- `/icanteven move` - Open the Move tab.
-- `/icanteven dump <expansion>` - Prepare old-content banking for an expansion filter.
-- `/icanteven recall <expansion>` - Prepare recall from bank for an expansion filter.
-- `/icanteven organize` - Open the Organize tab.
-- `/icanteven vendor` or `/icanteven sell` - Open the Vendor tab.
+- `/icanteven transfer` - Open the Transfer tab.
+- `/icanteven dump [expansion]` - Pre-configure Transfer to bank old content and open it.
+- `/icanteven recall [expansion]` - Pre-configure Transfer to recall from bank and open it.
+- `/icanteven organize` - Pre-configure Transfer for bank organization and open it.
+- `/icanteven vendor` - Pre-configure Transfer for vendor selling and open it.
 - `/icanteven rules` - Open the Rules tab.
 - `/icanteven settings` or `/icanteven options` - Open the Settings tab.
 - `/icanteven minimap` - Show or hide the minimap button.
 - `/icanteven buttons` - Print quick-access launcher status.
 - `/icanteven bankdiag` or `/icanteven bankids` - Print resolved bank container diagnostics.
+- `/icanteven errors` - View logged Lua errors.
+- `/icanteven clearerrors` - Clear the error log.
 - `/icanteven debug` - Toggle debug output.
 - `/icanteven diag` - Run a diagnostic dump.
 
@@ -80,11 +80,12 @@ Actions are enabled only when the related game context is available:
 
 1. Open the console with `/icanteven`.
 2. Scan bags, bank, or all available storage.
-3. Review recommendations and blocked reasons.
-4. Filter by mode, expansion, item type, or storage source.
-5. Select the exact rows you want to process.
-6. Execute the selected move, organize, recall, or vendor action.
-7. Add rules for any item you want handled differently next time.
+3. In the Transfer tab, choose a Source and Destination.
+4. Apply filters — Expansion, Binding, Type, Slot, Upgrade, or item level — to narrow the list.
+5. Load a saved filter preset or save the current filter combination for reuse.
+6. Select the rows you want to act on.
+7. Transfer or sell selected items.
+8. Add Rules for any item you want handled differently next time.
 
 ## Technical Details
 
@@ -94,23 +95,31 @@ Actions are enabled only when the related game context is available:
 ICantEvenRightNow/
 ├── ICantEvenRightNow.toc  # Addon metadata
 ├── ICantEvenRightNow.png  # Addon icon/art
-├── Core.lua               # Main UI, logic, event handlers
 ├── Data.lua               # Static data tables and defaults
 ├── Debug.lua              # Debug utilities
+├── Shared.lua             # Constants, bag ID resolution, context detection
+├── Evaluator.lua          # Binding detection, item classification, decision building
+├── Filter.lua             # Filter state, matching logic, option builders, saved presets
+├── Scanner.lua            # Container scanning and bank diagnostics
+├── Transfer.lua           # Movement execution and vendor selling
+├── UI.lua                 # UI construction and refresh
+├── Core.lua               # Addon lifecycle, events, slash commands
 └── docs/
 ```
 
 ### Key Concepts
 
-- **Recommendation** - What the classifier thinks should happen.
-- **Eligibility** - Whether the action is safe and currently possible.
-- **Selection** - What the player chose for this run.
+- **Source / Destination** - Where items are coming from and going to. The player sets both explicitly.
+- **Filter** - Narrows the Transfer list by Expansion, Binding, Type, Slot, Upgrade potential, item level, or name search.
+- **Saved Filter Preset** - A named combination of categorical filters that can be saved and reloaded in one click.
+- **Block Reason** - Why a specific item cannot be transferred right now (bank closed, vendor closed, no slots, Protect rule, etc.).
+- **Rule** - An item-ID override: Protect, Ignore, or Never Sell.
 
-These stay separate so recommended never accidentally means will be moved.
+Transfer intent is always player-driven. The addon classifies and explains; the player decides.
 
 ### Saved Variables
 
-- `ICantEvenRightNowDB` - Stores rules, UI state, context state, and scan data.
+- `ICantEvenRightNowDB` - Stores rules, UI state, context state, scan data, error log, and saved filter presets.
 
 ## Compatibility
 
