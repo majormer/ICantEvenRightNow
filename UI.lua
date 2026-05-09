@@ -1090,9 +1090,19 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
+    parent.selectAllItems = CreateButton(parent, "Select All", 90)
+    parent.selectAllItems:SetParent(parent.footer)
+    parent.selectAllItems:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
+    parent.selectAllItems:SetScript("OnClick", function()
+        for _, plan in ipairs(UI.transferVisible or {}) do
+            UI.transferSelected[plan.key] = true
+        end
+        Core.RefreshUI()
+    end)
+
     parent.execute = CreateButton(parent, "Transfer Selected", 130)
     parent.execute:SetParent(parent.footer)
-    parent.execute:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
+    parent.execute:SetPoint("LEFT", parent.selectAllItems, "RIGHT", 8, 0)
     parent.execute:SetScript("OnClick", function() Core.ExecuteTransferSelected() end)
 
     parent.itemCount = CreateLabel(parent, "", "GameFontHighlightSmall")
