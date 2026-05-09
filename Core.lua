@@ -30,6 +30,10 @@ local UI = {
     organizeVisible = {},
     vendorSelected = {},
     vendorVisible = {},
+    transferSelected = {},
+    transferVisible = {},
+    transferSource = "Bags",
+    transferDest = "Bank (All Tabs)",  -- matches STORAGE_ALL_BANK_TABS
     visible = {},
     bankContextOpen = false,
     bankContextClosed = false,
@@ -52,6 +56,17 @@ local STORAGE_BAGS = "Bags"
 local STORAGE_PRIVATE_BANK = "Private Bank"
 local STORAGE_REAGENT_BANK = "Reagent Bank"
 local STORAGE_WARBAND_BANK = "Warband Bank"
+local STORAGE_ALL_BANK_TABS = "Bank (All Tabs)"
+-- Prefix for named character bank tab storage keys (e.g. "BankTab:6").
+-- Source: https://warcraft.wiki.gg/wiki/API_C_Bank.FetchPurchasedBankTabData
+local BANK_TAB_PREFIX = "BankTab:"
+-- Enum.BagSlotFlags bitmask values for bank tab deposit filters.
+-- Source: https://warcraft.wiki.gg/wiki/API_C_Bank.FetchPurchasedBankTabData
+local BAG_SLOT_FLAGS_EQUIPMENT      = 0x2
+local BAG_SLOT_FLAGS_CONSUMABLES    = 0x4
+local BAG_SLOT_FLAGS_PROFESSION     = 0x8
+local BAG_SLOT_FLAGS_JUNK           = 0x10
+local BAG_SLOT_FLAGS_REAGENTS       = 0x80
 local TYPE_FILTER_REAGENT = "Reagent"
 local TYPE_FILTER_BOE = "BoE"
 local TYPE_FILTER_WUE = "WuE"
@@ -255,12 +270,118 @@ for _, bagID in ipairs(PRIVATE_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_P
 for _, bagID in ipairs(REAGENT_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_REAGENT_BANK end
 for _, bagID in ipairs(WARBAND_BANK_IDS) do STORAGE_BY_BAG_ID[bagID] = STORAGE_WARBAND_BANK end
 
+-- Cache of character bank tab data populated via C_Bank.FetchPurchasedBankTabData
+-- when the bank is open. Each entry: { bagID, name, flags }.
+local BANK_TAB_DATA = {}
+
+local function BankTabStorageKey(bagID)
+    return BANK_TAB_PREFIX .. tostring(bagID)
+end
+
+local function GetBankTabLabel(tab)
+    if tab.name and tab.name ~= "" then
+        return "Bank: " .. tab.name
+    end
+    return "Bank Tab " .. tostring(tab.bagID)
+end
+
+local function GetStorageDisplayName(storageKind)
+    if storageKind == "Bags"               then return "Bags" end
+    if storageKind == STORAGE_PRIVATE_BANK  then return "Private Bank" end
+    if storageKind == STORAGE_REAGENT_BANK  then return "Reagent Bank" end
+    if storageKind == STORAGE_WARBAND_BANK  then return "Warband Bank" end
+    if storageKind == STORAGE_ALL_BANK_TABS then return STORAGE_ALL_BANK_TABS end
+    if storageKind == "Vendor"              then return "Vendor" end
+    if storageKind and storageKind:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX then
+        local bagID = tonumber(storageKind:sub(#BANK_TAB_PREFIX + 1))
+        if bagID then
+            for _, tab in ipairs(BANK_TAB_DATA) do
+                if tab.bagID == bagID then return GetBankTabLabel(tab) end
+            end
+        end
+        return "Bank Tab"
+    end
+    return storageKind or "Unknown"
+end
+
 local function HasReagentBankStorage()
     return #REAGENT_BANK_IDS > 0
 end
 
+-- Reagent Bank was removed in Patch 11.2.0 (TOC 110200, released August 5 2025).
+-- In Midnight (12.x, TOC 120000+), Enum.BagIndex.Reagentbank does not exist, so
+-- REAGENT_BANK_IDS is always empty. HAS_REAGENT_BANK captures this once at load time.
+-- Source: https://warcraft.wiki.gg/wiki/Patch_11.2.0
+local HAS_REAGENT_BANK = HasReagentBankStorage()
+
+-- Populate BANK_TAB_DATA from C_Bank API and update STORAGE_BY_BAG_ID with named tab keys.
+-- Must be called while the bank frame is open (API returns nil otherwise).
+-- Source: https://warcraft.wiki.gg/wiki/API_C_Bank.FetchPurchasedBankTabData
+local function RefreshBankTabData()
+    BANK_TAB_DATA = {}
+    if not (C_Bank and C_Bank.FetchPurchasedBankTabData) then return end
+    if not (Enum and Enum.BankType) then return end
+    local tabs = C_Bank.FetchPurchasedBankTabData(Enum.BankType.Character)
+    if not tabs then return end
+    for _, tab in ipairs(tabs) do
+        local entry = {
+            bagID = tab.ID,
+            name  = tab.name or "",
+            flags = tab.depositFlags or 0,
+        }
+        table.insert(BANK_TAB_DATA, entry)
+        -- Override the static STORAGE_BY_BAG_ID entry so subsequent scans and
+        -- GetStorageKindForBagID calls return the named key instead of the
+        -- monolithic STORAGE_PRIVATE_BANK.
+        STORAGE_BY_BAG_ID[tab.ID] = BankTabStorageKey(tab.ID)
+    end
+end
+
+local function GetTransferSourceOptions()
+    local opts = { { text = "Bags", value = "Bags" } }
+    if #BANK_TAB_DATA > 0 then
+        table.insert(opts, { text = STORAGE_ALL_BANK_TABS, value = STORAGE_ALL_BANK_TABS })
+        for _, tab in ipairs(BANK_TAB_DATA) do
+            local key = BankTabStorageKey(tab.bagID)
+            table.insert(opts, { text = GetBankTabLabel(tab), value = key })
+        end
+    else
+        table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
+    end
+    table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+    return opts
+end
+
+local function GetTransferDestOptions()
+    local opts = GetTransferSourceOptions()
+    table.insert(opts, { text = "Vendor", value = "Vendor" })
+    return opts
+end
+
+local function RefreshTransferDropdowns()
+    local panels = UI.frame and UI.frame.panels
+    local panel = panels and panels.Transfer
+    if not panel then return end
+    local srcOpts = GetTransferSourceOptions()
+    local dstOpts = GetTransferDestOptions()
+    panel.sourceDropdown:SetOptions(srcOpts)
+    panel.destDropdown:SetOptions(dstOpts)
+    -- Validate current source selection against new options.
+    local srcValid = false
+    for _, o in ipairs(srcOpts) do if o.value == UI.transferSource then srcValid = true; break end end
+    if not srcValid then UI.transferSource = srcOpts[1] and srcOpts[1].value or "Bags" end
+    -- Validate current dest selection against new options.
+    local dstValid = false
+    for _, o in ipairs(dstOpts) do if o.value == UI.transferDest then dstValid = true; break end end
+    if not dstValid then
+        for _, o in ipairs(dstOpts) do
+            if o.value ~= UI.transferSource then UI.transferDest = o.value; break end
+        end
+    end
+end
+
 local function NormalizeLegacyBankStorageKinds(items)
-    if HasReagentBankStorage() then
+    if HAS_REAGENT_BANK then
         return
     end
     for _, item in ipairs(items or {}) do
@@ -271,15 +392,7 @@ local function NormalizeLegacyBankStorageKinds(items)
     end
 end
 
-local GROUP_ORDER = {
-    "Unknown / needs review",
-    "Recommended bank candidates",
-    "Recommended recall candidates",
-    "Obsolete consumables",
-    "Old BoEs",
-    "Protected / blocked",
-    "Ignored",
-}
+
 
 local function Print(msg)
     print("|cFF66CCFF" .. DISPLAY_NAME .. ":|r " .. tostring(msg))
@@ -354,7 +467,7 @@ function Core.PrintBankContainerDiagnostics()
     Print("Resolved private IDs: " .. JoinBagIDs(PRIVATE_BANK_IDS))
     Print("Resolved reagent IDs: " .. JoinBagIDs(REAGENT_BANK_IDS))
     Print("Resolved warband IDs: " .. JoinBagIDs(WARBAND_BANK_IDS))
-    if not HasReagentBankStorage() then
+    if not HAS_REAGENT_BANK then
         Print("Reagent-bank container is not available in this client; profession mats use private bank storage.")
     end
 
@@ -482,11 +595,9 @@ end
 local function EnsureRule(itemID)
     ns.DB.rules.items[itemID] = ns.DB.rules.items[itemID] or {
         protect = false,
-        neverMove = false,
         neverSell = false,
         ignore = false,
         expansionOverride = nil,
-        actionOverride = nil,
         notes = nil,
         createdFrom = "Rules tab",
     }
@@ -619,11 +730,11 @@ local function IsUnknownExpansion(expansionID)
     return expansionID == nil
 end
 
-local function SetBankOrRecallDecision(item, bankGroup, bankReason, recallReason)
+local function SetBankOrRecallDecision(item, bankReason, recallReason)
     if item.scope == BANK_SCOPE then
-        return "Recommended recall candidates", Data.Recommendations.RECALL, Data.Actions.RECALL, recallReason or bankReason
+        return recallReason or bankReason
     end
-    return bankGroup, Data.Recommendations.BANK, Data.Actions.BANK, bankReason
+    return bankReason
 end
 
 local function IsTransferableSharedValueItem(item, itemType)
@@ -662,7 +773,14 @@ local function GetPreferredProfessionStorage(item, charProfSubclasses)
     local noProfData = not next(charProfSubclasses)
     local isCharMat = noProfData or (charProfSubclasses[item.subclassID or -1] == true)
     if isCharMat then
-        if #REAGENT_BANK_IDS > 0 then
+        -- Prefer the character bank tab flagged as a reagents tab (if any).
+        for _, tab in ipairs(BANK_TAB_DATA) do
+            if bit.band(tab.flags, BAG_SLOT_FLAGS_REAGENTS) ~= 0 then
+                return BankTabStorageKey(tab.bagID),
+                    "Crafting material belongs in the reagents bank tab (" .. tab.name .. ")"
+            end
+        end
+        if HAS_REAGENT_BANK then
             return STORAGE_REAGENT_BANK, "Crafting material for this character belongs in the reagent bank"
         end
         return STORAGE_PRIVATE_BANK, "Crafting material for this character belongs in character storage"
@@ -696,118 +814,59 @@ local function BuildDecision(item)
 
     local itemType = GetItemType(item)
     local blocked = {}
-    local group = "Unknown / needs review"
-    local recommendation = Data.Recommendations.REVIEW
-    local action = Data.Actions.REVIEW
-    local reason = "Needs player review before moving"
+    local reason = "Unclassified"
     local bankTargetStorage
 
     if rule and rule.ignore then
-        group = "Ignored"
-        recommendation = Data.Recommendations.IGNORED
-        action = Data.Actions.NONE
         reason = "Ignored by item rule"
         table.insert(blocked, "Ignored")
-    elseif rule and (rule.protect or rule.neverMove) then
-        group = "Protected / blocked"
-        recommendation = Data.Recommendations.PROTECTED
-        action = Data.Actions.NONE
-        reason = rule.protect and "Protected by item rule" or "Never move rule"
+    elseif rule and rule.protect then
+        reason = "Protected by item rule"
         table.insert(blocked, reason)
     elseif IsMythicKeystone(item) then
         expansionID = Data.CurrentExpansionID
-        group = "Protected / blocked"
-        recommendation = Data.Recommendations.PROTECTED
-        action = Data.Actions.NONE
         reason = "Mythic Keystone is protected as current seasonal content"
         table.insert(blocked, "Mythic Keystone")
     elseif item.isBound and (item.classID == 2 or item.classID == 4) then
-        group = "Protected / blocked"
-        recommendation = Data.Recommendations.BLOCKED
-        action = Data.Actions.NONE
-        reason = "Soulbound equipment is blocked by default"
+        reason = "Soulbound equipment"
         table.insert(blocked, "Soulbound equipment")
     elseif itemType == Data.ItemTypes.QUEST then
-        group = "Protected / blocked"
-        recommendation = Data.Recommendations.BLOCKED
-        action = Data.Actions.NONE
-        reason = "Quest items are blocked by default"
+        reason = "Quest item"
         table.insert(blocked, "Quest item")
-    elseif rule and rule.actionOverride then
-        action = rule.actionOverride
-        recommendation = action == Data.Actions.BANK and Data.Recommendations.BANK or Data.Recommendations.RECALL
-        group = action == Data.Actions.BANK and "Recommended bank candidates" or "Recommended recall candidates"
-        reason = "Action override rule"
     elseif item.curated and item.curated.action == Data.Actions.BANK then
-        group, recommendation, action, reason = SetBankOrRecallDecision(
-            item,
-            "Recommended bank candidates",
-            item.curated.reason or "Curated old-content table",
-            "Curated item is available to recall from bank"
-        )
+        reason = SetBankOrRecallDecision(item,
+            item.curated.reason or "Curated old-content item",
+            "Curated item in bank")
     elseif itemType == Data.ItemTypes.CONSUMABLE and IsOldExpansion(expansionID) then
-        group, recommendation, action, reason = SetBankOrRecallDecision(
-            item,
-            "Obsolete consumables",
-            "Old expansion consumable",
-            "Old expansion consumable is available to recall from bank"
-        )
+        reason = SetBankOrRecallDecision(item, "Old expansion consumable", "Old expansion consumable in bank")
     elseif itemType == Data.ItemTypes.BOE and IsOldExpansion(expansionID) then
-        group = "Old BoEs"
-        recommendation = Data.Recommendations.REVIEW
-        action = Data.Actions.REVIEW
-        reason = "Old BoE, review before moving"
+        reason = "Old BoE — review before selling"
     elseif itemType == Data.ItemTypes.PROFESSION and IsOldExpansion(expansionID) then
-        group, recommendation, action, reason = SetBankOrRecallDecision(
-            item,
-            "Recommended bank candidates",
-            "Old expansion material",
-            "Old expansion material is available to recall from bank"
-        )
+        reason = SetBankOrRecallDecision(item, "Old expansion material", "Old expansion material in bank")
     elseif item.scope == BAG_SCOPE and itemType == Data.ItemTypes.PROFESSION then
         bankTargetStorage, reason = GetPreferredBankStorage(item, itemType)
-        group = "Recommended bank candidates"
-        recommendation = Data.Recommendations.BANK
-        action = Data.Actions.BANK
     elseif IsOldExpansion(expansionID) and itemType ~= Data.ItemTypes.EQUIPMENT then
-        group, recommendation, action, reason = SetBankOrRecallDecision(
-            item,
-            "Recommended bank candidates",
-            "Old expansion item",
-            "Old expansion item is available to recall from bank"
-        )
+        reason = SetBankOrRecallDecision(item, "Old expansion item", "Old expansion item in bank")
     elseif item.scope == BANK_SCOPE
         and expansionID
         and IsCurrentExpansion(expansionID)
         and (itemType == Data.ItemTypes.PROFESSION or itemType == Data.ItemTypes.CONSUMABLE or itemType == Data.ItemTypes.CURRENCY_LIKE) then
-        group = "Recommended recall candidates"
-        recommendation = Data.Recommendations.RECALL
-        action = Data.Actions.RECALL
-        reason = "Current expansion item is available to recall from bank"
+        reason = "Current expansion item in bank"
     elseif item.scope == BAG_SCOPE and item.bindingScope == "Warbound Until Equipped" then
         bankTargetStorage = STORAGE_WARBAND_BANK
-        group = "Recommended bank candidates"
-        recommendation = Data.Recommendations.BANK
-        action = Data.Actions.BANK
-        reason = "Warbound-until-equipped item belongs in shared storage"
+        reason = "Warbound-until-equipped — belongs in shared storage"
     elseif item.scope == BAG_SCOPE and IsTransferableSharedValueItem(item, itemType) then
         bankTargetStorage, reason = GetPreferredBankStorage(item, itemType)
-        group = "Recommended bank candidates"
-        recommendation = Data.Recommendations.BANK
-        action = Data.Actions.BANK
     elseif IsCurrentExpansion(expansionID) then
-        group = "Protected / blocked"
-        recommendation = Data.Recommendations.BLOCKED
-        action = Data.Actions.NONE
-        reason = "Current or unknown expansion is blocked by default"
-        table.insert(blocked, "Current or unknown expansion")
+        reason = "Current expansion — blocked by default"
+        table.insert(blocked, "Current expansion")
     end
 
     local eligibleForBankMove = item.scope == BAG_SCOPE
-        and not (rule and (rule.ignore or rule.protect or rule.neverMove))
+        and not (rule and (rule.ignore or rule.protect))
 
     local eligibleForRecall = item.scope == BANK_SCOPE
-        and not (rule and (rule.ignore or rule.protect or rule.neverMove))
+        and not (rule and (rule.ignore or rule.protect))
 
     if item.scope == BAG_SCOPE and not bankTargetStorage then
         bankTargetStorage = GetPreferredBankStorage(item, itemType)
@@ -816,10 +875,7 @@ local function BuildDecision(item)
     item.expansionID = expansionID
     item.expansionName = GetExpansionName(expansionID)
     item.typeTag = itemType
-    item.recommendation = recommendation
-    item.recommendedAction = action
     item.reason = reason
-    item.group = group
     item.blockedReasons = blocked
     item.eligibleForBankMove = eligibleForBankMove
     item.eligibleForRecall = eligibleForRecall
@@ -932,6 +988,7 @@ end
 
 local IsAllFilterValue
 local GetExpansionFilterLabel
+local GetMultiSelectLabel
 
 local function SetFilterSearch(tabName, value)
     local filters = EnsureTabFilters(tabName)
@@ -982,7 +1039,7 @@ local function BuildFilterSummary(tabName)
         table.insert(parts, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
     end
     if not IsAllFilterValue(filters.type.include) then
-        table.insert(parts, "Type: " .. tostring(filters.type.include))
+        table.insert(parts, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
     end
     if not IsAllFilterValue(filters.bind.include) then
         table.insert(parts, "Bind: " .. tostring(filters.bind.include))
@@ -1147,32 +1204,6 @@ local function MatchesTabFilters(item, tabName, extraParts)
     return true
 end
 
-local function MatchesMoveFilter(item)
-    local ui = ns.DB.ui
-    if ui.mode == "Dump to Bank" and item.scope ~= BAG_SCOPE then
-        return false
-    elseif ui.mode == "Recall from Bank" and item.scope ~= BANK_SCOPE then
-        return false
-    end
-    if ui.recommendedOnly then
-        if ui.mode == "Dump to Bank" and item.recommendedAction ~= Data.Actions.BANK then
-            return false
-        elseif ui.mode == "Recall from Bank" and item.recommendedAction ~= Data.Actions.RECALL then
-            return false
-        elseif item.recommendedAction == Data.Actions.NONE or item.recommendedAction == Data.Actions.REVIEW then
-            return false
-        end
-    end
-    local filters = EnsureTabFilters("Move")
-    if filters.hideBlocked then
-        if ui.mode == "Dump to Bank" and not item.eligibleForBankMove then
-            return false
-        elseif ui.mode == "Recall from Bank" and not item.eligibleForRecall then
-            return false
-        end
-    end
-    return MatchesTabFilters(item, "Move")
-end
 
 GetExpansionFilterLabel = function(value)
     if value == EXPANSION_FILTER_ALL then
@@ -1195,7 +1226,6 @@ local function GetTypeFilterOptions()
         { text = TYPE_FILTER_REAGENT, value = TYPE_FILTER_REAGENT },
         { text = Data.ItemTypes.CONSUMABLE, value = Data.ItemTypes.CONSUMABLE },
         { text = TYPE_FILTER_BOE, value = TYPE_FILTER_BOE },
-        { text = TYPE_FILTER_WUE, value = TYPE_FILTER_WUE },
         { text = TYPE_FILTER_VENDOR_SELLABLE, value = TYPE_FILTER_VENDOR_SELLABLE },
         { text = Data.ItemTypes.UNKNOWN, value = Data.ItemTypes.UNKNOWN },
     }
@@ -1205,10 +1235,8 @@ local function GetBindFilterOptions()
     return {
         { text = "All", value = BIND_FILTER_ALL },
         { text = BIND_FILTER_BOE, value = BIND_FILTER_BOE },
-        { text = BIND_FILTER_WUE, value = BIND_FILTER_WUE },
         { text = BIND_FILTER_SOULBOUND, value = BIND_FILTER_SOULBOUND },
-        { text = BIND_FILTER_WARBAND, value = BIND_FILTER_WARBAND },
-        { text = BIND_FILTER_BOP, value = BIND_FILTER_BOP },
+        { text = "Warband / WuE", value = BIND_FILTER_WARBAND },
     }
 end
 
@@ -1264,8 +1292,6 @@ local function GetMoveBlockReason(item)
             return "Ignored by item rule"
         elseif item.rule and item.rule.protect then
             return "Protected by item rule"
-        elseif item.rule and item.rule.neverMove then
-            return "Never move rule"
         end
 
         local candidates = GetCandidateBankStorages(item)
@@ -1286,8 +1312,6 @@ local function GetMoveBlockReason(item)
             return "Ignored by item rule"
         elseif item.rule and item.rule.protect then
             return "Protected by item rule"
-        elseif item.rule and item.rule.neverMove then
-            return "Never move rule"
         elseif not FindFreeNormalBagSlot({}, item) then
             return "No empty normal bag slots"
         end
@@ -1394,26 +1418,6 @@ local function MoveBankItemToStorageTarget(item, targetStorage, takenSlots)
     return false, "No empty slots in " .. targetStorage
 end
 
-local function IsMoveEligibleForCurrentMode(item)
-    if ns.DB.ui.mode == "Dump to Bank" then
-        return item.eligibleForBankMove and true or false
-    elseif ns.DB.ui.mode == "Recall from Bank" then
-        return item.eligibleForRecall and true or false
-    end
-    return false
-end
-
-local function SortDecisions(a, b)
-    local ai, bi = 99, 99
-    for index, group in ipairs(GROUP_ORDER) do
-        if a.group == group then ai = index end
-        if b.group == group then bi = index end
-    end
-    if ai ~= bi then
-        return ai < bi
-    end
-    return (a.name or "") < (b.name or "")
-end
 
 function GetStorageBagIDs(storageKind)
     if storageKind == STORAGE_PRIVATE_BANK then
@@ -1422,6 +1426,21 @@ function GetStorageBagIDs(storageKind)
         return REAGENT_BANK_IDS
     elseif storageKind == STORAGE_WARBAND_BANK then
         return WARBAND_BANK_IDS
+    elseif storageKind == STORAGE_ALL_BANK_TABS then
+        -- Return all purchased character bank tab bag IDs.
+        if #BANK_TAB_DATA > 0 then
+            local ids = {}
+            for _, tab in ipairs(BANK_TAB_DATA) do
+                table.insert(ids, tab.bagID)
+            end
+            return ids
+        end
+        return PRIVATE_BANK_IDS
+    end
+    -- Named character bank tab: "BankTab:N"
+    if storageKind and storageKind:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX then
+        local bagID = tonumber(storageKind:sub(#BANK_TAB_PREFIX + 1))
+        if bagID then return { bagID } end
     end
     return {}
 end
@@ -1480,7 +1499,7 @@ local function BuildOrganizationPlan(item, charProfSubclasses)
     local targetStorage = currentStorage
     local reason = "Already in the preferred bank tier"
 
-    if item.rule and (item.rule.ignore or item.rule.protect or item.rule.neverMove) then
+    if item.rule and (item.rule.ignore or item.rule.protect) then
         reason = "Rule-protected item"
     elseif item.typeTag == Data.ItemTypes.SEASONAL or item.typeTag == Data.ItemTypes.QUEST then
         targetStorage = STORAGE_PRIVATE_BANK
@@ -1663,6 +1682,132 @@ local function CreateDropdown(parent, width, options, onSelect)
         item:SetScript("OnClick", function()
             onSelect(option.value)
             menu:Hide()
+            Core.RefreshUI()
+        end)
+        dropdown.items[index] = item
+    end
+
+    dropdown:SetScript("OnClick", function()
+        menu:SetShown(not menu:IsShown())
+    end)
+    dropdown:SetScript("OnHide", function()
+        menu:Hide()
+    end)
+
+    -- Replace all options in an existing dropdown, rebuilding its menu items in place.
+    function dropdown:SetOptions(newOptions)
+        for _, existing in ipairs(self.items) do
+            existing:Hide()
+            existing:SetParent(nil)
+        end
+        self.items = {}
+        self.options = newOptions
+        menu:SetSize(width or 140, #newOptions * 22 + 8)
+        for index, option in ipairs(newOptions) do
+            local item = CreateButton(menu, option.text, (width or 140) - 8, 20)
+            item:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 22)
+            item:SetScript("OnClick", function()
+                onSelect(option.value)
+                menu:Hide()
+                Core.RefreshUI()
+            end)
+            self.items[index] = item
+        end
+    end
+
+    return dropdown
+end
+
+local function UpdateMultiDropdownItems(dropdown)
+    local selected = dropdown.selected or {}
+    local isEmpty = true
+    for _ in pairs(selected) do isEmpty = false; break end
+    for _, item in ipairs(dropdown.items) do
+        local opt = item.option
+        local isAll = IsAllFilterValue(opt.value)
+        local isSelected = not isAll and selected[opt.value]
+        if isSelected or (isAll and isEmpty) then
+            item:SetNormalFontObject("GameFontNormalSmall")
+        else
+            item:SetNormalFontObject("GameFontDisableSmall")
+        end
+    end
+end
+
+local function SetMultiDropdownValue(dropdown, value)
+    if IsAllFilterValue(value) or type(value) ~= "table" then
+        dropdown.selected = {}
+    else
+        dropdown.selected = {}
+        for k, v in pairs(value) do
+            dropdown.selected[k] = v
+        end
+    end
+    UpdateMultiDropdownItems(dropdown)
+end
+
+GetMultiSelectLabel = function(include, allLabel)
+    if IsAllFilterValue(include) or type(include) ~= "table" then
+        return allLabel or "All"
+    end
+    local parts = {}
+    for k, v in pairs(include) do
+        local actual = v == true and k or v
+        if not IsAllFilterValue(actual) then
+            table.insert(parts, actual)
+        end
+    end
+    if #parts == 0 then return allLabel or "All" end
+    if #parts <= 2 then return table.concat(parts, ", ") end
+    return parts[1] .. " +" .. (#parts - 1)
+end
+
+local function CreateMultiSelectDropdown(parent, width, options, onSelect)
+    local dropdown = CreateButton(parent, "", width or 140, 24)
+    dropdown.options = options
+    dropdown.selected = {}
+    dropdown.onSelect = onSelect
+
+    local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    menu:SetFrameStrata("FULLSCREEN_DIALOG")
+    menu:SetFrameLevel(parent:GetFrameLevel() + 40)
+    menu:SetSize(width or 140, #options * 22 + 8)
+    menu:SetPoint("TOPLEFT", dropdown, "BOTTOMLEFT", 0, -2)
+    menu:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    menu:Hide()
+    dropdown.menu = menu
+
+    dropdown.items = {}
+    for index, option in ipairs(options) do
+        local item = CreateButton(menu, option.text, (width or 140) - 8, 20)
+        item:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 22)
+        item.option = option
+        item:SetScript("OnClick", function()
+            if IsAllFilterValue(option.value) then
+                dropdown.selected = {}
+                onSelect("All")
+            else
+                if dropdown.selected[option.value] then
+                    dropdown.selected[option.value] = nil
+                else
+                    dropdown.selected[option.value] = true
+                end
+                local count = 0
+                for _ in pairs(dropdown.selected) do count = count + 1 end
+                if count == 0 then
+                    onSelect("All")
+                else
+                    onSelect(dropdown.selected)
+                end
+            end
+            UpdateMultiDropdownItems(dropdown)
             Core.RefreshUI()
         end)
         dropdown.items[index] = item
@@ -2336,7 +2481,10 @@ function Core.ScanInventory(scope, quiet)
     if scanBank then
         local bankItems = {}
         for _, bagID in ipairs(PRIVATE_BANK_IDS) do
-            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_PRIVATE_BANK)
+            -- GetStorageKindForBagID returns a named BankTab:N key when tab data is
+            -- available (populated by RefreshBankTabData on bank open), otherwise
+            -- falls back to STORAGE_PRIVATE_BANK.
+            ScanContainerBag(bagID, BANK_SCOPE, bankItems)
         end
         for _, bagID in ipairs(REAGENT_BANK_IDS) do
             ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_REAGENT_BANK)
@@ -2396,30 +2544,38 @@ end
 
 local function CountSummary()
     local counts = {
-        oldBags = 0,
-        oldBank = 0,
-        bankCandidates = 0,
-        recallCandidates = 0,
-        consumables = 0,
-        boes = 0,
-        unknown = 0,
-        protected = 0,
+        totalBags = 0,
+        totalBank = 0,
+        totalWarband = 0,
+        oldInBags = 0,
+        oldInBank = 0,
+        unclassified = 0,
+        itemRules = 0,
     }
     for _, item in ipairs(GetAllDecisions() or {}) do
-        if IsOldExpansion(item.expansionID) and item.scope == BAG_SCOPE then
-            counts.oldBags = counts.oldBags + 1
-        elseif IsOldExpansion(item.expansionID) and item.scope == BANK_SCOPE then
-            counts.oldBank = counts.oldBank + 1
+        if item.scope == BAG_SCOPE then
+            counts.totalBags = counts.totalBags + 1
+        elseif item.storageKind == STORAGE_WARBAND_BANK then
+            counts.totalWarband = counts.totalWarband + 1
+        else
+            counts.totalBank = counts.totalBank + 1
         end
-        if item.recommendation == Data.Recommendations.BANK then
-            counts.bankCandidates = counts.bankCandidates + 1
-        elseif item.recommendation == Data.Recommendations.RECALL then
-            counts.recallCandidates = counts.recallCandidates + 1
+        if IsOldExpansion(item.expansionID) then
+            if item.scope == BAG_SCOPE then
+                counts.oldInBags = counts.oldInBags + 1
+            elseif item.scope == BANK_SCOPE then
+                counts.oldInBank = counts.oldInBank + 1
+            end
         end
-        if item.group == "Obsolete consumables" then counts.consumables = counts.consumables + 1 end
-        if item.group == "Old BoEs" then counts.boes = counts.boes + 1 end
-        if item.group == "Unknown / needs review" then counts.unknown = counts.unknown + 1 end
-        if item.group == "Protected / blocked" then counts.protected = counts.protected + 1 end
+        if item.reason == "Unclassified" then
+            counts.unclassified = counts.unclassified + 1
+        end
+    end
+    local rules = ns.DB and ns.DB.rules and ns.DB.rules.items or {}
+    for _, rule in pairs(rules) do
+        if rule.protect or rule.ignore or rule.neverSell then
+            counts.itemRules = counts.itemRules + 1
+        end
     end
     return counts
 end
@@ -2429,7 +2585,6 @@ local function SetTab(tabName)
     UI.page = 1
     Core.UpdateContext()
     Core.RefreshUI()
-    Core.ScheduleDeferredUIRefresh()
 end
 
 function AddRule(item, ruleType)
@@ -2439,12 +2594,6 @@ function AddRule(item, ruleType)
         rule.protect = true
     elseif ruleType == "Ignore" then
         rule.ignore = true
-    elseif ruleType == "Always Bank" then
-        rule.actionOverride = Data.Actions.BANK
-    elseif ruleType == "Always Recall" then
-        rule.actionOverride = Data.Actions.RECALL
-    elseif ruleType == "Never Move" then
-        rule.neverMove = true
     elseif ruleType == "Never Sell" then
         rule.neverSell = true
     end
@@ -2493,7 +2642,7 @@ end
 
 
 local function BuildRulesTab(parent)
-    parent.help = CreateLabel(parent, "Item-ID rules created from Move rows. Rules are conservative and removable.", "GameFontHighlight")
+    parent.help = CreateLabel(parent, "Per-item rules override Transfer pipeline behavior. Rules take priority and are always removable.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -2580,7 +2729,13 @@ local function GetTransferBlockReason(item, source, dest)
     if ns.DB.context.inCombat then return "In combat" end
     if source == dest then return "Source and destination are the same" end
 
-    local needsBank = source ~= "Bags" or (dest ~= "Bags" and dest ~= "Vendor")
+    local function NeedsBank(s)
+        return s ~= "Bags" and s ~= "Vendor"
+            and (s == STORAGE_PRIVATE_BANK or s == STORAGE_REAGENT_BANK
+                 or s == STORAGE_WARBAND_BANK or s == STORAGE_ALL_BANK_TABS
+                 or (s and s:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX))
+    end
+    local needsBank = NeedsBank(source) or NeedsBank(dest)
     if needsBank and not IsBankContextDetected() then
         return "Bank is not open"
     end
@@ -2593,7 +2748,6 @@ local function GetTransferBlockReason(item, source, dest)
     if item.rule then
         if item.rule.protect then return "Protected by item rule" end
         if item.rule.ignore then return "Ignored by item rule" end
-        if item.rule.neverMove and dest ~= "Vendor" then return "Never move rule" end
         if item.rule.neverSell and dest == "Vendor" then return "Never sell rule" end
     end
 
@@ -2626,7 +2780,16 @@ local function GetTransferCandidates(source, dest)
         else
             itemSource = item.storageKind or "Unknown"
         end
-        if itemSource == source then
+        -- "Private Bank" as source is monolithic: it matches both STORAGE_PRIVATE_BANK
+        -- items (scanned without tab data) and any named BankTab:N items (scanned with
+        -- tab data active). Named tab sources match only their exact storageKind.
+        -- "Bank (All Tabs)" matches any character bank item regardless of tab.
+        local isBankTabItem = itemSource == STORAGE_PRIVATE_BANK
+            or itemSource:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX
+        local matches = (itemSource == source)
+            or (source == STORAGE_PRIVATE_BANK and itemSource:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX)
+            or (source == STORAGE_ALL_BANK_TABS and isBankTabItem)
+        if matches then
             local blocked = GetTransferBlockReason(item, source, dest)
             table.insert(candidates, {
                 item = item,
@@ -2676,26 +2839,21 @@ end
 local function BuildTransferTab(parent)
     parent.contextNotice = CreateContextNotice(parent)
 
-    local sourceOptions = {
-        { text = "Bags",          value = "Bags" },
-        { text = "Private Bank",  value = STORAGE_PRIVATE_BANK },
-        { text = "Reagent Bank",  value = STORAGE_REAGENT_BANK },
-        { text = "Warband Bank",  value = STORAGE_WARBAND_BANK },
-    }
-    local destOptions = {
-        { text = "Bags",          value = "Bags" },
-        { text = "Private Bank",  value = STORAGE_PRIVATE_BANK },
-        { text = "Reagent Bank",  value = STORAGE_REAGENT_BANK },
-        { text = "Warband Bank",  value = STORAGE_WARBAND_BANK },
-        { text = "Vendor",        value = "Vendor" },
-    }
-
     parent.fromLabel = CreateLabel(parent, "From:", "GameFontHighlightSmall")
     parent.fromLabel:SetPoint("TOPLEFT", 0, 0)
 
-    parent.sourceDropdown = CreateDropdown(parent, 140, sourceOptions, function(value)
+    parent.sourceDropdown = CreateDropdown(parent, 155, GetTransferSourceOptions(), function(value)
         UI.transferSource = value
         UI.transferSelected = {}
+        -- Prevent same source and dest; advance dest to the next valid option.
+        if UI.transferDest == value then
+            for _, opt in ipairs(GetTransferDestOptions()) do
+                if opt.value ~= value then
+                    UI.transferDest = opt.value
+                    break
+                end
+            end
+        end
         Core.RefreshUI()
     end)
     parent.sourceDropdown:SetPoint("LEFT", parent.fromLabel, "RIGHT", 6, 0)
@@ -2703,7 +2861,8 @@ local function BuildTransferTab(parent)
     parent.toLabel = CreateLabel(parent, "To:", "GameFontHighlightSmall")
     parent.toLabel:SetPoint("LEFT", parent.sourceDropdown, "RIGHT", 16, 0)
 
-    parent.destDropdown = CreateDropdown(parent, 140, destOptions, function(value)
+    parent.destDropdown = CreateDropdown(parent, 155, GetTransferDestOptions(), function(value)
+        if value == UI.transferSource then return end  -- Prevent same source and dest
         UI.transferDest = value
         UI.transferSelected = {}
         Core.RefreshUI()
@@ -2723,7 +2882,7 @@ local function BuildTransferTab(parent)
     end)
     parent.expansionFilter:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -10)
 
-    parent.typeFilter = CreateDropdown(parent, 135, GetTypeFilterOptions(), function(value)
+    parent.typeFilter = CreateMultiSelectDropdown(parent, 135, GetTypeFilterOptions(), function(value)
         SetFilterInclude("Transfer", "type", value)
     end)
     parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 8, 0)
@@ -2810,6 +2969,7 @@ local function BuildTransferTab(parent)
             { text = "Ignore",        ruleType = "Ignore" },
         })
         parent.rows[i] = row
+        row:Hide()
     end
 
     parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
@@ -2893,7 +3053,13 @@ function Core.RefreshTransfer()
     local dest = UI.transferDest or STORAGE_PRIVATE_BANK
     local filters = EnsureTabFilters("Transfer")
 
-    local needsBank = source ~= "Bags" or (dest ~= "Bags" and dest ~= "Vendor")
+    local function NeedsBank(s)
+        return s ~= "Bags" and s ~= "Vendor"
+            and (s == STORAGE_PRIVATE_BANK or s == STORAGE_REAGENT_BANK
+                 or s == STORAGE_WARBAND_BANK or s == STORAGE_ALL_BANK_TABS
+                 or (s and s:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX))
+    end
+    local needsBank = NeedsBank(source) or NeedsBank(dest)
     local noticeText
     if dest == "Vendor" and not ns.DB.context.vendorOpen then
         noticeText = "Vendor is not open: sell actions are unavailable."
@@ -2902,10 +3068,11 @@ function Core.RefreshTransfer()
     end
     SetContextNotice(panel.contextNotice, noticeText)
 
-    SetDropdownText(panel.sourceDropdown, "From: " .. source)
-    SetDropdownText(panel.destDropdown, "To: " .. dest)
+    SetDropdownText(panel.sourceDropdown, "From: " .. GetStorageDisplayName(source))
+    SetDropdownText(panel.destDropdown, "To: " .. GetStorageDisplayName(dest))
     SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
-    SetDropdownText(panel.typeFilter, "Type: " .. tostring(filters.type.include or "All"))
+    SetMultiDropdownValue(panel.typeFilter, filters.type.include)
+    SetDropdownText(panel.typeFilter, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
     SetDropdownText(panel.bindFilter, "Bind: " .. tostring(filters.bind.include or BIND_FILTER_ALL))
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     panel.filterSummary:SetText(BuildFilterSummary("Transfer"))
@@ -3123,14 +3290,14 @@ function Core.RefreshSummary()
     panel.scanBank:SetEnabled((UI.bankContextOpen or IsBankContextDetected()) and not ns.DB.context.inCombat)
 
     local cards = {
-        { "Old-content items in bags", counts.oldBags },
-        { "Old-content items in bank", counts.oldBank },
-        { "Bank candidates", counts.bankCandidates },
-        { "Recall candidates", counts.recallCandidates },
-        { "Obsolete consumables", counts.consumables },
-        { "Old BoEs", counts.boes },
-        { "Unknown/review items", counts.unknown },
-        { "Protected items", counts.protected },
+        { "Items in bags", counts.totalBags },
+        { "Items in bank", counts.totalBank },
+        { "Old-content in bags", counts.oldInBags },
+        { "Old-content in bank", counts.oldInBank },
+        { "Warband bank items", counts.totalWarband },
+        { "Item rules", counts.itemRules },
+        { "Unclassified items", counts.unclassified },
+        { "Last scan: bags", FormatTimestamp(ns.DB.lastScan and ns.DB.lastScan.bags) },
     }
     for index, cardData in ipairs(cards) do
         panel.cards[index].title:SetText(cardData[1])
@@ -3207,6 +3374,61 @@ function Core.RefreshUI()
         Core.RefreshSummary()
     elseif tab == "Transfer" then
         Core.RefreshTransfer()
+    elseif tab == "Rules" then
+        Core.RefreshRules()
+    end
+end
+
+function Core.RefreshRules()
+    if not UI.frame then return end
+    local panel = UI.frame.panels and UI.frame.panels.Rules
+    if not panel then return end
+
+    local ruleItems = ns.DB and ns.DB.rules and ns.DB.rules.items or {}
+    -- Build a name lookup from the most recent scan data.
+    local nameLookup = {}
+    for _, item in ipairs(GetAllDecisions() or {}) do
+        if item.itemID and item.name then nameLookup[item.itemID] = item.name end
+    end
+    -- Build sorted list of rules that have at least one flag set.
+    local entries = {}
+    for itemID, rule in pairs(ruleItems) do
+        local flags = {}
+        if rule.protect    then table.insert(flags, "Protect") end
+        if rule.ignore     then table.insert(flags, "Ignore") end
+        if rule.neverSell  then table.insert(flags, "Never Sell") end
+        if #flags > 0 then
+            table.insert(entries, {
+                itemID = itemID,
+                ruleType = table.concat(flags, ", "),
+                createdFrom = rule.createdFrom or "",
+                name = nameLookup[itemID] or rule.name or ("Item #" .. tostring(itemID)),
+            })
+        end
+    end
+    table.sort(entries, function(a, b) return (a.name or "") < (b.name or "") end)
+
+    local rows = panel.rows or {}
+    for i, row in ipairs(rows) do
+        local e = entries[i]
+        if e then
+            row.text:SetText(string.format("%-40s %-40s %s", e.name, e.ruleType, e.createdFrom))
+            row.remove:SetScript("OnClick", function()
+                ns.DB.rules.items[e.itemID] = nil
+                Core.RefreshRules()
+            end)
+            row:Show()
+        else
+            row.text:SetText("")
+            row.remove:SetScript("OnClick", nil)
+            row:Hide()
+        end
+    end
+
+    local count = #entries
+    SetEmptyLabel(panel.empty, count == 0, "No item rules yet.")
+    if panel.countText then
+        panel.countText:SetText(count .. " rule" .. (count == 1 and "" or "s") .. " total")
     end
 end
 
@@ -3236,21 +3458,21 @@ function Core.HandleSlashCommand(msg)
         Core.ShowSummaryUI()
     elseif cmd == "move" then
         UI.transferSource = "Bags"
-        UI.transferDest = STORAGE_PRIVATE_BANK
+        UI.transferDest = STORAGE_ALL_BANK_TABS
         Core.ShowMoveUI()
     elseif cmd == "dump" then
         UI.transferSource = "Bags"
-        UI.transferDest = STORAGE_PRIVATE_BANK
+        UI.transferDest = STORAGE_ALL_BANK_TABS
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "recall" then
-        UI.transferSource = STORAGE_PRIVATE_BANK
+        UI.transferSource = STORAGE_ALL_BANK_TABS
         UI.transferDest = "Bags"
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "organize" or cmd == "organizer" then
-        UI.transferSource = STORAGE_PRIVATE_BANK
-        UI.transferDest = STORAGE_REAGENT_BANK
+        UI.transferSource = STORAGE_ALL_BANK_TABS
+        UI.transferDest = "Bags"
         Core.ShowOrganizeUI()
     elseif cmd == "vendor" or cmd == "sell" then
         UI.transferSource = "Bags"
@@ -3305,9 +3527,48 @@ function Core.HandleSlashCommand(msg)
         Print("Debug mode: " .. (Debug.IsDebugEnabled() and "ON" or "OFF"))
     elseif cmd == "diag" then
         Debug.RunDiagnosticDump()
+    elseif cmd == "errors" then
+        -- Show persisted error log captured by our own error handler.
+        local log = ns.DB and ns.DB.errorLog
+        if not log or #log == 0 then
+            Print("No errors logged for " .. ADDON_NAME .. ".")
+        else
+            Print(#log .. " error(s) logged (most recent first):")
+            local start = math.max(1, #log - 9)
+            for i = #log, start, -1 do
+                local e = log[i]
+                Print("[" .. (e.time or "?") .. "] " .. (e.msg or "?"))
+            end
+            if #log > 10 then
+                Print("(showing 10 most recent of " .. #log .. " total; /icanteven clearerrors to wipe)")
+            end
+        end
+    elseif cmd == "clearerrors" then
+        if ns.DB then ns.DB.errorLog = {} end
+        Print("Error log cleared.")
     else
-        Print("Commands: /icanteven, scan [bags|bank|all], summary, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag")
+        Print("Commands: /icanteven, scan [bags|bank|all], summary, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors")
     end
+end
+
+local ERROR_LOG_MAX = 50
+
+function Core.LogError(msg)
+    if not ns.DB then return end
+    if not ns.DB.errorLog then ns.DB.errorLog = {} end
+    local log = ns.DB.errorLog
+    table.insert(log, { time = date("%Y-%m-%d %H:%M:%S"), msg = tostring(msg) })
+    while #log > ERROR_LOG_MAX do table.remove(log, 1) end
+end
+
+do
+    local _prevHandler = geterrorhandler()
+    seterrorhandler(function(errMsg)
+        if type(errMsg) == "string" and errMsg:find(ADDON_NAME, 1, true) then
+            Core.LogError(errMsg)
+        end
+        if _prevHandler then return _prevHandler(errMsg) end
+    end)
 end
 
 function Core.OnAddonLoaded()
@@ -3330,6 +3591,7 @@ eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("BANKFRAME_OPENED")
 eventFrame:RegisterEvent("BANKFRAME_CLOSED")
+eventFrame:RegisterEvent("BANK_TAB_SETTINGS_UPDATED")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
 eventFrame:RegisterEvent("MERCHANT_SHOW")
@@ -3366,6 +3628,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             UI.bankContextClosed = true
         end
 
+        if event == "BANK_TAB_SETTINGS_UPDATED" then
+            RefreshBankTabData()
+            RefreshTransferDropdowns()
+            Core.RefreshUI()
+        end
+
         if vendorContextOpened then
             UI.vendorContextOpen = true
             UI.vendorContextClosed = false
@@ -3386,6 +3654,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             UI.hadVendorContext = false
         end
         if bankContextOpened then
+            RefreshBankTabData()
+            RefreshTransferDropdowns()
             pcall(Core.ScanInventory, "all", true)
         end
         ScheduleQuickAccessRefresh()

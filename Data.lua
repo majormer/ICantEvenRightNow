@@ -38,16 +38,6 @@ ns.Data.ItemTypes = {
     UNKNOWN = "Unknown",
 }
 
-ns.Data.Recommendations = {
-    BANK = "BankCandidate",
-    RECALL = "RecallCandidate",
-    SELL = "SellCandidate",
-    REVIEW = "NeedsReview",
-    PROTECTED = "Protected",
-    IGNORED = "Ignored",
-    BLOCKED = "Blocked",
-}
-
 ns.Data.Actions = {
     BANK = "Bank",
     RECALL = "Recall",
@@ -162,4 +152,5 @@ ns.Data.DefaultDB = {
         showVendorButton = false,
         search = "",
     },
+    errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
 }
