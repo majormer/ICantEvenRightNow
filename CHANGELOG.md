@@ -11,6 +11,8 @@ Release note rules:
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-05-09
+
 ### Added
 
 - Transfer tab now uses a scrollable list for all items instead of a paginated presentation.
