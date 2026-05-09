@@ -26,6 +26,7 @@ local WARBAND_BANK_IDS   = P.WARBAND_BANK_IDS
 local Print                      = P.Print
 local SafeCopyDefaults           = P.SafeCopyDefaults
 local MigrateLegacyTabFilters    = P.MigrateLegacyTabFilters
+local SeedDefaultSavedFilters    = P.SeedDefaultSavedFilters
 local NormalizeLegacyBankStorageKinds = P.NormalizeLegacyBankStorageKinds
 local RefreshBankTabData         = P.RefreshBankTabData
 local IsBankContextDetected      = P.IsBankContextDetected
@@ -215,6 +216,7 @@ function Core.OnAddonLoaded()
     ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, ICantEvenRightNowDB)
     ns.DB = ICantEvenRightNowDB
     MigrateLegacyTabFilters()
+    SeedDefaultSavedFilters()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
     NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)

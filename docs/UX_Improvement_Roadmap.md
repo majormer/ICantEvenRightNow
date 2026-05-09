@@ -2,154 +2,94 @@
 
 ## 1. Context
 
-Recent testing surfaced repeated friction around high-frequency flows, especially:
-
-- AH pull from bank
-- Recommended-only defaults obscuring actionable rows
-- Filter semantics around BoE vs WuE
-
-The addon already has strong filtering and explicit movement controls. The main UX opportunity is to make those strengths easier to access without reducing safety.
+This document tracks UX friction and improvement opportunities as the addon evolves. Items marked **Done** were addressed during the 0.3.0 or 0.4.0 cycles.
 
 ## 2. UX Goals
 
 - Reduce setup clicks for common workflows
-- Clarify the difference between recommendation and actionability
 - Keep conservative safeguards while allowing intentional manual workflows
 - Make filter behavior predictable and discoverable
+- Explain blocked and empty states clearly
 
-## 3. Priority Improvements
+## 3. Improvements Shipped
 
-### P0: Mode Presets for High-Frequency Work
+### Done in 0.3.0
 
-Add command and UI presets that configure tab, mode, and filters in one action.
+- **Unified Transfer tab**: Replaced Move, Organize, and Vendor tabs with a single Source → Destination model. Eliminates tab-switching between bank and vendor.
+- **Per-item block reasons**: Each row in the Transfer list explains why an item cannot be moved (context, rule, capacity).
+- **Actionable-only toggle**: "Actionable only" hides blocked rows so users can focus on what they can actually do right now.
+- **Context-gated dropdowns**: Bank and Vendor destination options are hidden when the relevant context is not open, eliminating context-mismatch errors.
 
-Suggested presets:
+### Done in 0.4.0
 
-- AH Pull BoE:
-  - Tab: Move
-  - Mode: Recall from Bank
-  - Type: BoE
-  - Recommended only: off
-  - Location: Bank
-- WuE Dump:
-  - Tab: Move
-  - Mode: Dump to Bank
-  - Type: WuE
-  - Recommended only: off
-  - Location: Bags
-- Legacy Cleanup:
-  - Tab: Move
-  - Mode: Dump to Bank
-  - Expansion: Not current
-  - Recommended only: on
+- **Scrollable list**: Replaced paginated Transfer list with a FauxScrollFrame. No more page navigation.
+- **Saved Filter Presets**: Named combinations of Expansion, Binding, Type, Slot, and Upgrade filters. Users can save, load, and remove presets from the Transfer tab. Two defaults ship: "Old Gear Dump" and "Upgrade Check".
+- **Item Level filter**: Min/max ilvl range filter, applied only to equippable gear.
+- **Slot filter**: Narrow Transfer list to a specific gear slot.
+- **Upgrade filter**: Show only gear that beats the currently equipped piece (weaker slot used for rings/trinkets).
+- **Split filter dropdowns**: Binding is now a separate dropdown from item Type, eliminating the old combined "BoE" entry in the Type filter.
 
-Expected benefit:
+## 4. Current Friction Areas
 
-- Eliminates repetitive setup errors
-- Aligns addon with real user jobs rather than raw controls
+### A. Empty-state Explanations
 
-### P0: Recommendation vs Actionability Clarity
+Status: Partial — block reasons exist per-row, but top-level empty states ("0 items") do not yet summarize why.
 
-Current ambiguity:
+Proposed:
 
-- Users may interpret disabled rows as "cannot move" when they only mean "not recommended"
+- Show a count summary when list is empty: e.g. "12 items filtered out — 3 blocked by rules, 9 outside Expansion filter."
+- Distinguish between: no scan data, nothing passes filters, all rows blocked.
 
-Proposed changes:
+Priority: P1
 
-- Introduce an explicit row state field in UI text:
-  - Recommended
-  - Actionable (manual)
-  - Blocked
-- Replace generic blockers with policy class labels:
-  - Rule blocked
-  - Context blocked
-  - Capacity blocked
-  - Recommendation-only hidden
+### B. Scan on Context Open
 
-### P1: Filter Model Improvements
+Status: Deferred — the addon does not auto-scan when a bank or vendor window opens.
 
-#### A. Split filter dimensions
+Proposed:
 
-Current type filter mixes item type and bind semantics.
+- When bank window opens and last scan is stale, trigger a background bank scan automatically.
+- Show a brief notice when an auto-scan completes.
 
-Proposed two-dropdown model:
+Priority: P1
 
-- Item Type: All, Profession, Consumable, Equipment, etc.
-- Bind Type: All, BoE, WuE, Soulbound, Warbound
+### C. Auto-close Stale Context
 
-Benefits:
+Status: Deferred — Source/Destination dropdowns do not clear bank/vendor options when those contexts close mid-session.
 
-- Avoids overloading one filter control
-- Reduces confusion when items are equipment but not BoE/WuE
+Proposed:
 
-#### B. Add Actionability quick filter
+- On `BANK_CLOSED` or `MERCHANT_CLOSED` events, call `RefreshTransferDropdowns` and reset source/dest if the current selection is no longer valid.
 
-Add "Can Act Now" toggle to only show rows currently selectable.
+Priority: P2
 
-Benefits:
+### D. Workflow-specific Footer Actions
 
-- Removes cognitive load from disabled rows
-- Speeds up batch operations
+Status: Not started.
 
-### P1: Better Empty and Disabled Explanations
+Proposed:
 
-Enhance list states with top reason counts, for example:
+- Contextual button label text, for example "Bank Selected" when Destination is Bank, "Sell Selected" when Destination is Vendor.
 
-- 12 filtered by recommendation-only
-- 5 blocked by current-expansion policy
-- 3 blocked by no bag space
+Priority: P2
 
-Benefits:
-
-- Immediate diagnosis without hovering many rows
-
-### P2: Workflow-specific Footer Actions
-
-Contextual footer action text:
-
-- Move tab in Recall mode + BoE filter: `Recall BoE Selected`
-- Move tab in Dump mode + WuE filter: `Bank WuE Selected`
-
-Benefits:
-
-- Reinforces user intent and reduces misclick anxiety
-
-## 4. Proposed Implementation Plan
-
-## Phase 1 (Low Risk)
-
-- Add slash presets (`/icanteven ahpull`, `/icanteven wuedump`, `/icanteven legacycleanup`)
-- Improve row detail text for recommendation/actionability status
-- Improve empty-state diagnostics
-
-## Phase 2 (Medium Risk)
-
-- Add bind-type filter dropdown
-- Keep current type filter for compatibility, then migrate
-- Add `Can Act Now` toggle
-
-## Phase 3 (Optional)
-
-- Introduce per-flow mini-wizards (single panel quick actions)
-- Add persistent "last workflow" restoration
-
-## 5. Acceptance Criteria for AH Pull UX
-
-A successful AH pull UX should satisfy all:
-
-1. From bank, user can run one command or click one preset.
-2. List shows only auctionable BoE items by default.
-3. WuE items are excluded unless explicitly requested.
-4. Selected items are immediately recallable with no recommendation-policy friction.
-5. Empty states explain exactly why no rows are shown.
-
-## 6. Safety Guardrails to Preserve
+## 5. Safety Guardrails to Preserve
 
 Do not remove:
 
 - Explicit user selection before action
-- Rule-based hard blocks (`Protect`, `Ignore`, `Never Move`)
+- Rule-based hard blocks (`Protect`, `Ignore`, `Never Sell`)
 - Context checks (bank/vendor/combat)
 - Conservative defaults for ambiguous content
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
+
+## 6. Acceptance Criteria for AH Pull UX
+
+A successful AH pull UX should satisfy all:
+
+1. From bank, user can run one command or load a saved preset.
+2. List shows only auctionable BoE items.
+3. WuE items are excluded unless explicitly requested.
+4. Selected items are immediately transferable.
+5. Empty states explain exactly why no rows are shown.

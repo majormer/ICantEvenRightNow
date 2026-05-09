@@ -656,3 +656,128 @@ end
 
 P.GetSlotFilterOptions       = GetSlotFilterOptions
 P.GetUpgradeFilterOptions    = GetUpgradeFilterOptions
+
+-- ===========================================================================
+-- Saved Filters ("Favorites")
+-- Presets store the five categorical filter fields: expansion, bind, type,
+-- slot, upgrade. ilvl range and search text are excluded — they are too
+-- query-specific to be useful as reusable presets.
+-- ===========================================================================
+
+local DEFAULT_SAVED_FILTERS = {
+    {
+        name      = "Old Gear Dump",
+        expansion = EXPANSION_FILTER_NOT_CURRENT,
+        bind      = BIND_FILTER_ALL,
+        type      = "All",
+        slot      = "All",
+        upgrade   = "All",
+    },
+    {
+        name      = "Upgrade Check",
+        expansion = EXPANSION_FILTER_ALL,
+        bind      = BIND_FILTER_ALL,
+        type      = "All",
+        slot      = "All",
+        upgrade   = "Upgrade",
+    },
+}
+
+-- Seeds the two default presets the first time the addon runs (or when the
+-- saved-filter list is empty and the seed flag has never been set).
+local function SeedDefaultSavedFilters()
+    if ns.DB.savedFiltersSeeded then return end
+    ns.DB.savedFilters = ns.DB.savedFilters or {}
+    if #ns.DB.savedFilters == 0 then
+        for _, preset in ipairs(DEFAULT_SAVED_FILTERS) do
+            table.insert(ns.DB.savedFilters, {
+                name      = preset.name,
+                expansion = preset.expansion,
+                bind      = preset.bind,
+                type      = preset.type,
+                slot      = preset.slot,
+                upgrade   = preset.upgrade,
+            })
+        end
+    end
+    ns.DB.savedFiltersSeeded = true
+end
+
+local function GetSavedFilters()
+    return ns.DB.savedFilters or {}
+end
+
+-- Returns a dropdown-ready options list from the current saved filter list.
+local function GetSavedFiltersOptions()
+    local opts = {}
+    for _, preset in ipairs(ns.DB.savedFilters or {}) do
+        table.insert(opts, { text = preset.name, value = preset.name })
+    end
+    return opts
+end
+
+-- Looks up a saved preset by name. Returns the preset table, or nil.
+local function FindSavedFilter(name)
+    for _, preset in ipairs(ns.DB.savedFilters or {}) do
+        if preset.name == name then return preset end
+    end
+    return nil
+end
+
+-- Applies a saved preset to the given tab's filter state.
+local function ApplySavedFilter(preset, tabName)
+    if not preset then return end
+    local filters = EnsureTabFilters(tabName)
+    filters.expansion.include = preset.expansion
+    filters.bind.include      = preset.bind
+    filters.type.include      = preset.type
+    EnsureFilterBranch(filters, "slot")
+    filters.slot.include      = preset.slot
+    EnsureFilterBranch(filters, "upgrade")
+    filters.upgrade.include   = preset.upgrade
+end
+
+-- Saves the current categorical filter state under the given name.
+-- Overwrites any existing preset with the same name.
+local function SaveFilter(name, tabName)
+    if not name or name == "" then return false end
+    local filters = EnsureTabFilters(tabName)
+    local preset = {
+        name      = name,
+        expansion = filters.expansion.include,
+        bind      = filters.bind.include,
+        type      = filters.type.include,
+        slot      = filters.slot and filters.slot.include or "All",
+        upgrade   = filters.upgrade and filters.upgrade.include or "All",
+    }
+    ns.DB.savedFilters = ns.DB.savedFilters or {}
+    for i, existing in ipairs(ns.DB.savedFilters) do
+        if existing.name == name then
+            ns.DB.savedFilters[i] = preset
+            return true
+        end
+    end
+    table.insert(ns.DB.savedFilters, preset)
+    return true
+end
+
+-- Removes the preset with the given name. Returns true if found and removed.
+local function DeleteSavedFilter(name)
+    if not name or name == "" then return false end
+    ns.DB.savedFilters = ns.DB.savedFilters or {}
+    for i, preset in ipairs(ns.DB.savedFilters) do
+        if preset.name == name then
+            table.remove(ns.DB.savedFilters, i)
+            return true
+        end
+    end
+    return false
+end
+
+P.SeedDefaultSavedFilters = SeedDefaultSavedFilters
+P.GetSavedFilters         = GetSavedFilters
+P.GetSavedFiltersOptions  = GetSavedFiltersOptions
+P.FindSavedFilter         = FindSavedFilter
+P.ApplySavedFilter        = ApplySavedFilter
+P.SaveFilter              = SaveFilter
+P.DeleteSavedFilter       = DeleteSavedFilter

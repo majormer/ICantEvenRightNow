@@ -14,8 +14,10 @@ Release note rules:
 ### Added
 
 - Transfer tab now uses a scrollable list for all items instead of a paginated presentation.
-- Saved Filters ("Favorites"): save a named combination of Expansion, Binding, and Type filter selections, then load any saved filter from a dropdown.
-- Item Level filter in the Transfer tab, applicable to equippable gear only.
+- Item Level filter in the Transfer tab: filter equippable gear by a minimum and/or maximum item level.
+- Slot filter in the Transfer tab: narrow the list to a specific gear slot (Head, Chest, Finger, etc.).
+- Upgrade filter in the Transfer tab: show only gear that is a strict item level upgrade over what the character currently has equipped. For two-slot types (rings, trinkets), the weaker of the two equipped items is used as the baseline.
+- Saved Filter presets ("Favorites"): save a named combination of Expansion, Binding, Type, Slot, and Upgrade filter selections, then reload any saved preset from a dropdown. Two presets ship by default and can be removed: "Old Gear Dump" (Expansion: Not current) and "Upgrade Check" (Upgrade: Upgrade).
 
 ### Changed
 
@@ -30,7 +32,7 @@ Release note rules:
 
 ### Maintenance
 
-- Core.lua split into logical modules (UI, Evaluator, Scanner, Actions) for long-term maintainability.
+- Core.lua split into focused modules (Shared, Evaluator, Filter, Scanner, Transfer, UI) for long-term maintainability.
 
 ## [0.3.0] - 2026-05-08
 

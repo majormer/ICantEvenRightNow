@@ -62,6 +62,11 @@ local GetBindFilterOptions      = P.GetBindFilterOptions
 local GetExpansionOptions       = P.GetExpansionOptions
 local GetSlotFilterOptions      = P.GetSlotFilterOptions
 local GetUpgradeFilterOptions   = P.GetUpgradeFilterOptions
+local GetSavedFiltersOptions    = P.GetSavedFiltersOptions
+local FindSavedFilter           = P.FindSavedFilter
+local ApplySavedFilter          = P.ApplySavedFilter
+local SaveFilter                = P.SaveFilter
+local DeleteSavedFilter         = P.DeleteSavedFilter
 
 local GetTransferCandidates     = P.GetTransferCandidates
 local GetTransferBlockReason    = P.GetTransferBlockReason
@@ -856,11 +861,53 @@ local function BuildTransferTab(parent)
     parent.scanBank:SetPoint("LEFT", parent.scanBags, "RIGHT", 8, 0)
     parent.scanBank:SetScript("OnClick", function() Core.ScanInventory(BANK_SCOPE) end)
 
+    -- Presets row: load / save / remove named filter combinations
+    parent.presetsLabel = CreateLabel(parent, "Preset:", "GameFontHighlightSmall")
+    parent.presetsLabel:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -12)
+
+    parent.presetsDropdown = CreateDropdown(parent, 190, GetSavedFiltersOptions(), function(name)
+        local preset = FindSavedFilter(name)
+        if not preset then return end
+        ApplySavedFilter(preset, "Transfer")
+        if parent.presetNameInput:GetText() ~= name then
+            parent.presetNameInput:SetText(name)
+        end
+        Core.RefreshUI()
+    end)
+    parent.presetsDropdown:SetPoint("LEFT", parent.presetsLabel, "RIGHT", 6, 0)
+
+    parent.presetNameInput = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.presetNameInput:SetSize(148, 24)
+    parent.presetNameInput:SetAutoFocus(false)
+    parent.presetNameInput:SetMaxLetters(48)
+    parent.presetNameInput:SetPoint("LEFT", parent.presetsDropdown, "RIGHT", 10, 0)
+
+    parent.savePreset = CreateButton(parent, "Save", 58)
+    parent.savePreset:SetPoint("LEFT", parent.presetNameInput, "RIGHT", 6, 0)
+    parent.savePreset:SetScript("OnClick", function()
+        local name = parent.presetNameInput:GetText()
+        if name and name ~= "" then
+            SaveFilter(name, "Transfer")
+            Core.RefreshUI()
+        end
+    end)
+
+    parent.deletePreset = CreateButton(parent, "Remove", 68)
+    parent.deletePreset:SetPoint("LEFT", parent.savePreset, "RIGHT", 6, 0)
+    parent.deletePreset:SetScript("OnClick", function()
+        local name = parent.presetNameInput:GetText()
+        if name and name ~= "" then
+            DeleteSavedFilter(name)
+            parent.presetNameInput:SetText("")
+            Core.RefreshUI()
+        end
+    end)
+
     -- Filter row 1: expansion / type / binding / slot dropdowns
     parent.expansionFilter = CreateDropdown(parent, 155, GetExpansionOptions(), function(value)
         SetFilterInclude("Transfer", "expansion", value)
     end)
-    parent.expansionFilter:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -16)
+    parent.expansionFilter:SetPoint("TOPLEFT", parent.presetsLabel, "BOTTOMLEFT", 0, -12)
 
     parent.typeFilter = CreateMultiSelectDropdown(parent, 120, GetTypeFilterOptions(), function(value)
         SetFilterInclude("Transfer", "type", value)
@@ -1118,6 +1165,13 @@ function Core.RefreshTransfer()
 
     SetDropdownText(panel.sourceDropdown, "From: " .. GetStorageDisplayName(source))
     SetDropdownText(panel.destDropdown,   "To: "   .. GetStorageDisplayName(dest))
+    -- Update presets dropdown options (list may have changed since the tab was built)
+    local presetOpts = GetSavedFiltersOptions()
+    panel.presetsDropdown:SetOptions(presetOpts)
+    SetDropdownText(panel.presetsDropdown, #presetOpts > 0 and "Load preset..." or "(no presets saved)")
+    local currentPresetName = panel.presetNameInput:GetText()
+    local presetExists = currentPresetName ~= "" and FindSavedFilter(currentPresetName) ~= nil
+    panel.deletePreset:SetEnabled(presetExists)
     SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
     SetMultiDropdownValue(panel.typeFilter, filters.type.include)
     SetDropdownText(panel.typeFilter, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
