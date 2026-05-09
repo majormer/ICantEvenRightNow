@@ -26,7 +26,7 @@ local BANK_FRAME_PATTERNS    = P.BANK_FRAME_PATTERNS
 local UI = P.UI
 
 local DISPLAY_NAME  = "I Can't Even Right Now"
-local ICON_TEXTURE  = "Interface\\Icons\\inv_misc_bag_07"
+local ICON_TEXTURE  = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow_icon.tga"
 local MINIMAP_LDB_NAME = "ICantEvenRightNow"
 
 local GetStorageDisplayName     = P.GetStorageDisplayName
@@ -863,7 +863,7 @@ local function BuildTransferTab(parent)
 
     -- Presets row: load / save / remove named filter combinations
     parent.presetsLabel = CreateLabel(parent, "Preset:", "GameFontHighlightSmall")
-    parent.presetsLabel:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -12)
+    parent.presetsLabel:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -16)
 
     parent.presetsDropdown = CreateDropdown(parent, 190, GetSavedFiltersOptions(), function(name)
         local preset = FindSavedFilter(name)
@@ -1367,7 +1367,7 @@ function Core.CreateUI()
     if UI.frame then return end
 
     local frame = CreateFrame("Frame", "ICantEvenRightNowFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(780, 560)
+    frame:SetSize(780, 584)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
