@@ -54,6 +54,13 @@ P.TYPE_FILTER_BOE            = "BoE"
 P.TYPE_FILTER_WUE            = "WuE"
 P.TYPE_FILTER_VENDOR_SELLABLE = "Vendor Sellable"
 
+-- Armor type filter values (Armor classID=4, subClassID values)
+P.ARMOR_FILTER_ALL    = "All"
+P.ARMOR_FILTER_CLOTH  = 1
+P.ARMOR_FILTER_LEATHER = 2
+P.ARMOR_FILTER_MAIL   = 3
+P.ARMOR_FILTER_PLATE  = 4
+
 -- ---------------------------------------------------------------------------
 -- Vendor action constants (plan.action values)
 -- ---------------------------------------------------------------------------

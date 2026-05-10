@@ -55,12 +55,14 @@ local SetFilterSearch           = P.SetFilterSearch
 local SetFilterHideBlocked      = P.SetFilterHideBlocked
 local SetFilterItemLevel        = P.SetFilterItemLevel
 local SetFilterSlot             = P.SetFilterSlot
+local SetFilterArmorType        = P.SetFilterArmorType
 local SetFilterUpgrade          = P.SetFilterUpgrade
 local ResetTabFilters           = P.ResetTabFilters
 local GetTypeFilterOptions      = P.GetTypeFilterOptions
 local GetBindFilterOptions      = P.GetBindFilterOptions
 local GetExpansionOptions       = P.GetExpansionOptions
 local GetSlotFilterOptions      = P.GetSlotFilterOptions
+local GetArmorTypeFilterOptions = P.GetArmorTypeFilterOptions
 local GetUpgradeFilterOptions   = P.GetUpgradeFilterOptions
 local GetSavedFiltersOptions    = P.GetSavedFiltersOptions
 local FindSavedFilter           = P.FindSavedFilter
@@ -929,6 +931,11 @@ local function BuildTransferTab(parent)
     end)
     parent.upgradeFilter:SetPoint("LEFT", parent.slotFilter, "RIGHT", 6, 0)
 
+    parent.armorTypeFilter = CreateDropdown(parent, 88, GetArmorTypeFilterOptions(), function(value)
+        SetFilterArmorType("Transfer", value)
+    end)
+    parent.armorTypeFilter:SetPoint("LEFT", parent.upgradeFilter, "RIGHT", 6, 0)
+
     -- Filter row 2: search / ilvl range / actionable toggle / clear
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
     parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -16)
@@ -1000,8 +1007,10 @@ local function BuildTransferTab(parent)
     parent.empty = CreateEmptyLabel(parent.listFrame, "No transfer candidates.")
 
     -- Scrollable list using FauxScrollFrame
-    local ROW_HEIGHT = 42
-    local VISIBLE_ROWS = 8
+    parent.ROW_HEIGHT = 42
+    parent.VISIBLE_ROWS = 8
+    local ROW_HEIGHT = parent.ROW_HEIGHT
+    local VISIBLE_ROWS = parent.VISIBLE_ROWS
     parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
     parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     5,   -5)
     parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -29,  5)
@@ -1073,7 +1082,7 @@ local function BuildTransferTab(parent)
     parent.selectPage:SetScript("OnClick", function()
         local vis = UI.transferVisible or {}
         local offset = FauxScrollFrame_GetOffset(parent.scrollFrame)
-        for i = offset + 1, math.min(offset + 6, #vis) do
+        for i = offset + 1, math.min(offset + VISIBLE_ROWS, #vis) do
             local plan = vis[i]
             if plan and plan.movable then
                 UI.transferSelected[plan.key] = true
@@ -1126,6 +1135,29 @@ function Core.RefreshTransferDropdowns()
     end
     if panel.destDropdown and panel.destDropdown.SetOptions then
         panel.destDropdown:SetOptions(destOpts)
+    end
+    -- Validate current source/dest are still available; reset if stale
+    local function isValidValue(opts, value)
+        for _, opt in ipairs(opts) do
+            if opt.value == value then return true end
+        end
+        return false
+    end
+    local defaultSource = "Bags"
+    local defaultDest = sourceOpts[2] and sourceOpts[2].value or defaultSource
+    if not isValidValue(sourceOpts, UI.transferSource) then
+        UI.transferSource = defaultSource
+        UI.transferSelected = {}
+    end
+    if not isValidValue(destOpts, UI.transferDest) or UI.transferDest == UI.transferSource then
+        -- Pick first dest that isn't the source
+        for _, opt in ipairs(destOpts) do
+            if opt.value ~= UI.transferSource then
+                UI.transferDest = opt.value
+                break
+            end
+        end
+        UI.transferSelected = {}
     end
 end
 
@@ -1190,6 +1222,12 @@ function Core.RefreshTransfer()
     SetDropdownText(panel.slotFilter, "Slot: " .. GetMultiSelectLabel(filters.slot and filters.slot.include or "All", "All"))
     local upgradeVal = filters.upgrade and filters.upgrade.include or "All"
     SetDropdownText(panel.upgradeFilter, upgradeVal == "All" and "Upgrade: All" or upgradeVal)
+    local armorTypeVal = filters.armorType and filters.armorType.include or "All"
+    local armorTypeLabelMap = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate" }
+    local armorTypeLabel = (armorTypeVal == "All" or armorTypeVal == nil)
+        and "Armor: All"
+        or ("Armor: " .. (armorTypeLabelMap[armorTypeVal] or tostring(armorTypeVal)))
+    SetDropdownText(panel.armorTypeFilter, armorTypeLabel)
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     -- filterSummary removed; filter state is visible in the dropdown button labels
     local searchText = filters.name.includeText or ""
@@ -1230,7 +1268,7 @@ function Core.RefreshTransfer()
     panel.execute:SetEnabled(not ns.DB.context.inCombat and selectedCount > 0)
 
     local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
-    FauxScrollFrame_Update(panel.scrollFrame, #visible, 6, 42)
+    FauxScrollFrame_Update(panel.scrollFrame, #visible, panel.VISIBLE_ROWS, panel.ROW_HEIGHT)
     local startIndex = offset + 1
 
     panel.itemCount:SetText(#visible .. " item" .. (#visible == 1 and "" or "s") .. ", " .. selectedCount .. " selected")

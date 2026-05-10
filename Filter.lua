@@ -24,6 +24,12 @@ local TYPE_FILTER_REAGENT         = P.TYPE_FILTER_REAGENT
 local TYPE_FILTER_WUE             = P.TYPE_FILTER_WUE
 local TYPE_FILTER_VENDOR_SELLABLE = P.TYPE_FILTER_VENDOR_SELLABLE
 
+local ARMOR_FILTER_ALL    = P.ARMOR_FILTER_ALL
+local ARMOR_FILTER_CLOTH  = P.ARMOR_FILTER_CLOTH
+local ARMOR_FILTER_LEATHER = P.ARMOR_FILTER_LEATHER
+local ARMOR_FILTER_MAIL   = P.ARMOR_FILTER_MAIL
+local ARMOR_FILTER_PLATE  = P.ARMOR_FILTER_PLATE
+
 local STORAGE_PRIVATE_BANK = P.STORAGE_PRIVATE_BANK
 local STORAGE_REAGENT_BANK = P.STORAGE_REAGENT_BANK
 local STORAGE_WARBAND_BANK = P.STORAGE_WARBAND_BANK
@@ -84,7 +90,8 @@ local function GetEquippedItemLevel(equipLoc)
     if not slots then return nil end
     local result = nil
     for _, slotID in ipairs(slots) do
-        local ilvl = GetInventoryItemLevel("player", slotID) or 0
+        local itemLoc = ItemLocation:CreateFromEquipmentSlot(slotID)
+        local ilvl = (itemLoc:IsValid() and C_Item.GetCurrentItemLevel(itemLoc)) or 0
         if result == nil or ilvl < result then
             result = ilvl
         end
@@ -117,12 +124,14 @@ local function EnsureTabFilters(tabName)
     local itemLevel = EnsureFilterBranch(filters, "itemLevel")
     local slot      = EnsureFilterBranch(filters, "slot")
     local upgrade   = EnsureFilterBranch(filters, "upgrade")
+    local armorType = EnsureFilterBranch(filters, "armorType")
     if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
     if itemType.include == nil  then itemType.include  = "All" end
     if bind.include == nil      then bind.include      = BIND_FILTER_ALL end
     if location.include == nil  then location.include  = "All" end
     if slot.include == nil      then slot.include      = "All" end
     if upgrade.include == nil   then upgrade.include   = "All" end
+    if armorType.include == nil then armorType.include = ARMOR_FILTER_ALL end
     -- itemLevel.min and itemLevel.max default to nil (no filter)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
@@ -167,6 +176,9 @@ local function IsAllFilterValue(value)
 end
 
 P.IsAllFilterValue = IsAllFilterValue
+
+-- Forward declaration: FilterMatchesInclude is defined later in this file.
+local FilterMatchesInclude
 
 -- ===========================================================================
 -- Filter state mutations
@@ -242,6 +254,24 @@ local function MatchesSlotInclude(item, include)
     end)
 end
 
+-- Armor type filter: matches only Armor items (classID=4) by subClassID.
+-- Non-armor items always pass through so the filter doesn't hide weapons/etc.
+local ARMOR_SUBCLASS_LABEL = {
+    [ARMOR_FILTER_CLOTH]   = "Cloth",
+    [ARMOR_FILTER_LEATHER] = "Leather",
+    [ARMOR_FILTER_MAIL]    = "Mail",
+    [ARMOR_FILTER_PLATE]   = "Plate",
+}
+
+local function MatchesArmorTypeInclude(item, include)
+    if IsAllFilterValue(include) then return true end
+    -- Only applies to Armor (classID 4); other classes always pass.
+    if item.classID ~= 4 then return true end
+    return FilterMatchesInclude(include, function(value)
+        return item.subclassID == value
+    end)
+end
+
 local function SetFilterItemLevel(tabName, min, max)
     local filters = EnsureTabFilters(tabName)
     EnsureFilterBranch(filters, "itemLevel")
@@ -275,6 +305,9 @@ local function ResetTabFilters(tabName)
     if filters.upgrade then
         filters.upgrade.include = "All"
     end
+    if filters.armorType then
+        filters.armorType.include = ARMOR_FILTER_ALL
+    end
     if tabName == "Move" then
         ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
         ns.DB.ui.typeFilter      = "All"
@@ -287,6 +320,12 @@ local function ResetTabFilters(tabName)
     end
 end
 
+local function SetFilterArmorType(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    EnsureFilterBranch(filters, "armorType")
+    filters.armorType.include = value
+end
+
 local function SetFilterUpgrade(tabName, value)
     local filters = EnsureTabFilters(tabName)
     filters.upgrade.include = value
@@ -297,6 +336,7 @@ P.SetFilterSearch      = SetFilterSearch
 P.SetFilterHideBlocked = SetFilterHideBlocked
 P.SetFilterItemLevel   = SetFilterItemLevel
 P.SetFilterSlot        = SetFilterSlot
+P.SetFilterArmorType   = SetFilterArmorType
 P.SetFilterUpgrade     = SetFilterUpgrade
 P.ResetTabFilters      = ResetTabFilters
 
@@ -355,6 +395,10 @@ local function BuildFilterSummary(tabName)
         local label = GetMultiSelectLabel(filters.slot.include, "All")
         table.insert(parts, "Slot: " .. label)
     end
+    if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
+        local label = GetMultiSelectLabel(filters.armorType.include, "All")
+        table.insert(parts, "Armor: " .. label)
+    end
     if filters.itemLevel then
         local ilvl = filters.itemLevel
         if ilvl.min and ilvl.max then
@@ -376,7 +420,7 @@ P.BuildFilterSummary      = BuildFilterSummary
 -- Filter matching
 -- ===========================================================================
 
-local function FilterMatchesInclude(include, matcher)
+local function FilterMatchesInclude_Implementation(include, matcher)
     if IsAllFilterValue(include) then return true end
     if type(include) == "table" then
         local hasSpecificValue = false
@@ -391,6 +435,8 @@ local function FilterMatchesInclude(include, matcher)
     end
     return matcher(include)
 end
+
+FilterMatchesInclude = FilterMatchesInclude_Implementation
 
 local function FilterIncludesValue(include, expected)
     if include == expected then return true end
@@ -498,6 +544,9 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.slot and not IsAllFilterValue(filters.slot.include) then
         if not MatchesSlotInclude(item, filters.slot.include) then return false end
     end
+    if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
+        if not MatchesArmorTypeInclude(item, filters.armorType.include) then return false end
+    end
     -- Upgrade filter: compares item level against equipped items in the same slot(s).
     -- Non-equippable or items with uncached data (itemLevel nil) pass through.
     if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
@@ -562,6 +611,7 @@ P.IsVendorSellable        = IsVendorSellable
 P.MatchesTypeInclude      = MatchesTypeInclude
 P.MatchesBindInclude      = MatchesBindInclude
 P.MatchesLocationInclude  = MatchesLocationInclude
+P.MatchesArmorTypeInclude = MatchesArmorTypeInclude
 P.BuildItemSearchParts    = BuildItemSearchParts
 P.TextMatchesSearch       = TextMatchesSearch
 P.MatchesTabFilters       = MatchesTabFilters
@@ -654,7 +704,18 @@ local function GetUpgradeFilterOptions()
     }
 end
 
+local function GetArmorTypeFilterOptions()
+    return {
+        { text = "All",     value = ARMOR_FILTER_ALL },
+        { text = "Cloth",   value = ARMOR_FILTER_CLOTH },
+        { text = "Leather", value = ARMOR_FILTER_LEATHER },
+        { text = "Mail",    value = ARMOR_FILTER_MAIL },
+        { text = "Plate",   value = ARMOR_FILTER_PLATE },
+    }
+end
+
 P.GetSlotFilterOptions       = GetSlotFilterOptions
+P.GetArmorTypeFilterOptions  = GetArmorTypeFilterOptions
 P.GetUpgradeFilterOptions    = GetUpgradeFilterOptions
 
 -- ===========================================================================

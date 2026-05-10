@@ -42,7 +42,7 @@ end
 -- Run full diagnostic dump
 function ns.Debug.RunDiagnosticDump()
     ns.Debug.Print("=== I Can't Even Right Now Diagnostic Dump ===")
-    ns.Debug.Print("Addon Version: " .. GetAddOnMetadata("ICantEvenRightNow", "Version"))
+    ns.Debug.Print("Addon Version: " .. C_AddOns.GetAddOnMetadata("ICantEvenRightNow", "Version"))
     ns.Debug.Print("Game Version: " .. GetBuildInfo())
     ns.Debug.Print("Player Name: " .. UnitName("player"))
     ns.Debug.Print("Player Class: " .. UnitClass("player"))
