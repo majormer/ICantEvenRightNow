@@ -732,6 +732,7 @@ local DEFAULT_SAVED_FILTERS = {
         bind      = BIND_FILTER_ALL,
         type      = "All",
         slot      = "All",
+        armorType = ARMOR_FILTER_ALL,
         upgrade   = "All",
     },
     {
@@ -740,6 +741,7 @@ local DEFAULT_SAVED_FILTERS = {
         bind      = BIND_FILTER_ALL,
         type      = "All",
         slot      = "All",
+        armorType = ARMOR_FILTER_ALL,
         upgrade   = "Upgrade",
     },
 }
@@ -757,6 +759,7 @@ local function SeedDefaultSavedFilters()
                 bind      = preset.bind,
                 type      = preset.type,
                 slot      = preset.slot,
+                armorType = preset.armorType or ARMOR_FILTER_ALL,
                 upgrade   = preset.upgrade,
             })
         end
@@ -794,6 +797,8 @@ local function ApplySavedFilter(preset, tabName)
     filters.type.include      = preset.type
     EnsureFilterBranch(filters, "slot")
     filters.slot.include      = preset.slot
+    EnsureFilterBranch(filters, "armorType")
+    filters.armorType.include = preset.armorType or ARMOR_FILTER_ALL
     EnsureFilterBranch(filters, "upgrade")
     filters.upgrade.include   = preset.upgrade
 end
@@ -809,6 +814,7 @@ local function SaveFilter(name, tabName)
         bind      = filters.bind.include,
         type      = filters.type.include,
         slot      = filters.slot and filters.slot.include or "All",
+        armorType = filters.armorType and filters.armorType.include or ARMOR_FILTER_ALL,
         upgrade   = filters.upgrade and filters.upgrade.include or "All",
     }
     ns.DB.savedFilters = ns.DB.savedFilters or {}

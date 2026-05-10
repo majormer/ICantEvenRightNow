@@ -21,6 +21,7 @@ Release note rules:
 
 - Upgrade filter no longer crashes on load; replaced removed `GetInventoryItemLevel` API with `C_Item.GetCurrentItemLevel` (API removed in patch 12.x).
 - Slot and Armor Type filters no longer cause Lua errors due to a forward-reference issue in the filter matching code.
+- Saved filter presets now preserve Armor Type selections.
 - Transfer tab "Select Visible" button now correctly selects all visible rows (was only selecting 6 of 8 due to a hard-coded value).
 - Transfer tab scrollbar now correctly reflects the full list length (visible row count was hard-coded in scroll update).
 - Source/Destination dropdowns now reset to valid defaults when the previously selected option becomes unavailable (e.g., bank closing).
