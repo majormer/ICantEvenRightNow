@@ -72,7 +72,7 @@ P.VENDOR_ACTION_SELL   = "Sell at Vendor"
 -- ---------------------------------------------------------------------------
 P.ORGANIZE_PAGE_SIZE = 6
 P.VENDOR_PAGE_SIZE   = 6
-P.TAB_ORDER = { "Summary", "Transfer", "Rules", "Settings" }
+P.TAB_ORDER = { "Transfer", "Summary", "Rules", "Settings" }
 
 P.MYTHIC_KEYSTONE_ITEM_IDS = {
     [138019] = true,

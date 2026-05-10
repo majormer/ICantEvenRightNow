@@ -63,6 +63,7 @@ local GetBindFilterOptions      = P.GetBindFilterOptions
 local GetExpansionOptions       = P.GetExpansionOptions
 local GetSlotFilterOptions      = P.GetSlotFilterOptions
 local GetArmorTypeFilterOptions = P.GetArmorTypeFilterOptions
+local GetArmorTypeFilterLabel   = P.GetArmorTypeFilterLabel
 local GetUpgradeFilterOptions   = P.GetUpgradeFilterOptions
 local GetSavedFiltersOptions    = P.GetSavedFiltersOptions
 local FindSavedFilter           = P.FindSavedFilter
@@ -147,8 +148,22 @@ local function CreateDropdown(parent, width, options, onSelect)
         menu:Hide()
     end)
 
+    local function OptionsEqual(left, right)
+        if left == right then return true end
+        if not left or not right or #left ~= #right then return false end
+        for index, leftOption in ipairs(left) do
+            local rightOption = right[index]
+            if not rightOption or leftOption.text ~= rightOption.text or leftOption.value ~= rightOption.value then
+                return false
+            end
+        end
+        return true
+    end
+
     -- Replace all options in an existing dropdown, rebuilding its menu items in place.
     function dropdown:SetOptions(newOptions)
+        newOptions = newOptions or {}
+        if OptionsEqual(self.options, newOptions) then return false end
         for _, existing in ipairs(self.items) do
             existing:Hide()
             existing:SetParent(nil)
@@ -166,6 +181,7 @@ local function CreateDropdown(parent, width, options, onSelect)
             end)
             self.items[index] = item
         end
+        return true
     end
 
     return dropdown
@@ -430,7 +446,7 @@ local function ToggleConsole(tabName)
     elseif tabName == "Move" then
         Core.ShowMoveUI()
     else
-        Core.ShowSummaryUI()
+        Core.ShowTransferUI()
     end
 end
 
@@ -501,7 +517,7 @@ local function CreateStandardMinimapButton()
                     UI.frame:Show()
                     Core.RefreshUI()
                 else
-                    ToggleConsole("Summary")
+                    ToggleConsole("Transfer")
                 end
             end,
             OnTooltipShow = function(tooltip)
@@ -552,7 +568,7 @@ local function CreateMinimapButton()
         "Click to open or close the cleanup console.",
         "Use /icanteven minimap to hide this button.",
     }, function()
-        ToggleConsole("Summary")
+        ToggleConsole("Transfer")
     end)
     button:SetFrameStrata("FULLSCREEN_DIALOG")
     button:SetFrameLevel(80)
@@ -871,6 +887,7 @@ local function BuildTransferTab(parent)
         local preset = FindSavedFilter(name)
         if not preset then return end
         ApplySavedFilter(preset, "Transfer")
+        UI.activeSavedFilterName = name
         if parent.presetNameInput:GetText() ~= name then
             parent.presetNameInput:SetText(name)
         end
@@ -890,6 +907,7 @@ local function BuildTransferTab(parent)
         local name = parent.presetNameInput:GetText()
         if name and name ~= "" then
             SaveFilter(name, "Transfer")
+            UI.activeSavedFilterName = name
             Core.RefreshUI()
         end
     end)
@@ -901,6 +919,9 @@ local function BuildTransferTab(parent)
         if name and name ~= "" then
             DeleteSavedFilter(name)
             parent.presetNameInput:SetText("")
+            if UI.activeSavedFilterName == name then
+                UI.activeSavedFilterName = nil
+            end
             Core.RefreshUI()
         end
     end)
@@ -908,35 +929,35 @@ local function BuildTransferTab(parent)
     -- Filter row 1: expansion / type / binding / slot dropdowns
     parent.expansionFilter = CreateDropdown(parent, 155, GetExpansionOptions(), function(value)
         SetFilterInclude("Transfer", "expansion", value)
+        UI.activeSavedFilterName = nil
     end)
     parent.expansionFilter:SetPoint("TOPLEFT", parent.presetsLabel, "BOTTOMLEFT", 0, -12)
 
     parent.typeFilter = CreateMultiSelectDropdown(parent, 120, GetTypeFilterOptions(), function(value)
         SetFilterInclude("Transfer", "type", value)
+        UI.activeSavedFilterName = nil
     end)
     parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 6, 0)
 
     parent.bindFilter = CreateDropdown(parent, 110, GetBindFilterOptions(), function(value)
         SetFilterInclude("Transfer", "bind", value)
+        UI.activeSavedFilterName = nil
     end)
     parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 6, 0)
 
     parent.slotFilter = CreateMultiSelectDropdown(parent, 110, GetSlotFilterOptions(), function(value)
         SetFilterSlot("Transfer", value)
+        UI.activeSavedFilterName = nil
     end)
     parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 6, 0)
 
     parent.upgradeFilter = CreateDropdown(parent, 100, GetUpgradeFilterOptions(), function(value)
         SetFilterUpgrade("Transfer", value)
+        UI.activeSavedFilterName = nil
     end)
     parent.upgradeFilter:SetPoint("LEFT", parent.slotFilter, "RIGHT", 6, 0)
 
-    parent.armorTypeFilter = CreateDropdown(parent, 88, GetArmorTypeFilterOptions(), function(value)
-        SetFilterArmorType("Transfer", value)
-    end)
-    parent.armorTypeFilter:SetPoint("LEFT", parent.upgradeFilter, "RIGHT", 6, 0)
-
-    -- Filter row 2: search / ilvl range / actionable toggle / clear
+    -- Filter row 2: search / armor / ilvl range / actionable toggle / clear
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
     parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -16)
 
@@ -946,11 +967,18 @@ local function BuildTransferTab(parent)
     parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 6, 0)
     parent.search:SetScript("OnTextChanged", function(self)
         SetFilterSearch("Transfer", self:GetText())
+        UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
+    parent.armorTypeFilter = CreateDropdown(parent, 88, GetArmorTypeFilterOptions(), function(value)
+        SetFilterArmorType("Transfer", value)
+        UI.activeSavedFilterName = nil
+    end)
+    parent.armorTypeFilter:SetPoint("LEFT", parent.search, "RIGHT", 12, 0)
+
     parent.ilvlLabel = CreateLabel(parent, "iLvl:", "GameFontHighlightSmall")
-    parent.ilvlLabel:SetPoint("LEFT", parent.search, "RIGHT", 12, 0)
+    parent.ilvlLabel:SetPoint("LEFT", parent.armorTypeFilter, "RIGHT", 12, 0)
 
     parent.ilvlMin = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
     parent.ilvlMin:SetSize(52, 24)
@@ -960,6 +988,7 @@ local function BuildTransferTab(parent)
     parent.ilvlMin:SetPoint("LEFT", parent.ilvlLabel, "RIGHT", 6, 0)
     parent.ilvlMin:SetScript("OnTextChanged", function(self)
         SetFilterItemLevel("Transfer", self:GetText(), parent.ilvlMax:GetText())
+        UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
@@ -974,6 +1003,7 @@ local function BuildTransferTab(parent)
     parent.ilvlMax:SetPoint("LEFT", parent.ilvlSep, "RIGHT", 4, 0)
     parent.ilvlMax:SetScript("OnTextChanged", function(self)
         SetFilterItemLevel("Transfer", parent.ilvlMin:GetText(), self:GetText())
+        UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
@@ -983,6 +1013,7 @@ local function BuildTransferTab(parent)
     parent.actionableOnlyLabel:SetPoint("LEFT", parent.actionableOnly, "RIGHT", -2, 0)
     parent.actionableOnly:SetScript("OnClick", function(self)
         SetFilterHideBlocked("Transfer", self:GetChecked())
+        UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
@@ -990,6 +1021,7 @@ local function BuildTransferTab(parent)
     parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
     parent.clearFilters:SetScript("OnClick", function()
         ResetTabFilters("Transfer")
+        UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
@@ -1099,19 +1131,9 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.selectAllItems = CreateButton(parent, "Select All", 90)
-    parent.selectAllItems:SetParent(parent.footer)
-    parent.selectAllItems:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
-    parent.selectAllItems:SetScript("OnClick", function()
-        for _, plan in ipairs(UI.transferVisible or {}) do
-            UI.transferSelected[plan.key] = true
-        end
-        Core.RefreshUI()
-    end)
-
     parent.execute = CreateButton(parent, "Transfer Selected", 130)
     parent.execute:SetParent(parent.footer)
-    parent.execute:SetPoint("LEFT", parent.selectAllItems, "RIGHT", 8, 0)
+    parent.execute:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
     parent.execute:SetScript("OnClick", function() Core.ExecuteTransferSelected() end)
 
     parent.itemCount = CreateLabel(parent, "", "GameFontHighlightSmall")
@@ -1144,12 +1166,14 @@ function Core.RefreshTransferDropdowns()
         return false
     end
     local defaultSource = "Bags"
-    local defaultDest = sourceOpts[2] and sourceOpts[2].value or defaultSource
+    local resetMessages = {}
     if not isValidValue(sourceOpts, UI.transferSource) then
+        table.insert(resetMessages, "source")
         UI.transferSource = defaultSource
         UI.transferSelected = {}
     end
     if not isValidValue(destOpts, UI.transferDest) or UI.transferDest == UI.transferSource then
+        table.insert(resetMessages, "destination")
         -- Pick first dest that isn't the source
         for _, opt in ipairs(destOpts) do
             if opt.value ~= UI.transferSource then
@@ -1158,6 +1182,9 @@ function Core.RefreshTransferDropdowns()
             end
         end
         UI.transferSelected = {}
+    end
+    if #resetMessages > 0 then
+        UI.transferContextMessage = "Transfer " .. table.concat(resetMessages, " and ") .. " reset because the previous option is no longer available."
     end
 end
 
@@ -1203,6 +1230,10 @@ function Core.RefreshTransfer()
     elseif needsBank and not IsBankContextDetected() then
         noticeText = "Bank is not open: transfer actions are unavailable."
     end
+    if UI.transferContextMessage then
+        noticeText = noticeText and (noticeText .. " " .. UI.transferContextMessage) or UI.transferContextMessage
+        UI.transferContextMessage = nil
+    end
     SetContextNotice(panel.contextNotice, noticeText)
 
     SetDropdownText(panel.sourceDropdown, "From: " .. GetStorageDisplayName(source))
@@ -1210,7 +1241,8 @@ function Core.RefreshTransfer()
     -- Update presets dropdown options (list may have changed since the tab was built)
     local presetOpts = GetSavedFiltersOptions()
     panel.presetsDropdown:SetOptions(presetOpts)
-    SetDropdownText(panel.presetsDropdown, #presetOpts > 0 and "Load preset..." or "(no presets saved)")
+    local loadedPresetName = UI.activeSavedFilterName
+    SetDropdownText(panel.presetsDropdown, loadedPresetName and ("Preset: " .. loadedPresetName) or (#presetOpts > 0 and "Load preset..." or "(no presets saved)"))
     local currentPresetName = panel.presetNameInput:GetText()
     local presetExists = currentPresetName ~= "" and FindSavedFilter(currentPresetName) ~= nil
     panel.deletePreset:SetEnabled(presetExists)
@@ -1223,11 +1255,7 @@ function Core.RefreshTransfer()
     local upgradeVal = filters.upgrade and filters.upgrade.include or "All"
     SetDropdownText(panel.upgradeFilter, upgradeVal == "All" and "Upgrade: All" or upgradeVal)
     local armorTypeVal = filters.armorType and filters.armorType.include or "All"
-    local armorTypeLabelMap = { [1] = "Cloth", [2] = "Leather", [3] = "Mail", [4] = "Plate" }
-    local armorTypeLabel = (armorTypeVal == "All" or armorTypeVal == nil)
-        and "Armor: All"
-        or ("Armor: " .. (armorTypeLabelMap[armorTypeVal] or tostring(armorTypeVal)))
-    SetDropdownText(panel.armorTypeFilter, armorTypeLabel)
+    SetDropdownText(panel.armorTypeFilter, "Armor: " .. GetArmorTypeFilterLabel(armorTypeVal))
     panel.actionableOnly:SetChecked(filters.hideBlocked)
     -- filterSummary removed; filter state is visible in the dropdown button labels
     local searchText = filters.name.includeText or ""

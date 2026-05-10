@@ -107,7 +107,7 @@ function Core.HandleSlashCommand(msg)
     cmd = (cmd or ""):lower()
 
     if cmd == "" then
-        Core.ShowSummaryUI()
+        Core.ShowTransferUI()
     elseif cmd == "scan" then
         Core.ScanInventory(arg1)
     elseif cmd == "summary" then

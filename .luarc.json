@@ -95,11 +95,11 @@
       "C_PlayerInteractionManager",
       "GetCursorInfo",
       "ClearCursor"
-    ],
-    "disable": ["undefined-field"]
+    ]
   },
   "workspace": {
     "library": [
+      "l:/Personal/Repos/ICantEvenRightNow/.lua-ls/wow-stdlib.lua",
       "L:/Personal/Repos/WowApiStubs/Resources"
     ],
     "ignoreDir": [

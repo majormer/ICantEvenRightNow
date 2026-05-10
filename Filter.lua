@@ -263,6 +263,11 @@ local ARMOR_SUBCLASS_LABEL = {
     [ARMOR_FILTER_PLATE]   = "Plate",
 }
 
+local function GetArmorTypeFilterLabel(value)
+    if IsAllFilterValue(value) then return "All" end
+    return ARMOR_SUBCLASS_LABEL[value] or tostring(value)
+end
+
 local function MatchesArmorTypeInclude(item, include)
     if IsAllFilterValue(include) then return true end
     -- Only applies to Armor (classID 4); other classes always pass.
@@ -612,6 +617,7 @@ P.MatchesTypeInclude      = MatchesTypeInclude
 P.MatchesBindInclude      = MatchesBindInclude
 P.MatchesLocationInclude  = MatchesLocationInclude
 P.MatchesArmorTypeInclude = MatchesArmorTypeInclude
+P.GetArmorTypeFilterLabel = GetArmorTypeFilterLabel
 P.BuildItemSearchParts    = BuildItemSearchParts
 P.TextMatchesSearch       = TextMatchesSearch
 P.MatchesTabFilters       = MatchesTabFilters
@@ -706,11 +712,11 @@ end
 
 local function GetArmorTypeFilterOptions()
     return {
-        { text = "All",     value = ARMOR_FILTER_ALL },
-        { text = "Cloth",   value = ARMOR_FILTER_CLOTH },
-        { text = "Leather", value = ARMOR_FILTER_LEATHER },
-        { text = "Mail",    value = ARMOR_FILTER_MAIL },
-        { text = "Plate",   value = ARMOR_FILTER_PLATE },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_ALL),     value = ARMOR_FILTER_ALL },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_CLOTH),   value = ARMOR_FILTER_CLOTH },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_LEATHER), value = ARMOR_FILTER_LEATHER },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_MAIL),    value = ARMOR_FILTER_MAIL },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_PLATE),   value = ARMOR_FILTER_PLATE },
     }
 end
 

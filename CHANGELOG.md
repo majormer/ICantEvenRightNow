@@ -16,9 +16,15 @@ Release note rules:
 ### Added
 
 - Armor Type filter in the Transfer tab: filter armor items by type (Cloth, Leather, Mail, Plate). Non-armor items are unaffected by this filter.
+- Transfer is now the default landing tab when opening the addon without requesting a specific tab.
 
 ### Fixed
 
+- Transfer tab filter controls are less crowded, with Armor Type moved alongside the search and item-level controls.
+- Transfer source/destination auto-resets now show an in-panel notice when context changes make the previous option unavailable.
+- Saved preset dropdowns now keep the active preset name visible after loading or saving.
+- The bulk selection buttons no longer select blocked transfer rows.
+- Lua language-server configuration no longer disables all undefined-field diagnostics to work around `string.lower` false positives.
 - Upgrade filter no longer crashes on load; replaced removed `GetInventoryItemLevel` API with `C_Item.GetCurrentItemLevel` (API removed in patch 12.x).
 - Slot and Armor Type filters no longer cause Lua errors due to a forward-reference issue in the filter matching code.
 - Saved filter presets now preserve Armor Type selections.

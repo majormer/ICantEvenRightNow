@@ -9,6 +9,7 @@ ignore:
   - .gitignore
   - .env.example
   - .github
+  - .lua-ls
   - scripts
   - build
   - .release
