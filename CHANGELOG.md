@@ -25,6 +25,7 @@ Release note rules:
 - Transfer tab "Select Visible" button now correctly selects all visible rows (was only selecting 6 of 8 due to a hard-coded value).
 - Transfer tab scrollbar now correctly reflects the full list length (visible row count was hard-coded in scroll update).
 - Source/Destination dropdowns now reset to valid defaults when the previously selected option becomes unavailable (e.g., bank closing).
+- Addon metadata now reports version 0.5.0.
 
 ## [0.4.0] - 2026-05-09
 
