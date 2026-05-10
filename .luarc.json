@@ -99,8 +99,7 @@
   },
   "workspace": {
     "library": [
-      "l:/Personal/Repos/ICantEvenRightNow/.lua-ls/wow-stdlib.lua",
-      "L:/Personal/Repos/WowApiStubs/Resources"
+      ".lua-ls/wow-stdlib.lua"
     ],
     "ignoreDir": [
       "build",

@@ -29,6 +29,18 @@ This document tracks UX friction and improvement opportunities as the addon evol
 - **Upgrade filter**: Show only gear that beats the currently equipped piece (weaker slot used for rings/trinkets).
 - **Split filter dropdowns**: Binding is now a separate dropdown from item Type, eliminating the old combined "BoE" entry in the Type filter.
 
+### Done in 0.5.0
+
+- **Armor Type filter**: Filter armor items by material type (Cloth, Leather, Mail, Plate). Non-armor items are unaffected.
+- **Transfer as default tab**: Transfer tab is now the landing tab when opening the addon.
+- **Context validation with notices**: Source/Destination dropdowns reset to valid defaults when context changes (bank/vendor close), with an in-panel notice explaining the reset.
+- **Preset name visibility**: Saved preset dropdown now shows the active preset name after loading or saving.
+- **Bulk selection fixes**: "Select Visible" button now correctly selects all visible rows; removed "Select All" to prevent selecting blocked rows.
+- **Scrollbar fix**: Transfer tab scrollbar now correctly reflects full list length (was using hard-coded visible row count).
+- **Lua language-server config**: Fixed to enable undefined-field diagnostics instead of disabling all to work around false positives.
+- **Upgrade filter API fix**: Replaced removed `GetInventoryItemLevel` API with `C_Item.GetCurrentItemLevel` (patch 12.x).
+- **Slot/Armor Type filter fix**: Resolved forward-reference error that caused Lua errors when using Slot or Armor Type filters.
+
 ## 4. Current Friction Areas
 
 ### A. Empty-state Explanations
@@ -55,13 +67,13 @@ Priority: P1
 
 ### C. Auto-close Stale Context
 
-Status: Deferred — Source/Destination dropdowns do not clear bank/vendor options when those contexts close mid-session.
+Status: Partial — Source/Destination dropdowns now validate and reset to valid defaults with in-panel notices when context changes (bank/vendor close).
 
-Proposed:
+Remaining:
 
-- On `BANK_CLOSED` or `MERCHANT_CLOSED` events, call `RefreshTransferDropdowns` and reset source/dest if the current selection is no longer valid.
+- Context notices are shown but dropdowns are not automatically cleared mid-session without user interaction.
 
-Priority: P2
+Priority: P2 (deferred; current validation with notices provides good UX)
 
 ### D. Workflow-specific Footer Actions
 

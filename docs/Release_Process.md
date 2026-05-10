@@ -21,13 +21,14 @@ This runbook describes the repeatable process to publish a new addon release thr
 2. `CHANGELOG.md` contains a dated section for the version (for example `## [0.3.0] - YYYY-MM-DD`).
 3. `## Version:` in `ICantEvenRightNow.toc` matches the release version (for example `0.3.0`).
 4. `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface value(s), so CurseForge does not classify the upload under outdated game versions only.
-5. Lua syntax passes:
+5. `.pkgmeta` packaging rules are updated if new files were added (e.g., new Lua modules, documentation folders).
+6. Lua syntax passes:
 
 ```powershell
-luac -p Core.lua Data.lua Debug.lua
+luac -p Core.lua Data.lua Debug.lua Shared.lua Evaluator.lua Filter.lua Scanner.lua Transfer.lua UI.lua
 ```
 
-6. In-game smoke check completed (copy + `/reload`).
+7. In-game smoke check completed (copy + `/reload`).
 
 ## Standard release flow
 

@@ -17,7 +17,9 @@ If you want full automation with zero review, this addon is probably not a fit. 
 - Four-tab cleanup console: Summary, Transfer, Rules, and Settings.
 - Scan bags, private bank (all tabs or individual), and warband bank storage.
 - Unified Transfer tab: pick any Source and Destination — Bags, Bank tabs, Warband Bank, or Vendor — and act on exactly that combination.
-- Filter by expansion, item type, binding, or name search within any transfer.
+- Filter by expansion, binding, item type, slot, upgrade potential, item level, or name search within any transfer.
+- Saved filter presets: save and reload common filter combinations instantly.
+- Scrollable item list with per-item block reasons.
 - Actionable-only toggle: hide blocked rows and focus on what you can move right now.
 - Per-item block reasons explain exactly why an item cannot be moved (bank closed, vendor closed, no slots, item rule, equipped, etc.).
 - Protect current-content, quest, legendary, and rule-protected items by default.
@@ -49,14 +51,14 @@ Tip: use the Actionable Only checkbox to hide anything currently blocked so you 
 
 - Open bank.
 - Transfer tab → From: Bank (All Tabs), To: Bags.
-- Filter Type to BoE.
+- Filter Binding to BoE (not Type).
 - Select and recall only what you want to list.
 
 ### 3) Vendor Pass
 
 - At a vendor with items in your bags.
 - Transfer tab → From: Bags, To: Vendor.
-- Filter Type to Vendor Sellable.
+- Filter by Expansion (Not current) and Type (Consumable) for conservative selling.
 - Review rows — Never Sell rules block protected items automatically — then Sell Selected.
 
 ### 4) Warband Storage Shuffle
@@ -87,6 +89,16 @@ Add rules from the Rules tab or via the rule menu on any Transfer row. Remove th
 - `/icanteven bankdiag` or `/icanteven bankids` — print bank container diagnostics.
 - `/icanteven errors` — show captured Lua errors.
 - `/icanteven clearerrors` — clear the error log.
+
+## Filters Explained
+
+- **Expansion filter**: Items by expansion (current, old, unknown)
+- **Binding filter**: Items by bind type (BoE, WuE, Soulbound, Warbound, BoP)
+- **Type filter**: Items by category (Consumable, Reputation, Quest, etc.)
+- **Slot filter**: Gear by equipment slot (Head, Chest, Finger, etc.)
+- **Upgrade filter**: Gear that beats your currently equipped item level
+- **Item Level filter**: Gear by minimum/maximum item level
+- **Armor Type filter**: Armor by material type (Cloth, Leather, Mail, Plate)
 
 ## New User FAQ
 

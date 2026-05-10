@@ -67,11 +67,12 @@ Primary responsibilities:
 Primary responsibilities:
 
 - Filter state management (`EnsureTabFilters`, lazy init per tab)
-- Filter mutations: `SetFilterInclude`, `SetFilterSearch`, `SetFilterHideBlocked`, `SetFilterItemLevel`, `SetFilterSlot`, `SetFilterUpgrade`, `ResetTabFilters`
+- Filter mutations: `SetFilterInclude`, `SetFilterSearch`, `SetFilterHideBlocked`, `SetFilterItemLevel`, `SetFilterSlot`, `SetFilterUpgrade`, `SetFilterArmorType`, `ResetTabFilters`
 - Filter matching: `MatchesTabFilters`, `PlanMatchesTabFilters`
-- Option builders: `GetExpansionOptions`, `GetBindFilterOptions`, `GetTypeFilterOptions`, `GetSlotFilterOptions`, `GetUpgradeFilterOptions`
-- Upgrade detection: `GetEquippedItemLevel`, `INVTYPE_TO_SLOTS` mapping
+- Option builders: `GetExpansionOptions`, `GetBindFilterOptions`, `GetTypeFilterOptions`, `GetSlotFilterOptions`, `GetUpgradeFilterOptions`, `GetArmorTypeFilterOptions`
+- Upgrade detection: `GetEquippedItemLevel` using `C_Item.GetCurrentItemLevel`, `INVTYPE_TO_SLOTS` mapping
 - Slot label mapping: `EQUIPLOC_TO_SLOT_LABEL`
+- Armor type label mapping: `ARMOR_SUBCLASS_LABEL`, `GetArmorTypeFilterLabel`
 - Saved filter presets: `SeedDefaultSavedFilters`, `GetSavedFiltersOptions`, `FindSavedFilter`, `ApplySavedFilter`, `SaveFilter`, `DeleteSavedFilter`
 - Label helpers: `GetExpansionFilterLabel`, `GetMultiSelectLabel`, `BuildFilterSummary`
 
@@ -152,6 +153,7 @@ Filter state schema (per tab, under `ui.tabFilters[tabName]`):
 - `type.include`: `"All"` or multi-select table
 - `slot.include`: `"All"` or multi-select table of slot labels
 - `upgrade.include`: `"All"`, `"Upgrade"`, or `"Not Upgrade"`
+- `armorType.include`: `ARMOR_FILTER_ALL` or armor subclass ID (Cloth, Leather, Mail, Plate)
 - `itemLevel.min`, `itemLevel.max`: optional numeric bounds (equippable gear only)
 - `name.includeText`, `name.excludeText`: search strings
 - `hideBlocked`: bool
@@ -224,107 +226,10 @@ Matching is stateless: `MatchesTabFilters(item, tabName)` and `PlanMatchesTabFil
 Saved filter presets:
 
 - Stored in `ns.DB.savedFilters` as an ordered array
-- Each preset stores: `name`, `expansion`, `bind`, `type`, `slot`, `upgrade`
+- Each preset stores: `name`, `expansion`, `bind`, `type`, `slot`, `armorType`, `upgrade`
 - ilvl range and search text are intentionally excluded (too query-specific for reuse)
 - `SeedDefaultSavedFilters` writes two defaults on first load: "Old Gear Dump" and "Upgrade Check"
 - Applying a preset calls `ApplySavedFilter(preset, tabName)`, then `Core.RefreshUI`
-
-## 8. UI Model
-- `scans.bags` and `scans.bank`: Last scanned item stacks
-- `ui`: UI preferences and active filters
-
-Rule schema (per itemID):
-
-- `protect`
-- `neverSell`
-- `ignore`
-- `expansionOverride`
-- `notes`
-- `createdFrom`
-
-## 4. Container and Storage Model
-
-Storage tiers represented internally:
-
-- Bags
-- Private Bank
-- Reagent Bank (only when distinct IDs exist)
-- Warband Bank
-
-Container IDs are resolved from `Enum.BagIndex` with compatibility fallbacks and overlap removal.
-
-Important compatibility behavior:
-
-- Aggregate tab IDs are avoided for primary scanning where possible
-- If reagent bank container IDs are absent in client API, reagent storage rows are normalized to private bank
-
-## 5. Scan Pipeline
-
-Entry point: `Core.ScanInventory(scope, quiet)`
-
-High-level sequence:
-
-1. Refresh context
-2. Resolve scan scope (`bags`, `bank`, `all`)
-3. Validate required context (bank must be open for bank scan)
-4. Scan container slots using `C_Container` APIs
-5. Build per-item records with metadata from `GetItemInfo`
-6. Enrich binding details (including account-bank eligibility and WuE checks)
-7. Save scan results
-8. Optionally schedule cache-warm rescan when item info is incomplete
-
-Scan record fields include:
-
-- identity: `itemID`, `name`, `link`
-- location: `scope`, `bagID`, `slot`, `storageKind`, `location`
-- item metadata: quality, class/subclass, maxStack, sellPrice, expansionID
-- binding metadata: `isBound`, `isSoulbound`, `isWarbandBound`, `accountBankAllowed`, `bindingScope`
-
-## 6. Decision Engine
-
-Entry point: `BuildDecision(item)`
-
-Decision outputs:
-
-- recommendation (`BANK`, `RECALL`, `REVIEW`, `BLOCKED`, etc.)
-- recommended action (`Bank`, `Recall`, `Review`, `None`)
-- group label for list ordering
-- reason text and blocked reasons
-- eligibility flags (`eligibleForBankMove`, `eligibleForRecall`)
-- preferred bank storage target for banking moves
-
-Decision order emphasizes:
-
-1. User rule overrides
-2. Hard protection (quest, mythic key, soulbound equipment)
-3. Curated exceptions
-4. Expansion + type heuristics
-5. Transferability and storage targeting
-
-Current notable behavior:
-
-- Move-tab manual actions (dump and recall) are not gated by recommendation state
-- Recommendation is a display/sorting signal, while rule/context/capacity checks gate actionability
-- WuE filtering and routing is supported as a first-class path
-
-## 7. Move/Organize/Vendor Execution Paths
-
-### Move tab
-
-- `MoveOneItem` for row-level actions
-- `MoveSelected` for batch actions
-- Separate logic paths for dump vs recall
-- Uses optimistic local removal plus scheduled rescans
-
-### Organize tab
-
-- Builds bank-to-bank plans with target tier recommendations
-- Executes selected plans through container pickup operations
-
-### Vendor tab
-
-- Supports recall from bank for vendor prep
-- Supports sell at merchant when vendor context is active
 
 ## 8. UI Model
 
@@ -341,7 +246,7 @@ Transfer tab layout:
 
 1. Source / Destination dropdowns (context-gated: bank options hidden unless bank is open; vendor hidden unless vendor is open)
 2. Preset row: "Preset:" dropdown to load a saved filter, name EditBox, Save and Remove buttons
-3. Filter rows: Expansion, Type, Binding, Slot, Upgrade dropdowns; ilvl min/max inputs; Search text
+3. Filter rows: Expansion, Type, Binding, Slot, Armor Type, Upgrade dropdowns; ilvl min/max inputs; Search text
 4. Action row: "Actionable only" toggle, Transfer All, Transfer Selected, Deselect All buttons
 5. Scrollable item list: FauxScrollFrame, 8 visible rows, each row shows item link, item level, binding, and block reason
 
@@ -375,7 +280,7 @@ Core command groups:
 - Conservative defaults reduce accidental destructive actions
 - Good explainability (block reasons surfaced per item)
 - Single Transfer tab replaces the old three-tab Move/Organize/Vendor split
-- Filter system is comprehensive: Expansion, Binding, Type, Slot, Upgrade, ilvl, Search
+- Filter system is comprehensive: Expansion, Binding, Type, Slot, Armor Type, Upgrade, ilvl, Search
 - Saved filter presets reduce repetitive setup for common workflows
 - Works across modern and shifting bank API layouts
 
