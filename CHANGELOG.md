@@ -21,6 +21,11 @@ Release note rules:
 ### Fixed
 
 - Transfer tab filter controls are less crowded, with Armor Type moved alongside the search and item-level controls.
+- Transfer tab controls now use cleaner, aligned rows for transfer flow, presets, filters, search, results, and footer actions.
+- Transfer tab rows now use the wider console space for metadata, with row buttons and scrollbar anchored to the expanded list boundary.
+- Navigation tabs now look and behave more like tabs, with a distinct active state instead of a disabled-button appearance.
+- Transfer tab list/footer spacing now keeps all eight rendered rows clear of the footer, and opening one dropdown now closes any previously open dropdown.
+- Transfer rows now front the decision reason and show more useful context such as binding, gear details, target storage, and vendor value.
 - Transfer source/destination auto-resets now show an in-panel notice when context changes make the previous option unavailable.
 - Saved preset dropdowns now keep the active preset name visible after loading or saving.
 - The bulk selection buttons no longer select blocked transfer rows.

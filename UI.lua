@@ -28,6 +28,8 @@ local UI = P.UI
 local DISPLAY_NAME  = "I Can't Even Right Now"
 local ICON_TEXTURE  = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow_icon.tga"
 local MINIMAP_LDB_NAME = "ICantEvenRightNow"
+local CONSOLE_WIDTH = 860
+local CONSOLE_HEIGHT = 638
 
 local GetStorageDisplayName     = P.GetStorageDisplayName
 local GetTransferSourceOptions  = P.GetTransferSourceOptions
@@ -39,6 +41,7 @@ local IsPlayerBankInteractionActive = P.IsPlayerBankInteractionActive
 local IsBankViewableByAPI       = P.IsBankViewableByAPI
 local IsBankStorageAccessible   = P.IsBankStorageAccessible
 local FormatTimestamp           = P.FormatTimestamp
+local FormatMoney               = P.FormatMoney
 local Print                     = P.Print
 local SlotKey                   = P.SlotKey
 
@@ -98,6 +101,33 @@ local function CreateButton(parent, text, width, height)
     return button
 end
 
+local TAB_ACTIVE_BG = { 0.08, 0.07, 0.06, 0.95 }
+local TAB_INACTIVE_BG = { 0.16, 0.02, 0.02, 0.9 }
+local TAB_HOVER_BG = { 0.24, 0.04, 0.04, 0.95 }
+local TAB_ACTIVE_TEXT = { 1.0, 0.88, 0.25 }
+local TAB_INACTIVE_TEXT = { 0.75, 0.64, 0.34 }
+local TAB_ACTIVE_BORDER = { 0.95, 0.75, 0.25, 0.95 }
+local TAB_INACTIVE_BORDER = { 0.35, 0.25, 0.18, 0.9 }
+
+local function ApplyTabBackdrop(tab, bg, border)
+    tab:SetBackdropColor(bg[1], bg[2], bg[3], bg[4])
+    tab:SetBackdropBorderColor(border[1], border[2], border[3], border[4])
+end
+
+local function SetTabVisual(tab, active, hovered)
+    if not tab then return end
+    tab.active = active and true or false
+    if active then
+        ApplyTabBackdrop(tab, TAB_ACTIVE_BG, TAB_ACTIVE_BORDER)
+        tab.text:SetTextColor(TAB_ACTIVE_TEXT[1], TAB_ACTIVE_TEXT[2], TAB_ACTIVE_TEXT[3], 1)
+        tab:SetHeight(30)
+    else
+        ApplyTabBackdrop(tab, hovered and TAB_HOVER_BG or TAB_INACTIVE_BG, TAB_INACTIVE_BORDER)
+        tab.text:SetTextColor(TAB_INACTIVE_TEXT[1], TAB_INACTIVE_TEXT[2], TAB_INACTIVE_TEXT[3], 1)
+        tab:SetHeight(26)
+    end
+end
+
 local function CreateLabel(parent, text, size)
     local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     label:SetText(text or "")
@@ -106,6 +136,54 @@ local function CreateLabel(parent, text, size)
         label:SetFontObject(size)
     end
     return label
+end
+
+local function CreateTabButton(parent, text, width, onClick)
+    local tab = CreateFrame("Button", nil, parent, "BackdropTemplate")
+    tab:SetSize(width or 100, 26)
+    tab:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 0 },
+    })
+    tab:RegisterForClicks("LeftButtonUp")
+    tab.text = CreateLabel(tab, text, "GameFontNormalSmall")
+    tab.text:SetPoint("CENTER", tab, "CENTER", 0, 1)
+    tab.text:SetJustifyH("CENTER")
+    tab:SetScript("OnClick", function()
+        if not tab.active then
+            onClick()
+        end
+    end)
+    tab:SetScript("OnEnter", function(self) SetTabVisual(self, self.active, true) end)
+    tab:SetScript("OnLeave", function(self) SetTabVisual(self, self.active, false) end)
+    SetTabVisual(tab, false, false)
+    return tab
+end
+
+local function CloseOpenDropdown(exceptDropdown)
+    if UI.openDropdown and UI.openDropdown ~= exceptDropdown and UI.openDropdown.menu then
+        UI.openDropdown.menu:Hide()
+    end
+    if not exceptDropdown then
+        UI.openDropdown = nil
+    end
+end
+
+local function ToggleDropdownMenu(dropdown)
+    local menu = dropdown.menu
+    local shouldShow = not menu:IsShown()
+    CloseOpenDropdown(dropdown)
+    if shouldShow then
+        UI.openDropdown = dropdown
+        menu:Show()
+    else
+        menu:Hide()
+        if UI.openDropdown == dropdown then
+            UI.openDropdown = nil
+        end
+    end
 end
 
 local function CreateDropdown(parent, width, options, onSelect)
@@ -136,16 +214,18 @@ local function CreateDropdown(parent, width, options, onSelect)
         item:SetScript("OnClick", function()
             onSelect(option.value)
             menu:Hide()
+            if UI.openDropdown == dropdown then UI.openDropdown = nil end
             Core.RefreshUI()
         end)
         dropdown.items[index] = item
     end
 
     dropdown:SetScript("OnClick", function()
-        menu:SetShown(not menu:IsShown())
+        ToggleDropdownMenu(dropdown)
     end)
     dropdown:SetScript("OnHide", function()
         menu:Hide()
+        if UI.openDropdown == dropdown then UI.openDropdown = nil end
     end)
 
     local function OptionsEqual(left, right)
@@ -177,6 +257,7 @@ local function CreateDropdown(parent, width, options, onSelect)
             item:SetScript("OnClick", function()
                 onSelect(option.value)
                 menu:Hide()
+                if UI.openDropdown == dropdown then UI.openDropdown = nil end
                 Core.RefreshUI()
             end)
             self.items[index] = item
@@ -267,10 +348,11 @@ local function CreateMultiSelectDropdown(parent, width, options, onSelect)
     end
 
     dropdown:SetScript("OnClick", function()
-        menu:SetShown(not menu:IsShown())
+        ToggleDropdownMenu(dropdown)
     end)
     dropdown:SetScript("OnHide", function()
         menu:Hide()
+        if UI.openDropdown == dropdown then UI.openDropdown = nil end
     end)
 
     return dropdown
@@ -342,6 +424,56 @@ local function SetContextNotice(label, text)
     if not label then return end
     label:SetText(text or "")
     label:SetShown(text and text ~= "")
+end
+
+local function AddIfPresent(parts, value)
+    if value and value ~= "" then
+        table.insert(parts, value)
+    end
+end
+
+local function GetItemGearSummary(item)
+    if not item or not item.equipLoc or item.equipLoc == "" then return nil end
+    local parts = {}
+    if item.itemLevel and item.itemLevel > 0 then
+        table.insert(parts, "iLvl " .. tostring(item.itemLevel))
+    end
+    AddIfPresent(parts, item.itemSubTypeName)
+    return #parts > 0 and table.concat(parts, " ") or nil
+end
+
+local function GetTransferTargetSummary(plan, source, dest)
+    if plan.blocked then
+        return "Blocked: " .. plan.blocked
+    end
+    local item = plan.item
+    if dest == "Vendor" then
+        local stackValue = (item.sellPrice or 0) * (item.count or 1)
+        return "Sell" .. (stackValue > 0 and (" for " .. FormatMoney(stackValue)) or "")
+    end
+    if dest == STORAGE_ALL_BANK_TABS and item.bankTargetStorage then
+        return "Target: " .. GetStorageDisplayName(item.bankTargetStorage)
+    end
+    if source ~= plan.source or dest ~= plan.dest then
+        return GetStorageDisplayName(source) .. " -> " .. GetStorageDisplayName(dest)
+    end
+    return nil
+end
+
+local function BuildTransferRowDetail(plan, source, dest)
+    local item = plan.item
+    local reason = plan.blocked and ("Blocked: " .. plan.blocked) or item.reason or GetTransferTargetSummary(plan, source, dest)
+    local meta = {}
+    table.insert(meta, "x" .. tostring(item.count or 1))
+    AddIfPresent(meta, item.bindingScope)
+    AddIfPresent(meta, GetItemGearSummary(item))
+    AddIfPresent(meta, item.expansionName)
+    AddIfPresent(meta, item.typeTag)
+    if not plan.blocked then
+        AddIfPresent(meta, GetTransferTargetSummary(plan, source, dest))
+    end
+    AddIfPresent(meta, item.location)
+    return (reason or "Ready") .. " | " .. table.concat(meta, " | ")
 end
 
 -- ===========================================================================
@@ -840,12 +972,37 @@ local function BuildSettingsTab(parent)
 end
 
 local function BuildTransferTab(parent)
+    local CONTENT_WIDTH = 806
+    local ROW_HEIGHT = 24
+    local ROW_GAP = 10
+    local SECTION_GAP = 14
+    local CONTROL_GAP = 6
+    local FOOTER_HEIGHT = 54
+    local LIST_FOOTER_GAP = 10
+    local LIST_INSET = 5
+    local SCROLLBAR_RIGHT_INSET = 29
+    local ROW_WIDTH = CONTENT_WIDTH - 26
+    local ROW_BODY_GAP = 12
+    local ROW_RULE_WIDTH = 70
+    local ROW_ACTION_WIDTH = 60
+    local ROW_RULE_RIGHT = 4
+    local ROW_ACTION_RIGHT = ROW_RULE_RIGHT + ROW_RULE_WIDTH + ROW_BODY_GAP
+    local ROW_TEXT_WIDTH = ROW_WIDTH - 232
+    local FLOW_Y = 0
+    local PRESET_Y = FLOW_Y - ROW_HEIGHT - SECTION_GAP
+    local FILTER_Y = PRESET_Y - ROW_HEIGHT - ROW_GAP
+    local REFINE_Y = FILTER_Y - ROW_HEIGHT - ROW_GAP
+    local LIST_TOP_Y = REFINE_Y - ROW_HEIGHT - SECTION_GAP
+
     parent.contextNotice = CreateContextNotice(parent)
+    parent.contextNotice:ClearAllPoints()
+    parent.contextNotice:SetPoint("BOTTOMRIGHT", parent, "TOPLEFT", CONTENT_WIDTH, LIST_TOP_Y + 4)
+    parent.contextNotice:SetWidth(420)
 
-    parent.fromLabel = CreateLabel(parent, "From:", "GameFontHighlightSmall")
-    parent.fromLabel:SetPoint("TOPLEFT", 0, 0)
+    parent.fromLabel = CreateLabel(parent, "From", "GameFontHighlightSmall")
+    parent.fromLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, FLOW_Y - 5)
 
-    parent.sourceDropdown = CreateDropdown(parent, 155, GetTransferSourceOptions(), function(value)
+    parent.sourceDropdown = CreateDropdown(parent, 200, GetTransferSourceOptions(), function(value)
         UI.transferSource = value
         UI.transferSelected = {}
         if UI.transferDest == value then
@@ -858,32 +1015,35 @@ local function BuildTransferTab(parent)
         end
         Core.RefreshUI()
     end)
-    parent.sourceDropdown:SetPoint("LEFT", parent.fromLabel, "RIGHT", 6, 0)
+    parent.sourceDropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", 42, FLOW_Y)
 
-    parent.toLabel = CreateLabel(parent, "To:", "GameFontHighlightSmall")
-    parent.toLabel:SetPoint("LEFT", parent.sourceDropdown, "RIGHT", 16, 0)
+    parent.flowArrow = CreateLabel(parent, "->", "GameFontDisableSmall")
+    parent.flowArrow:SetPoint("TOPLEFT", parent, "TOPLEFT", 252, FLOW_Y - 5)
 
-    parent.destDropdown = CreateDropdown(parent, 155, GetTransferDestOptions(), function(value)
+    parent.toLabel = CreateLabel(parent, "To", "GameFontHighlightSmall")
+    parent.toLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 282, FLOW_Y - 5)
+
+    parent.destDropdown = CreateDropdown(parent, 200, GetTransferDestOptions(), function(value)
         if value == UI.transferSource then return end
         UI.transferDest = value
         UI.transferSelected = {}
         Core.RefreshUI()
     end)
-    parent.destDropdown:SetPoint("LEFT", parent.toLabel, "RIGHT", 6, 0)
+    parent.destDropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", 310, FLOW_Y)
 
-    parent.scanBags = CreateButton(parent, "Scan Bags", 90)
-    parent.scanBags:SetPoint("LEFT", parent.destDropdown, "RIGHT", 16, 0)
-    parent.scanBags:SetScript("OnClick", function() Core.ScanInventory(BAG_SCOPE) end)
-
-    parent.scanBank = CreateButton(parent, "Scan Bank", 90)
-    parent.scanBank:SetPoint("LEFT", parent.scanBags, "RIGHT", 8, 0)
+    parent.scanBank = CreateButton(parent, "Scan Bank", 82)
+    parent.scanBank:SetPoint("TOPRIGHT", parent, "TOPLEFT", CONTENT_WIDTH, FLOW_Y)
     parent.scanBank:SetScript("OnClick", function() Core.ScanInventory(BANK_SCOPE) end)
 
-    -- Presets row: load / save / remove named filter combinations
-    parent.presetsLabel = CreateLabel(parent, "Preset:", "GameFontHighlightSmall")
-    parent.presetsLabel:SetPoint("TOPLEFT", parent.fromLabel, "BOTTOMLEFT", 0, -16)
+    parent.scanBags = CreateButton(parent, "Scan Bags", 82)
+    parent.scanBags:SetPoint("RIGHT", parent.scanBank, "LEFT", -CONTROL_GAP, 0)
+    parent.scanBags:SetScript("OnClick", function() Core.ScanInventory(BAG_SCOPE) end)
 
-    parent.presetsDropdown = CreateDropdown(parent, 190, GetSavedFiltersOptions(), function(name)
+    -- Presets row: load / save / remove named filter combinations
+    parent.presetsLabel = CreateLabel(parent, "Preset", "GameFontHighlightSmall")
+    parent.presetsLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, PRESET_Y - 5)
+
+    parent.presetsDropdown = CreateDropdown(parent, 220, GetSavedFiltersOptions(), function(name)
         local preset = FindSavedFilter(name)
         if not preset then return end
         ApplySavedFilter(preset, "Transfer")
@@ -893,16 +1053,16 @@ local function BuildTransferTab(parent)
         end
         Core.RefreshUI()
     end)
-    parent.presetsDropdown:SetPoint("LEFT", parent.presetsLabel, "RIGHT", 6, 0)
+    parent.presetsDropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", 50, PRESET_Y)
 
     parent.presetNameInput = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.presetNameInput:SetSize(148, 24)
+    parent.presetNameInput:SetSize(190, ROW_HEIGHT)
     parent.presetNameInput:SetAutoFocus(false)
     parent.presetNameInput:SetMaxLetters(48)
-    parent.presetNameInput:SetPoint("LEFT", parent.presetsDropdown, "RIGHT", 10, 0)
+    parent.presetNameInput:SetPoint("LEFT", parent.presetsDropdown, "RIGHT", ROW_GAP, 0)
 
     parent.savePreset = CreateButton(parent, "Save", 58)
-    parent.savePreset:SetPoint("LEFT", parent.presetNameInput, "RIGHT", 6, 0)
+    parent.savePreset:SetPoint("LEFT", parent.presetNameInput, "RIGHT", CONTROL_GAP, 0)
     parent.savePreset:SetScript("OnClick", function()
         local name = parent.presetNameInput:GetText()
         if name and name ~= "" then
@@ -913,7 +1073,7 @@ local function BuildTransferTab(parent)
     end)
 
     parent.deletePreset = CreateButton(parent, "Remove", 68)
-    parent.deletePreset:SetPoint("LEFT", parent.savePreset, "RIGHT", 6, 0)
+    parent.deletePreset:SetPoint("LEFT", parent.savePreset, "RIGHT", CONTROL_GAP, 0)
     parent.deletePreset:SetScript("OnClick", function()
         local name = parent.presetNameInput:GetText()
         if name and name ~= "" then
@@ -926,62 +1086,62 @@ local function BuildTransferTab(parent)
         end
     end)
 
-    -- Filter row 1: expansion / type / binding / slot dropdowns
-    parent.expansionFilter = CreateDropdown(parent, 155, GetExpansionOptions(), function(value)
+    -- Filter row 1: categorical filters
+    parent.expansionFilter = CreateDropdown(parent, 145, GetExpansionOptions(), function(value)
         SetFilterInclude("Transfer", "expansion", value)
         UI.activeSavedFilterName = nil
     end)
-    parent.expansionFilter:SetPoint("TOPLEFT", parent.presetsLabel, "BOTTOMLEFT", 0, -12)
+    parent.expansionFilter:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, FILTER_Y)
 
-    parent.typeFilter = CreateMultiSelectDropdown(parent, 120, GetTypeFilterOptions(), function(value)
+    parent.typeFilter = CreateMultiSelectDropdown(parent, 105, GetTypeFilterOptions(), function(value)
         SetFilterInclude("Transfer", "type", value)
         UI.activeSavedFilterName = nil
     end)
-    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", 6, 0)
+    parent.typeFilter:SetPoint("LEFT", parent.expansionFilter, "RIGHT", CONTROL_GAP, 0)
 
-    parent.bindFilter = CreateDropdown(parent, 110, GetBindFilterOptions(), function(value)
+    parent.bindFilter = CreateDropdown(parent, 105, GetBindFilterOptions(), function(value)
         SetFilterInclude("Transfer", "bind", value)
         UI.activeSavedFilterName = nil
     end)
-    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", 6, 0)
+    parent.bindFilter:SetPoint("LEFT", parent.typeFilter, "RIGHT", CONTROL_GAP, 0)
 
-    parent.slotFilter = CreateMultiSelectDropdown(parent, 110, GetSlotFilterOptions(), function(value)
+    parent.slotFilter = CreateMultiSelectDropdown(parent, 105, GetSlotFilterOptions(), function(value)
         SetFilterSlot("Transfer", value)
         UI.activeSavedFilterName = nil
     end)
-    parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", 6, 0)
+    parent.slotFilter:SetPoint("LEFT", parent.bindFilter, "RIGHT", CONTROL_GAP, 0)
 
-    parent.upgradeFilter = CreateDropdown(parent, 100, GetUpgradeFilterOptions(), function(value)
+    parent.armorTypeFilter = CreateDropdown(parent, 90, GetArmorTypeFilterOptions(), function(value)
+        SetFilterArmorType("Transfer", value)
+        UI.activeSavedFilterName = nil
+    end)
+    parent.armorTypeFilter:SetPoint("LEFT", parent.slotFilter, "RIGHT", CONTROL_GAP, 0)
+
+    parent.upgradeFilter = CreateDropdown(parent, 90, GetUpgradeFilterOptions(), function(value)
         SetFilterUpgrade("Transfer", value)
         UI.activeSavedFilterName = nil
     end)
-    parent.upgradeFilter:SetPoint("LEFT", parent.slotFilter, "RIGHT", 6, 0)
+    parent.upgradeFilter:SetPoint("LEFT", parent.armorTypeFilter, "RIGHT", CONTROL_GAP, 0)
 
-    -- Filter row 2: search / armor / ilvl range / actionable toggle / clear
+    -- Filter row 2: search / item level / actionable toggle / clear
     parent.searchLabel = CreateLabel(parent, "Search", "GameFontHighlightSmall")
-    parent.searchLabel:SetPoint("TOPLEFT", parent.expansionFilter, "BOTTOMLEFT", 6, -16)
+    parent.searchLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, REFINE_Y - 5)
 
     parent.search = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.search:SetSize(180, 24)
+    parent.search:SetSize(240, ROW_HEIGHT)
     parent.search:SetAutoFocus(false)
-    parent.search:SetPoint("LEFT", parent.searchLabel, "RIGHT", 6, 0)
+    parent.search:SetPoint("TOPLEFT", parent, "TOPLEFT", 50, REFINE_Y)
     parent.search:SetScript("OnTextChanged", function(self)
         SetFilterSearch("Transfer", self:GetText())
         UI.activeSavedFilterName = nil
         Core.RefreshUI()
     end)
 
-    parent.armorTypeFilter = CreateDropdown(parent, 88, GetArmorTypeFilterOptions(), function(value)
-        SetFilterArmorType("Transfer", value)
-        UI.activeSavedFilterName = nil
-    end)
-    parent.armorTypeFilter:SetPoint("LEFT", parent.search, "RIGHT", 12, 0)
-
     parent.ilvlLabel = CreateLabel(parent, "iLvl:", "GameFontHighlightSmall")
-    parent.ilvlLabel:SetPoint("LEFT", parent.armorTypeFilter, "RIGHT", 12, 0)
+    parent.ilvlLabel:SetPoint("LEFT", parent.search, "RIGHT", 12, 0)
 
     parent.ilvlMin = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.ilvlMin:SetSize(52, 24)
+    parent.ilvlMin:SetSize(52, ROW_HEIGHT)
     parent.ilvlMin:SetAutoFocus(false)
     parent.ilvlMin:SetMaxLetters(5)
     parent.ilvlMin:SetNumeric(true)
@@ -996,7 +1156,7 @@ local function BuildTransferTab(parent)
     parent.ilvlSep:SetPoint("LEFT", parent.ilvlMin, "RIGHT", 4, 0)
 
     parent.ilvlMax = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.ilvlMax:SetSize(52, 24)
+    parent.ilvlMax:SetSize(52, ROW_HEIGHT)
     parent.ilvlMax:SetAutoFocus(false)
     parent.ilvlMax:SetMaxLetters(5)
     parent.ilvlMax:SetNumeric(true)
@@ -1018,7 +1178,7 @@ local function BuildTransferTab(parent)
     end)
 
     parent.clearFilters = CreateButton(parent, "Clear Filters", 100)
-    parent.clearFilters:SetPoint("LEFT", parent.actionableOnlyLabel, "RIGHT", 10, 0)
+    parent.clearFilters:SetPoint("TOPRIGHT", parent, "TOPLEFT", CONTENT_WIDTH, REFINE_Y)
     parent.clearFilters:SetScript("OnClick", function()
         ResetTabFilters("Transfer")
         UI.activeSavedFilterName = nil
@@ -1026,9 +1186,9 @@ local function BuildTransferTab(parent)
     end)
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetWidth(706)
-    parent.listFrame:SetPoint("TOPLEFT", parent.searchLabel, "BOTTOMLEFT", -6, -10)
-    parent.listFrame:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 54)
+    parent.listFrame:SetWidth(CONTENT_WIDTH)
+    parent.listFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, LIST_TOP_Y)
+    parent.listFrame:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, FOOTER_HEIGHT + LIST_FOOTER_GAP)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -1044,8 +1204,8 @@ local function BuildTransferTab(parent)
     local ROW_HEIGHT = parent.ROW_HEIGHT
     local VISIBLE_ROWS = parent.VISIBLE_ROWS
     parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
-    parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     5,   -5)
-    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -29,  5)
+    parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     LIST_INSET,   -LIST_INSET)
+    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -SCROLLBAR_RIGHT_INSET,  LIST_INSET)
     parent.scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
         FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() Core.RefreshUI() end)
     end)
@@ -1053,10 +1213,10 @@ local function BuildTransferTab(parent)
     parent.rows = {}
     for i = 1, VISIBLE_ROWS do
         local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
-        row:SetSize(680, 40)
+        row:SetSize(ROW_WIDTH, 40)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
-        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -5 - (i - 1) * ROW_HEIGHT)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", LIST_INSET, -LIST_INSET - (i - 1) * ROW_HEIGHT)
         row.check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         row.check:SetPoint("LEFT", 0, 0)
         row.icon = row:CreateTexture(nil, "ARTWORK")
@@ -1064,16 +1224,16 @@ local function BuildTransferTab(parent)
         row.icon:SetPoint("LEFT", row.check, "RIGHT", -2, 0)
         row.nameText = CreateLabel(row, "", "GameFontHighlightSmall")
         row.nameText:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 6, -4)
-        row.nameText:SetWidth(440)
+        row.nameText:SetWidth(ROW_TEXT_WIDTH)
         row.nameText:SetWordWrap(false)
         row.detailText = CreateLabel(row, "", "GameFontDisableSmall")
         row.detailText:SetPoint("TOPLEFT", row.nameText, "BOTTOMLEFT", 0, -2)
-        row.detailText:SetWidth(440)
+        row.detailText:SetWidth(ROW_TEXT_WIDTH)
         row.detailText:SetWordWrap(false)
-        row.action = CreateButton(row, "Move", 60, 22)
-        row.action:SetPoint("RIGHT", row, "RIGHT", -86, 0)
-        row.rule = CreateButton(row, "+Rule", 70, 22)
-        row.rule:SetPoint("RIGHT", row, "RIGHT", -4, 0)
+        row.action = CreateButton(row, "Move", ROW_ACTION_WIDTH, 22)
+        row.action:SetPoint("RIGHT", row, "RIGHT", -ROW_ACTION_RIGHT, 0)
+        row.rule = CreateButton(row, "+Rule", ROW_RULE_WIDTH, 22)
+        row.rule:SetPoint("RIGHT", row, "RIGHT", -ROW_RULE_RIGHT, 0)
         -- Only live rule types: Protect / Ignore / Never Sell
         row.ruleMenu = CreateRowRuleMenu(row, 104, {
             { text = "Protect",    ruleType = "Protect" },
@@ -1085,7 +1245,7 @@ local function BuildTransferTab(parent)
     end
 
     parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.footer:SetSize(720, 54)
+    parent.footer:SetSize(CONTENT_WIDTH, FOOTER_HEIGHT)
     parent.footer:SetPoint("BOTTOMLEFT", 0, 0)
     parent.footer:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -1096,21 +1256,26 @@ local function BuildTransferTab(parent)
         insets = { left = 2, right = 2, top = 2, bottom = 2 },
     })
 
-    parent.selectAll = CreateButton(parent, "Select Movable", 120)
-    parent.selectAll:SetParent(parent.footer)
-    parent.selectAll:SetPoint("TOPLEFT", parent.footer, "TOPLEFT", 8, -7)
-    parent.selectAll:SetScript("OnClick", function()
-        for _, plan in ipairs(UI.transferVisible or {}) do
-            if plan.movable then
-                UI.transferSelected[plan.key] = true
-            end
-        end
+    parent.itemCount = CreateLabel(parent.footer, "", "GameFontHighlightSmall")
+    parent.itemCount:SetPoint("LEFT", parent.footer, "LEFT", 8, 0)
+    parent.itemCount:SetWidth(220)
+
+    parent.execute = CreateButton(parent, "Transfer Selected", 130)
+    parent.execute:SetParent(parent.footer)
+    parent.execute:SetPoint("RIGHT", parent.footer, "RIGHT", -8, 0)
+    parent.execute:SetScript("OnClick", function() Core.ExecuteTransferSelected() end)
+
+    parent.clearSel = CreateButton(parent, "Clear", 70)
+    parent.clearSel:SetParent(parent.footer)
+    parent.clearSel:SetPoint("RIGHT", parent.execute, "LEFT", -8, 0)
+    parent.clearSel:SetScript("OnClick", function()
+        UI.transferSelected = {}
         Core.RefreshUI()
     end)
 
     parent.selectPage = CreateButton(parent, "Select Visible", 110)
     parent.selectPage:SetParent(parent.footer)
-    parent.selectPage:SetPoint("LEFT", parent.selectAll, "RIGHT", 8, 0)
+    parent.selectPage:SetPoint("RIGHT", parent.clearSel, "LEFT", -8, 0)
     parent.selectPage:SetScript("OnClick", function()
         local vis = UI.transferVisible or {}
         local offset = FauxScrollFrame_GetOffset(parent.scrollFrame)
@@ -1123,23 +1288,17 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.clearSel = CreateButton(parent, "Clear Selection", 120)
-    parent.clearSel:SetParent(parent.footer)
-    parent.clearSel:SetPoint("LEFT", parent.selectPage, "RIGHT", 8, 0)
-    parent.clearSel:SetScript("OnClick", function()
-        UI.transferSelected = {}
+    parent.selectAll = CreateButton(parent, "Select Movable", 120)
+    parent.selectAll:SetParent(parent.footer)
+    parent.selectAll:SetPoint("RIGHT", parent.selectPage, "LEFT", -8, 0)
+    parent.selectAll:SetScript("OnClick", function()
+        for _, plan in ipairs(UI.transferVisible or {}) do
+            if plan.movable then
+                UI.transferSelected[plan.key] = true
+            end
+        end
         Core.RefreshUI()
     end)
-
-    parent.execute = CreateButton(parent, "Transfer Selected", 130)
-    parent.execute:SetParent(parent.footer)
-    parent.execute:SetPoint("LEFT", parent.clearSel, "RIGHT", 8, 0)
-    parent.execute:SetScript("OnClick", function() Core.ExecuteTransferSelected() end)
-
-    parent.itemCount = CreateLabel(parent, "", "GameFontHighlightSmall")
-    parent.itemCount:SetParent(parent.footer)
-    parent.itemCount:SetPoint("LEFT", parent.execute, "RIGHT", 12, 0)
-    parent.itemCount:SetWidth(260)
 end
 
 -- ===========================================================================
@@ -1236,13 +1395,13 @@ function Core.RefreshTransfer()
     end
     SetContextNotice(panel.contextNotice, noticeText)
 
-    SetDropdownText(panel.sourceDropdown, "From: " .. GetStorageDisplayName(source))
-    SetDropdownText(panel.destDropdown,   "To: "   .. GetStorageDisplayName(dest))
+    SetDropdownText(panel.sourceDropdown, GetStorageDisplayName(source))
+    SetDropdownText(panel.destDropdown, GetStorageDisplayName(dest))
     -- Update presets dropdown options (list may have changed since the tab was built)
     local presetOpts = GetSavedFiltersOptions()
     panel.presetsDropdown:SetOptions(presetOpts)
     local loadedPresetName = UI.activeSavedFilterName
-    SetDropdownText(panel.presetsDropdown, loadedPresetName and ("Preset: " .. loadedPresetName) or (#presetOpts > 0 and "Load preset..." or "(no presets saved)"))
+    SetDropdownText(panel.presetsDropdown, loadedPresetName or (#presetOpts > 0 and "Load preset..." or "(no presets saved)"))
     local currentPresetName = panel.presetNameInput:GetText()
     local presetExists = currentPresetName ~= "" and FindSavedFilter(currentPresetName) ~= nil
     panel.deletePreset:SetEnabled(presetExists)
@@ -1315,15 +1474,7 @@ function Core.RefreshTransfer()
                 Core.RefreshUI()
             end)
             row.nameText:SetText(item.name or ("Item " .. item.itemID))
-            local statusText = plan.movable
-                and (source .. " -> " .. dest)
-                or ("Blocked: " .. (plan.blocked or "?"))
-            row.detailText:SetText(string.format("x%d  |  %s  |  %s  |  %s  |  %s",
-                item.count or 1,
-                item.expansionName or "Unknown",
-                item.typeTag or "Unknown",
-                item.location or "",
-                statusText))
+            row.detailText:SetText(BuildTransferRowDetail(plan, source, dest))
             local actionText = dest == "Vendor" and "Sell" or "Move"
             row.action:SetText(actionText)
             row.action:SetEnabled(plan.movable)
@@ -1337,7 +1488,30 @@ function Core.RefreshTransfer()
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("From: " .. source, 1, 1, 1)
                 GameTooltip:AddLine("To: " .. dest, 1, 1, 1)
+                if item.bankTargetStorage and dest == STORAGE_ALL_BANK_TABS then
+                    GameTooltip:AddLine("Target: " .. GetStorageDisplayName(item.bankTargetStorage), 1, 1, 1)
+                end
+                if item.reason then
+                    GameTooltip:AddLine("Reason: " .. item.reason, 0.75, 0.85, 1)
+                end
                 GameTooltip:AddLine("Expansion: " .. (item.expansionName or "Unknown"), 1, 1, 1)
+                GameTooltip:AddLine("Type: " .. (item.typeTag or "Unknown"), 1, 1, 1)
+                if item.itemSubTypeName then
+                    GameTooltip:AddLine("Subtype: " .. item.itemSubTypeName, 1, 1, 1)
+                end
+                if item.bindingScope then
+                    GameTooltip:AddLine("Binding: " .. item.bindingScope, 1, 1, 1)
+                end
+                if item.itemLevel and item.itemLevel > 0 then
+                    GameTooltip:AddLine("Item Level: " .. tostring(item.itemLevel), 1, 1, 1)
+                end
+                if item.location then
+                    GameTooltip:AddLine("Location: " .. item.location, 1, 1, 1)
+                end
+                if dest == "Vendor" then
+                    local stackValue = (item.sellPrice or 0) * (item.count or 1)
+                    GameTooltip:AddLine("Vendor value: " .. FormatMoney(stackValue), 1, 1, 1)
+                end
                 if plan.blocked then
                     GameTooltip:AddLine("Blocked: " .. plan.blocked, 1, 0.35, 0.35)
                 end
@@ -1413,7 +1587,7 @@ function Core.RefreshUI()
         end
         local tabBtn = UI.tabs and UI.tabs[tabName]
         if tabBtn then
-            tabBtn:SetEnabled(tabName ~= tab)
+            SetTabVisual(tabBtn, tabName == tab, false)
         end
     end
     if tab == "Summary" then
@@ -1433,7 +1607,7 @@ function Core.CreateUI()
     if UI.frame then return end
 
     local frame = CreateFrame("Frame", "ICantEvenRightNowFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(780, 584)
+    frame:SetSize(CONSOLE_WIDTH, CONSOLE_HEIGHT)
     frame:SetPoint("CENTER")
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     frame:SetFrameLevel(100)
@@ -1455,10 +1629,9 @@ function Core.CreateUI()
     frame.panels = {}
     local previous
     for _, name in ipairs(TAB_ORDER) do
-        local tab = CreateButton(frame, name, 92, 26)
+        local tab = CreateTabButton(frame, name, name == "Transfer" and 104 or 92, function() SetTab(name) end)
         tab:SetFrameLevel(frame:GetFrameLevel() + 8)
-        tab:SetPoint("TOPLEFT", previous or frame, previous and "TOPRIGHT" or "TOPLEFT", previous and 4 or 14, previous and 0 or -34)
-        tab:SetScript("OnClick", function() SetTab(name) end)
+        tab:SetPoint("TOPLEFT", previous or frame, previous and "TOPRIGHT" or "TOPLEFT", previous and 2 or 14, previous and 0 or -36)
         UI.tabs[name] = tab
         previous = tab
 
