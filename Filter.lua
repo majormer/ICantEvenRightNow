@@ -81,6 +81,70 @@ local function IsEquippable(item)
     return loc and loc ~= "" and loc ~= "INVTYPE_NON_EQUIP" and loc ~= "INVTYPE_NON_EQUIP_IGNORE"
 end
 
+local CLASS_ARMOR_SUBCLASS = {
+    DEATHKNIGHT = ARMOR_FILTER_PLATE,
+    DEMONHUNTER = ARMOR_FILTER_LEATHER,
+    DRUID = ARMOR_FILTER_LEATHER,
+    EVOKER = ARMOR_FILTER_MAIL,
+    HUNTER = ARMOR_FILTER_MAIL,
+    MAGE = ARMOR_FILTER_CLOTH,
+    MONK = ARMOR_FILTER_LEATHER,
+    PALADIN = ARMOR_FILTER_PLATE,
+    PRIEST = ARMOR_FILTER_CLOTH,
+    ROGUE = ARMOR_FILTER_LEATHER,
+    SHAMAN = ARMOR_FILTER_MAIL,
+    WARLOCK = ARMOR_FILTER_CLOTH,
+    WARRIOR = ARMOR_FILTER_PLATE,
+}
+
+local SHIELD_CLASSES = {
+    PALADIN = true,
+    SHAMAN = true,
+    WARRIOR = true,
+}
+
+local function GetPlayerClassFile()
+    if UnitClassBase then
+        local classFile = UnitClassBase("player")
+        return classFile
+    end
+    local _, classFile = UnitClass("player")
+    return classFile
+end
+
+local function MeetsPlayerLevelRequirement(item)
+    local requiredLevel = item.requiredLevel or 0
+    if requiredLevel <= 0 then return true end
+    if not UnitLevel then return true end
+    return UnitLevel("player") >= requiredLevel
+end
+
+local function IsStatBearingEquipment(item)
+    return item.equipLoc ~= "INVTYPE_BODY" and item.equipLoc ~= "INVTYPE_TABARD"
+end
+
+local function IsPreferredClassEquipment(item)
+    if item.classID ~= 4 then return true end
+    if item.subclassID == 0 then return true end
+    if item.subclassID == 5 then return false end
+    local classFile = GetPlayerClassFile()
+    if item.subclassID == 6 then
+        return SHIELD_CLASSES[classFile] and true or false
+    end
+    local armorSubclass = CLASS_ARMOR_SUBCLASS[classFile]
+    if armorSubclass then
+        return item.subclassID == armorSubclass
+    end
+    return true
+end
+
+local function IsUpgradeEligibleItem(item)
+    return IsEquippable(item)
+        and IsStatBearingEquipment(item)
+        and MeetsPlayerLevelRequirement(item)
+        and IsPreferredClassEquipment(item)
+end
+
 -- Returns the effective item level of the currently equipped item in the slot(s)
 -- for the given equipLoc, or nil if no mapping or no item is equipped.
 -- For two-slot types (rings, trinkets) returns the LOWER of the two, so an
@@ -101,6 +165,7 @@ end
 
 P.INVTYPE_TO_SLOTS       = INVTYPE_TO_SLOTS
 P.IsEquippable           = IsEquippable
+P.IsUpgradeEligibleItem  = IsUpgradeEligibleItem
 P.GetEquippedItemLevel   = GetEquippedItemLevel
 
 -- ===========================================================================
@@ -552,16 +617,18 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
         if not MatchesArmorTypeInclude(item, filters.armorType.include) then return false end
     end
-    -- Upgrade filter: compares item level against equipped items in the same slot(s).
-    -- Non-equippable or items with uncached data (itemLevel nil) pass through.
+    -- Upgrade filter: compares usable, class-appropriate gear against equipped items in the same slot(s).
+    -- Items with uncached item level data pass through.
     if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
-        if IsEquippable(item) and item.itemLevel and item.itemLevel > 0 then
+        if IsUpgradeEligibleItem(item) and item.itemLevel and item.itemLevel > 0 then
             local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
             if equippedIlvl ~= nil then
                 local isUpgrade = item.itemLevel > equippedIlvl
                 if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
                 if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
             end
+        elseif item.itemLevel and item.itemLevel > 0 then
+            if filters.upgrade.include == "Upgrade" then return false end
         end
     end
     -- Item level filter: when active, restricts to equippable gear within the range.

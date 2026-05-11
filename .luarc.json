@@ -24,6 +24,8 @@
       "LibStub",
       "UIParent",
       "UnitClass",
+      "UnitClassBase",
+      "UnitLevel",
       "UnitName",
       "FauxScrollFrame_GetOffset",
       "FauxScrollFrame_OnVerticalScroll",
