@@ -11,7 +11,7 @@ Release note rules:
 
 ## [Unreleased]
 
-## [0.5.0] - 2026-05-10
+## [0.5.0] - 2026-05-11
 
 ### Added
 
