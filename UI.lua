@@ -749,7 +749,15 @@ function Core.UpdateQuickAccessButtons()
 
     CreateMinimapButton()
     if UI.minimapIconRegistered then
+        local LDBIcon = GetLibDBIcon()
         EnsureMinimapIconDB()
+        if LDBIcon then
+            if ns.DB.ui.showMinimapIcon == false then
+                LDBIcon:Hide(MINIMAP_LDB_NAME)
+            else
+                LDBIcon:Show(MINIMAP_LDB_NAME)
+            end
+        end
     elseif UI.minimapButton then
         PositionMinimapButton()
         UI.minimapButton:SetShown(ns.DB.ui.showMinimapIcon ~= false)
@@ -893,12 +901,29 @@ local function BuildSummaryTab(parent)
 end
 
 local function BuildRulesTab(parent)
+    local CONTENT_WIDTH = 806
+    local ROW_HEIGHT = 30
+    local VISIBLE_ROWS = 13
+    local LIST_INSET = 5
+    local HEADER_HEIGHT = 26
+    local FOOTER_HEIGHT = 42
+    local LIST_FOOTER_GAP = 10
+    local SCROLLBAR_RIGHT_INSET = 29
+    local ROW_WIDTH = CONTENT_WIDTH - 26
+    local REMOVE_WIDTH = 70
+    local REMOVE_RIGHT = 4
+    local ITEM_X = 10
+    local RULE_X = 210
+    local SOURCE_X = 410
+    local SOURCE_WIDTH = ROW_WIDTH - SOURCE_X - REMOVE_WIDTH - 20
+
     parent.help = CreateLabel(parent, "Per-item rules override Transfer pipeline behavior. Rules take priority and are always removable.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.listFrame:SetSize(720, 394)
+    parent.listFrame:SetWidth(CONTENT_WIDTH)
     parent.listFrame:SetPoint("TOPLEFT", parent.help, "BOTTOMLEFT", 0, -14)
+    parent.listFrame:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, FOOTER_HEIGHT + LIST_FOOTER_GAP)
     parent.listFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
         edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
@@ -907,27 +932,49 @@ local function BuildRulesTab(parent)
     })
     parent.listFrame:SetBackdropColor(0, 0, 0, 0.2)
 
-    parent.headers = CreateLabel(parent.listFrame, "Item                                      Rule type                                      Created from", "GameFontNormalSmall")
-    parent.headers:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 10, -8)
+    parent.itemHeader = CreateLabel(parent.listFrame, "Item", "GameFontNormalSmall")
+    parent.itemHeader:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", ITEM_X, -8)
+    parent.ruleHeader = CreateLabel(parent.listFrame, "Rule type", "GameFontNormalSmall")
+    parent.ruleHeader:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", RULE_X, -8)
+    parent.sourceHeader = CreateLabel(parent.listFrame, "Created from", "GameFontNormalSmall")
+    parent.sourceHeader:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", SOURCE_X, -8)
     parent.empty = CreateEmptyLabel(parent.listFrame, "No item rules yet.")
 
+    parent.ROW_HEIGHT = ROW_HEIGHT
+    parent.VISIBLE_ROWS = VISIBLE_ROWS
+    parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
+    parent.scrollFrame:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", LIST_INSET, -HEADER_HEIGHT)
+    parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -SCROLLBAR_RIGHT_INSET, LIST_INSET)
+    parent.scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
+        FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() Core.RefreshRules() end)
+    end)
+
     parent.rows = {}
-    for i = 1, 12 do
+    for i = 1, VISIBLE_ROWS do
         local row = CreateFrame("Frame", nil, parent.listFrame, "BackdropTemplate")
-        row:SetSize(710, 28)
+        row:SetSize(ROW_WIDTH, 28)
         row:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8" })
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
-        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", 5, -30 - (i - 1) * 30)
-        row.text = CreateLabel(row, "", "GameFontHighlightSmall")
-        row.text:SetPoint("LEFT", 8, 0)
-        row.text:SetWidth(600)
+        row:SetPoint("TOPLEFT", parent.listFrame, "TOPLEFT", LIST_INSET, -HEADER_HEIGHT - (i - 1) * ROW_HEIGHT)
+        row.itemText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.itemText:SetPoint("LEFT", row, "LEFT", ITEM_X - LIST_INSET, 0)
+        row.itemText:SetWidth(RULE_X - ITEM_X - 14)
+        row.itemText:SetWordWrap(false)
+        row.ruleText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.ruleText:SetPoint("LEFT", row, "LEFT", RULE_X - LIST_INSET, 0)
+        row.ruleText:SetWidth(SOURCE_X - RULE_X - 14)
+        row.ruleText:SetWordWrap(false)
+        row.sourceText = CreateLabel(row, "", "GameFontHighlightSmall")
+        row.sourceText:SetPoint("LEFT", row, "LEFT", SOURCE_X - LIST_INSET, 0)
+        row.sourceText:SetWidth(SOURCE_WIDTH)
+        row.sourceText:SetWordWrap(false)
         row.remove = CreateButton(row, "Remove", 70, 22)
-        row.remove:SetPoint("RIGHT", -4, 0)
+        row.remove:SetPoint("RIGHT", -REMOVE_RIGHT, 0)
         parent.rows[i] = row
     end
 
     parent.footer = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.footer:SetSize(720, 42)
+    parent.footer:SetSize(CONTENT_WIDTH, FOOTER_HEIGHT)
     parent.footer:SetPoint("BOTTOMLEFT", 0, 0)
     parent.footer:SetBackdrop({
         bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -943,6 +990,15 @@ local function BuildRulesTab(parent)
 end
 
 local function BuildSettingsTab(parent)
+    local CONTENT_WIDTH = 806
+    local ROW_HEIGHT = 19
+    local SECTION_GAP = 24
+    local COLUMN_GAP = 34
+    local COLUMN_WIDTH = math.floor((CONTENT_WIDTH - COLUMN_GAP) / 2)
+    local COMMAND_WIDTH = 132
+    local DESC_X = 145
+    local COMMANDS_TOP_GAP = 34
+
     parent.help = CreateLabel(parent, "Quick access and display settings.", "GameFontHighlight")
     parent.help:SetPoint("TOPLEFT", 0, 0)
 
@@ -969,6 +1025,71 @@ local function BuildSettingsTab(parent)
     parent.status = CreateLabel(parent, "", "GameFontDisableSmall")
     parent.status:SetPoint("TOPLEFT", parent.refresh, "BOTTOMLEFT", 0, -14)
     parent.status:SetWidth(680)
+
+    parent.commandsTitle = CreateLabel(parent, "Slash command reference", "GameFontHighlight")
+    parent.commandsTitle:SetPoint("TOPLEFT", parent.status, "BOTTOMLEFT", 0, -COMMANDS_TOP_GAP)
+
+    parent.commandFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    parent.commandFrame:SetSize(CONTENT_WIDTH, 360)
+    parent.commandFrame:SetPoint("TOPLEFT", parent.commandsTitle, "BOTTOMLEFT", 0, -10)
+    parent.commandFrame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8x8",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        edgeSize = 8,
+        insets = { left = 2, right = 2, top = 2, bottom = 2 },
+    })
+    parent.commandFrame:SetBackdropColor(0, 0, 0, 0.18)
+
+    local commandGroups = {
+        {
+            title = "Workflows",
+            x = 12,
+            commands = {
+                { "/icanteven", "Open Transfer." },
+                { "/icanteven transfer", "Open Transfer." },
+                { "/icanteven scan bags", "Scan bag contents." },
+                { "/icanteven scan bank", "Scan bank contents." },
+                { "/icanteven scan all", "Scan bags and bank." },
+                { "/icanteven dump <exp>", "Bags to bank preset." },
+                { "/icanteven recall <exp>", "Bank to bags preset." },
+                { "/icanteven vendor", "Bags to vendor preset." },
+                { "/icanteven organize", "Bank to bags preset." },
+            },
+        },
+        {
+            title = "Views and Diagnostics",
+            x = 12 + COLUMN_WIDTH + COLUMN_GAP,
+            commands = {
+                { "/icanteven summary", "Open Summary." },
+                { "/icanteven rules", "Open Rules." },
+                { "/icanteven settings", "Open Settings." },
+                { "/icanteven minimap", "Toggle minimap launcher." },
+                { "/icanteven buttons", "Print launcher status." },
+                { "/icanteven bankdiag", "Print bank IDs." },
+                { "/icanteven ctx", "Print context state." },
+                { "/icanteven errors", "Show logged errors." },
+                { "/icanteven clearerrors", "Clear logged errors." },
+            },
+        },
+    }
+
+    parent.commandRows = {}
+    for _, group in ipairs(commandGroups) do
+        local title = CreateLabel(parent.commandFrame, group.title, "GameFontNormalSmall")
+        title:SetPoint("TOPLEFT", parent.commandFrame, "TOPLEFT", group.x, -10)
+        for index, entry in ipairs(group.commands) do
+            local y = -32 - (index - 1) * ROW_HEIGHT
+            local command = CreateLabel(parent.commandFrame, entry[1], "GameFontHighlightSmall")
+            command:SetPoint("TOPLEFT", parent.commandFrame, "TOPLEFT", group.x, y)
+            command:SetWidth(COMMAND_WIDTH)
+            command:SetWordWrap(false)
+            local description = CreateLabel(parent.commandFrame, entry[2], "GameFontDisableSmall")
+            description:SetPoint("TOPLEFT", parent.commandFrame, "TOPLEFT", group.x + DESC_X, y)
+            description:SetWidth(COLUMN_WIDTH - DESC_X)
+            description:SetWordWrap(false)
+            table.insert(parent.commandRows, { command = command, description = description })
+        end
+    end
 end
 
 local function BuildTransferTab(parent)
@@ -1554,17 +1675,25 @@ function Core.RefreshRules()
     table.sort(entries, function(a, b) return (a.name or "") < (b.name or "") end)
 
     local rows = panel.rows or {}
+    local visibleRows = panel.VISIBLE_ROWS or #rows
+    local rowHeight = panel.ROW_HEIGHT or 30
+    FauxScrollFrame_Update(panel.scrollFrame, #entries, visibleRows, rowHeight)
+    local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
     for i, row in ipairs(rows) do
-        local e = entries[i]
+        local e = entries[offset + i]
         if e then
-            row.text:SetText(string.format("%-40s %-40s %s", e.name, e.ruleType, e.createdFrom))
+            row.itemText:SetText(e.name or "")
+            row.ruleText:SetText(e.ruleType or "")
+            row.sourceText:SetText(e.createdFrom or "")
             row.remove:SetScript("OnClick", function()
                 ns.DB.rules.items[e.itemID] = nil
                 Core.RefreshRules()
             end)
             row:Show()
         else
-            row.text:SetText("")
+            row.itemText:SetText("")
+            row.ruleText:SetText("")
+            row.sourceText:SetText("")
             row.remove:SetScript("OnClick", nil)
             row:Hide()
         end
@@ -1574,6 +1703,19 @@ function Core.RefreshRules()
     SetEmptyLabel(panel.empty, count == 0, "No item rules yet.")
     if panel.countText then
         panel.countText:SetText(count .. " rule" .. (count == 1 and "" or "s") .. " total")
+    end
+end
+
+function Core.RefreshSettings()
+    if not UI.frame then return end
+    local panel = UI.frame.panels and UI.frame.panels.Settings
+    if not panel then return end
+    if panel.minimap then
+        panel.minimap:SetChecked(ns.DB and ns.DB.ui and ns.DB.ui.showMinimapIcon ~= false)
+    end
+    if panel.status then
+        local mode = UI.minimapIconRegistered and "LibDBIcon" or "fallback"
+        panel.status:SetText("Minimap launcher: " .. (ns.DB.ui.showMinimapIcon ~= false and "shown" or "hidden") .. " (" .. mode .. ")")
     end
 end
 
@@ -1596,6 +1738,8 @@ function Core.RefreshUI()
         Core.RefreshTransfer()
     elseif tab == "Rules" then
         Core.RefreshRules()
+    elseif tab == "Settings" then
+        Core.RefreshSettings()
     end
 end
 

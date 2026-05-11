@@ -617,18 +617,18 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
         if not MatchesArmorTypeInclude(item, filters.armorType.include) then return false end
     end
-    -- Upgrade filter: compares usable, class-appropriate gear against equipped items in the same slot(s).
-    -- Items with uncached item level data pass through.
+    -- Upgrade filter: implicitly narrows to usable, class-appropriate gear, then compares
+    -- item level against equipped items in the same slot(s). Wearable items with uncached
+    -- item level data pass through so they can resolve on a later scan.
     if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
-        if IsUpgradeEligibleItem(item) and item.itemLevel and item.itemLevel > 0 then
+        if not IsUpgradeEligibleItem(item) then return false end
+        if item.itemLevel and item.itemLevel > 0 then
             local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
             if equippedIlvl ~= nil then
                 local isUpgrade = item.itemLevel > equippedIlvl
                 if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
                 if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
             end
-        elseif item.itemLevel and item.itemLevel > 0 then
-            if filters.upgrade.include == "Upgrade" then return false end
         end
     end
     -- Item level filter: when active, restricts to equippable gear within the range.

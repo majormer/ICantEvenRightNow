@@ -23,8 +23,11 @@ Release note rules:
 - Transfer tab filter controls are less crowded, with Armor Type moved alongside the search and item-level controls.
 - Transfer tab controls now use cleaner, aligned rows for transfer flow, presets, filters, search, results, and footer actions.
 - Transfer tab rows now use the wider console space for metadata, with row buttons and scrollbar anchored to the expanded list boundary.
+- Rules tab now uses the wider console layout with anchored columns, footer spacing, and scrolling when many rules exist.
+- Settings tab now includes a slash command reference for common workflows, views, and diagnostics.
 - Navigation tabs now look and behave more like tabs, with a distinct active state instead of a disabled-button appearance.
-- Upgrade filtering now only treats items as upgrades when they meet the current character's level requirement and armor/shield suitability.
+- Settings tab minimap launcher toggle now refreshes from saved settings and immediately hides or shows the registered minimap icon.
+- Upgrade filtering now implicitly limits results to wearable gear, and only treats items as upgrades when they meet the current character's level requirement and armor/shield suitability.
 - Transfer tab list/footer spacing now keeps all eight rendered rows clear of the footer, and opening one dropdown now closes any previously open dropdown.
 - Transfer rows now front the decision reason and show more useful context such as binding, gear details, target storage, and vendor value.
 - Transfer source/destination auto-resets now show an in-panel notice when context changes make the previous option unavailable.
