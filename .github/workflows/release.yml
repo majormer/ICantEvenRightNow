@@ -18,6 +18,13 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Prepare version-specific changelog for CurseForge
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          awk "/^## \[$VERSION\]/{found=1; next} found && /^## \[/ {exit} found{print}" CHANGELOG.md > CHANGELOG-release.md
+          sed -i 's/filename: CHANGELOG\.md/filename: CHANGELOG-release.md/' .pkgmeta
+
       - name: WoW Packager
         uses: BigWigsMods/packager@v2
         env:
