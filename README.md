@@ -14,8 +14,10 @@ The addon is intentionally cautious. Unknown, quest, legendary, and protected it
 
 - **Expansion Detection** - Identifies old, current, and unknown-expansion items using Blizzard expansion metadata.
 - **Item Type Categorization** - Classifies reputation, quest, profession, seasonal, consumable, BoE, currency-like, equipment, material, and unknown items.
+- **Armor Type Filter** - Filter armor items by type (Cloth, Leather, Mail, Plate) for targeted gear management.
 - **Current-Content Protection** - Keeps current expansion and protected seasonal items, including Mythic Keystones, out of old-content cleanup flows.
 - **Explainable Decisions** - Shows recommendation, reason, blocking status, and rule state before you act.
+- **Saved Filter Presets** - Save named combinations of Expansion, Binding, Type, Slot, and Upgrade filters for one-click reload across sessions.
 
 ### Cleanup Console UI
 
@@ -51,6 +53,7 @@ Actions are enabled only when the related game context is available:
 2. Extract it to your WoW addon directory:
    - **Windows:** `C:\Program Files (x86)\World of Warcraft\_retail_\Interface\AddOns\`
    - **Mac:** `/Applications/World of Warcraft/_retail_/Interface/AddOns/`
+   - **Linux:** Ensure the folder is extracted to the equivalent path in your Wine prefix.
 3. Ensure the folder is named `ICantEvenRightNow`.
 4. Restart WoW or type `/reload` in-game.
 
@@ -87,6 +90,23 @@ Actions are enabled only when the related game context is available:
 7. Transfer or sell selected items.
 8. Add Rules for any item you want handled differently next time.
 
+## Recent Changes
+
+**0.5.0** (2026-05-10):
+- Added Armor Type filter for gear (Cloth/Leather/Mail/Plate)
+- Transfer tab is now the default landing tab
+- Fixed Upgrade filter crash (API change in patch 12.x)
+- Fixed Slot and Armor Type filter forward-reference errors
+- Fixed Transfer tab scrollbar and selection issues
+- Improved source/destination validation with context notices
+
+**0.4.0** (2026-05-09):
+- Replaced paginated list with scrollable FauxScrollFrame
+- Added Item Level, Slot, and Upgrade filters
+- Added saved filter presets ("Favorites")
+- Split Core.lua into focused modules for maintainability
+- Renamed "Bind" filter to "Binding"
+
 ## Technical Details
 
 ### File Structure
@@ -97,15 +117,17 @@ ICantEvenRightNow/
 ├── ICantEvenRightNow.png  # Addon icon/art
 ├── Data.lua               # Static data tables and defaults
 ├── Debug.lua              # Debug utilities
-├── Shared.lua             # Constants, bag ID resolution, context detection
+├── Shared.lua             # Constants, bag ID resolution, context detection, storage helpers
 ├── Evaluator.lua          # Binding detection, item classification, decision building
-├── Filter.lua             # Filter state, matching logic, option builders, saved presets
+├── Filter.lua             # Filter state, matching logic, option builders, saved presets, upgrade detection
 ├── Scanner.lua            # Container scanning and bank diagnostics
 ├── Transfer.lua           # Movement execution and vendor selling
-├── UI.lua                 # UI construction and refresh
-├── Core.lua               # Addon lifecycle, events, slash commands
+├── UI.lua                 # UI construction and refresh (FauxScrollFrame, tab frames)
+├── Core.lua               # Addon lifecycle, events, slash commands, UI coordination
 └── docs/
 ```
+
+The addon uses a modular architecture introduced in 0.4.0. Modules communicate through a shared namespace (`ns.Private`) with clear separation of concerns: Shared provides utilities, Evaluator classifies items, Filter manages filter state, Scanner handles container scanning, Transfer executes movements, UI builds the interface, and Core coordinates everything.
 
 ### Key Concepts
 

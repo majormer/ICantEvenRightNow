@@ -11,6 +11,37 @@ Release note rules:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-11
+
+### Added
+
+- Armor Type filter in the Transfer tab: filter armor items by type (Cloth, Leather, Mail, Plate). Non-armor items are unaffected by this filter.
+- Transfer is now the default landing tab when opening the addon without requesting a specific tab.
+
+### Fixed
+
+- Transfer tab filter controls are less crowded, with Armor Type moved alongside the search and item-level controls.
+- Transfer tab controls now use cleaner, aligned rows for transfer flow, presets, filters, search, results, and footer actions.
+- Transfer tab rows now use the wider console space for metadata, with row buttons and scrollbar anchored to the expanded list boundary.
+- Rules tab now uses the wider console layout with anchored columns, footer spacing, and scrolling when many rules exist.
+- Settings tab now includes a slash command reference for common workflows, views, and diagnostics.
+- Navigation tabs now look and behave more like tabs, with a distinct active state instead of a disabled-button appearance.
+- Settings tab minimap launcher toggle now refreshes from saved settings and immediately hides or shows the registered minimap icon.
+- Upgrade filtering now implicitly limits results to wearable gear, and only treats items as upgrades when they meet the current character's level requirement and armor/shield suitability.
+- Transfer tab list/footer spacing now keeps all eight rendered rows clear of the footer, and opening one dropdown now closes any previously open dropdown.
+- Transfer rows now front the decision reason and show more useful context such as binding, gear details, target storage, and vendor value.
+- Transfer source/destination auto-resets now show an in-panel notice when context changes make the previous option unavailable.
+- Saved preset dropdowns now keep the active preset name visible after loading or saving.
+- The bulk selection buttons no longer select blocked transfer rows.
+- Lua language-server configuration no longer disables all undefined-field diagnostics to work around `string.lower` false positives.
+- Upgrade filter no longer crashes on load; replaced removed `GetInventoryItemLevel` API with `C_Item.GetCurrentItemLevel` (API removed in patch 12.x).
+- Slot and Armor Type filters no longer cause Lua errors due to a forward-reference issue in the filter matching code.
+- Saved filter presets now preserve Armor Type selections.
+- Transfer tab "Select Visible" button now correctly selects all visible rows (was only selecting 6 of 8 due to a hard-coded value).
+- Transfer tab scrollbar now correctly reflects the full list length (visible row count was hard-coded in scroll update).
+- Source/Destination dropdowns now reset to valid defaults when the previously selected option becomes unavailable (e.g., bank closing).
+- Addon metadata now reports version 0.5.0.
+
 ## [0.4.0] - 2026-05-09
 
 ### Added

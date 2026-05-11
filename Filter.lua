@@ -24,6 +24,12 @@ local TYPE_FILTER_REAGENT         = P.TYPE_FILTER_REAGENT
 local TYPE_FILTER_WUE             = P.TYPE_FILTER_WUE
 local TYPE_FILTER_VENDOR_SELLABLE = P.TYPE_FILTER_VENDOR_SELLABLE
 
+local ARMOR_FILTER_ALL    = P.ARMOR_FILTER_ALL
+local ARMOR_FILTER_CLOTH  = P.ARMOR_FILTER_CLOTH
+local ARMOR_FILTER_LEATHER = P.ARMOR_FILTER_LEATHER
+local ARMOR_FILTER_MAIL   = P.ARMOR_FILTER_MAIL
+local ARMOR_FILTER_PLATE  = P.ARMOR_FILTER_PLATE
+
 local STORAGE_PRIVATE_BANK = P.STORAGE_PRIVATE_BANK
 local STORAGE_REAGENT_BANK = P.STORAGE_REAGENT_BANK
 local STORAGE_WARBAND_BANK = P.STORAGE_WARBAND_BANK
@@ -75,6 +81,70 @@ local function IsEquippable(item)
     return loc and loc ~= "" and loc ~= "INVTYPE_NON_EQUIP" and loc ~= "INVTYPE_NON_EQUIP_IGNORE"
 end
 
+local CLASS_ARMOR_SUBCLASS = {
+    DEATHKNIGHT = ARMOR_FILTER_PLATE,
+    DEMONHUNTER = ARMOR_FILTER_LEATHER,
+    DRUID = ARMOR_FILTER_LEATHER,
+    EVOKER = ARMOR_FILTER_MAIL,
+    HUNTER = ARMOR_FILTER_MAIL,
+    MAGE = ARMOR_FILTER_CLOTH,
+    MONK = ARMOR_FILTER_LEATHER,
+    PALADIN = ARMOR_FILTER_PLATE,
+    PRIEST = ARMOR_FILTER_CLOTH,
+    ROGUE = ARMOR_FILTER_LEATHER,
+    SHAMAN = ARMOR_FILTER_MAIL,
+    WARLOCK = ARMOR_FILTER_CLOTH,
+    WARRIOR = ARMOR_FILTER_PLATE,
+}
+
+local SHIELD_CLASSES = {
+    PALADIN = true,
+    SHAMAN = true,
+    WARRIOR = true,
+}
+
+local function GetPlayerClassFile()
+    if UnitClassBase then
+        local classFile = UnitClassBase("player")
+        return classFile
+    end
+    local _, classFile = UnitClass("player")
+    return classFile
+end
+
+local function MeetsPlayerLevelRequirement(item)
+    local requiredLevel = item.requiredLevel or 0
+    if requiredLevel <= 0 then return true end
+    if not UnitLevel then return true end
+    return UnitLevel("player") >= requiredLevel
+end
+
+local function IsStatBearingEquipment(item)
+    return item.equipLoc ~= "INVTYPE_BODY" and item.equipLoc ~= "INVTYPE_TABARD"
+end
+
+local function IsPreferredClassEquipment(item)
+    if item.classID ~= 4 then return true end
+    if item.subclassID == 0 then return true end
+    if item.subclassID == 5 then return false end
+    local classFile = GetPlayerClassFile()
+    if item.subclassID == 6 then
+        return SHIELD_CLASSES[classFile] and true or false
+    end
+    local armorSubclass = CLASS_ARMOR_SUBCLASS[classFile]
+    if armorSubclass then
+        return item.subclassID == armorSubclass
+    end
+    return true
+end
+
+local function IsUpgradeEligibleItem(item)
+    return IsEquippable(item)
+        and IsStatBearingEquipment(item)
+        and MeetsPlayerLevelRequirement(item)
+        and IsPreferredClassEquipment(item)
+end
+
 -- Returns the effective item level of the currently equipped item in the slot(s)
 -- for the given equipLoc, or nil if no mapping or no item is equipped.
 -- For two-slot types (rings, trinkets) returns the LOWER of the two, so an
@@ -84,7 +154,8 @@ local function GetEquippedItemLevel(equipLoc)
     if not slots then return nil end
     local result = nil
     for _, slotID in ipairs(slots) do
-        local ilvl = GetInventoryItemLevel("player", slotID) or 0
+        local itemLoc = ItemLocation:CreateFromEquipmentSlot(slotID)
+        local ilvl = (itemLoc:IsValid() and C_Item.GetCurrentItemLevel(itemLoc)) or 0
         if result == nil or ilvl < result then
             result = ilvl
         end
@@ -94,6 +165,7 @@ end
 
 P.INVTYPE_TO_SLOTS       = INVTYPE_TO_SLOTS
 P.IsEquippable           = IsEquippable
+P.IsUpgradeEligibleItem  = IsUpgradeEligibleItem
 P.GetEquippedItemLevel   = GetEquippedItemLevel
 
 -- ===========================================================================
@@ -117,12 +189,14 @@ local function EnsureTabFilters(tabName)
     local itemLevel = EnsureFilterBranch(filters, "itemLevel")
     local slot      = EnsureFilterBranch(filters, "slot")
     local upgrade   = EnsureFilterBranch(filters, "upgrade")
+    local armorType = EnsureFilterBranch(filters, "armorType")
     if expansion.include == nil then expansion.include = EXPANSION_FILTER_ALL end
     if itemType.include == nil  then itemType.include  = "All" end
     if bind.include == nil      then bind.include      = BIND_FILTER_ALL end
     if location.include == nil  then location.include  = "All" end
     if slot.include == nil      then slot.include      = "All" end
     if upgrade.include == nil   then upgrade.include   = "All" end
+    if armorType.include == nil then armorType.include = ARMOR_FILTER_ALL end
     -- itemLevel.min and itemLevel.max default to nil (no filter)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
@@ -167,6 +241,9 @@ local function IsAllFilterValue(value)
 end
 
 P.IsAllFilterValue = IsAllFilterValue
+
+-- Forward declaration: FilterMatchesInclude is defined later in this file.
+local FilterMatchesInclude
 
 -- ===========================================================================
 -- Filter state mutations
@@ -242,6 +319,29 @@ local function MatchesSlotInclude(item, include)
     end)
 end
 
+-- Armor type filter: matches only Armor items (classID=4) by subClassID.
+-- Non-armor items always pass through so the filter doesn't hide weapons/etc.
+local ARMOR_SUBCLASS_LABEL = {
+    [ARMOR_FILTER_CLOTH]   = "Cloth",
+    [ARMOR_FILTER_LEATHER] = "Leather",
+    [ARMOR_FILTER_MAIL]    = "Mail",
+    [ARMOR_FILTER_PLATE]   = "Plate",
+}
+
+local function GetArmorTypeFilterLabel(value)
+    if IsAllFilterValue(value) then return "All" end
+    return ARMOR_SUBCLASS_LABEL[value] or tostring(value)
+end
+
+local function MatchesArmorTypeInclude(item, include)
+    if IsAllFilterValue(include) then return true end
+    -- Only applies to Armor (classID 4); other classes always pass.
+    if item.classID ~= 4 then return true end
+    return FilterMatchesInclude(include, function(value)
+        return item.subclassID == value
+    end)
+end
+
 local function SetFilterItemLevel(tabName, min, max)
     local filters = EnsureTabFilters(tabName)
     EnsureFilterBranch(filters, "itemLevel")
@@ -275,6 +375,9 @@ local function ResetTabFilters(tabName)
     if filters.upgrade then
         filters.upgrade.include = "All"
     end
+    if filters.armorType then
+        filters.armorType.include = ARMOR_FILTER_ALL
+    end
     if tabName == "Move" then
         ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
         ns.DB.ui.typeFilter      = "All"
@@ -287,6 +390,12 @@ local function ResetTabFilters(tabName)
     end
 end
 
+local function SetFilterArmorType(tabName, value)
+    local filters = EnsureTabFilters(tabName)
+    EnsureFilterBranch(filters, "armorType")
+    filters.armorType.include = value
+end
+
 local function SetFilterUpgrade(tabName, value)
     local filters = EnsureTabFilters(tabName)
     filters.upgrade.include = value
@@ -297,6 +406,7 @@ P.SetFilterSearch      = SetFilterSearch
 P.SetFilterHideBlocked = SetFilterHideBlocked
 P.SetFilterItemLevel   = SetFilterItemLevel
 P.SetFilterSlot        = SetFilterSlot
+P.SetFilterArmorType   = SetFilterArmorType
 P.SetFilterUpgrade     = SetFilterUpgrade
 P.ResetTabFilters      = ResetTabFilters
 
@@ -355,6 +465,10 @@ local function BuildFilterSummary(tabName)
         local label = GetMultiSelectLabel(filters.slot.include, "All")
         table.insert(parts, "Slot: " .. label)
     end
+    if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
+        local label = GetMultiSelectLabel(filters.armorType.include, "All")
+        table.insert(parts, "Armor: " .. label)
+    end
     if filters.itemLevel then
         local ilvl = filters.itemLevel
         if ilvl.min and ilvl.max then
@@ -376,7 +490,7 @@ P.BuildFilterSummary      = BuildFilterSummary
 -- Filter matching
 -- ===========================================================================
 
-local function FilterMatchesInclude(include, matcher)
+local function FilterMatchesInclude_Implementation(include, matcher)
     if IsAllFilterValue(include) then return true end
     if type(include) == "table" then
         local hasSpecificValue = false
@@ -391,6 +505,8 @@ local function FilterMatchesInclude(include, matcher)
     end
     return matcher(include)
 end
+
+FilterMatchesInclude = FilterMatchesInclude_Implementation
 
 local function FilterIncludesValue(include, expected)
     if include == expected then return true end
@@ -498,10 +614,15 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.slot and not IsAllFilterValue(filters.slot.include) then
         if not MatchesSlotInclude(item, filters.slot.include) then return false end
     end
-    -- Upgrade filter: compares item level against equipped items in the same slot(s).
-    -- Non-equippable or items with uncached data (itemLevel nil) pass through.
+    if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
+        if not MatchesArmorTypeInclude(item, filters.armorType.include) then return false end
+    end
+    -- Upgrade filter: implicitly narrows to usable, class-appropriate gear, then compares
+    -- item level against equipped items in the same slot(s). Wearable items with uncached
+    -- item level data pass through so they can resolve on a later scan.
     if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
-        if IsEquippable(item) and item.itemLevel and item.itemLevel > 0 then
+        if not IsUpgradeEligibleItem(item) then return false end
+        if item.itemLevel and item.itemLevel > 0 then
             local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
             if equippedIlvl ~= nil then
                 local isUpgrade = item.itemLevel > equippedIlvl
@@ -562,6 +683,8 @@ P.IsVendorSellable        = IsVendorSellable
 P.MatchesTypeInclude      = MatchesTypeInclude
 P.MatchesBindInclude      = MatchesBindInclude
 P.MatchesLocationInclude  = MatchesLocationInclude
+P.MatchesArmorTypeInclude = MatchesArmorTypeInclude
+P.GetArmorTypeFilterLabel = GetArmorTypeFilterLabel
 P.BuildItemSearchParts    = BuildItemSearchParts
 P.TextMatchesSearch       = TextMatchesSearch
 P.MatchesTabFilters       = MatchesTabFilters
@@ -654,7 +777,18 @@ local function GetUpgradeFilterOptions()
     }
 end
 
+local function GetArmorTypeFilterOptions()
+    return {
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_ALL),     value = ARMOR_FILTER_ALL },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_CLOTH),   value = ARMOR_FILTER_CLOTH },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_LEATHER), value = ARMOR_FILTER_LEATHER },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_MAIL),    value = ARMOR_FILTER_MAIL },
+        { text = GetArmorTypeFilterLabel(ARMOR_FILTER_PLATE),   value = ARMOR_FILTER_PLATE },
+    }
+end
+
 P.GetSlotFilterOptions       = GetSlotFilterOptions
+P.GetArmorTypeFilterOptions  = GetArmorTypeFilterOptions
 P.GetUpgradeFilterOptions    = GetUpgradeFilterOptions
 
 -- ===========================================================================
@@ -671,6 +805,7 @@ local DEFAULT_SAVED_FILTERS = {
         bind      = BIND_FILTER_ALL,
         type      = "All",
         slot      = "All",
+        armorType = ARMOR_FILTER_ALL,
         upgrade   = "All",
     },
     {
@@ -679,6 +814,7 @@ local DEFAULT_SAVED_FILTERS = {
         bind      = BIND_FILTER_ALL,
         type      = "All",
         slot      = "All",
+        armorType = ARMOR_FILTER_ALL,
         upgrade   = "Upgrade",
     },
 }
@@ -696,6 +832,7 @@ local function SeedDefaultSavedFilters()
                 bind      = preset.bind,
                 type      = preset.type,
                 slot      = preset.slot,
+                armorType = preset.armorType or ARMOR_FILTER_ALL,
                 upgrade   = preset.upgrade,
             })
         end
@@ -733,6 +870,8 @@ local function ApplySavedFilter(preset, tabName)
     filters.type.include      = preset.type
     EnsureFilterBranch(filters, "slot")
     filters.slot.include      = preset.slot
+    EnsureFilterBranch(filters, "armorType")
+    filters.armorType.include = preset.armorType or ARMOR_FILTER_ALL
     EnsureFilterBranch(filters, "upgrade")
     filters.upgrade.include   = preset.upgrade
 end
@@ -748,6 +887,7 @@ local function SaveFilter(name, tabName)
         bind      = filters.bind.include,
         type      = filters.type.include,
         slot      = filters.slot and filters.slot.include or "All",
+        armorType = filters.armorType and filters.armorType.include or ARMOR_FILTER_ALL,
         upgrade   = filters.upgrade and filters.upgrade.include or "All",
     }
     ns.DB.savedFilters = ns.DB.savedFilters or {}

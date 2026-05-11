@@ -66,7 +66,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             local infoKey = info.hyperlink or itemID
             local name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
-                = GetItemInfo(infoKey)
+                = C_Item.GetItemInfo(infoKey)
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
             table.insert(output, {
                 itemID        = itemID,
