@@ -333,6 +333,7 @@ eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
 eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
 eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -347,6 +348,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    if event == "PLAYER_LOGOUT" then
+        if P.CompactSnapshots then pcall(P.CompactSnapshots) end
+        return
+    end
 
     if event == "PLAYER_REGEN_ENABLED" and P.OnCombatEnded then P.OnCombatEnded() end
 

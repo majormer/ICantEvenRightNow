@@ -90,11 +90,21 @@ local function Warband()
 end
 P.GetWarbandSnapshot = Warband
 
+-- Realm names are normalized (no spaces or dashes) so "Area 52" from
+-- GetRealmName and "Area52" from UnitFullName give the same key.
+local function NormalizeRealm(realm)
+    return (tostring(realm or ""):gsub("[%s%-]", ""))
+end
+
 local function GetCharacterKey()
     local name, realm
     if UnitFullName then name, realm = UnitFullName("player") end
     name = name or (UnitName and UnitName("player")) or "Unknown"
-    if not realm or realm == "" then realm = GetRealmName and GetRealmName() or "Unknown" end
+    if not realm or realm == "" then
+        realm = (GetNormalizedRealmName and GetNormalizedRealmName()) or (GetRealmName and GetRealmName()) or "Unknown"
+    end
+    realm = NormalizeRealm(realm)
+    if realm == "" then realm = "Unknown" end
     return name .. "-" .. realm, name, realm
 end
 P.GetCharacterKey = GetCharacterKey
@@ -432,4 +442,28 @@ function P.AllSnapshots()
     local warband = Warband()
     table.insert(list, { character = nil, scope = "warband", items = warband.items, scannedAt = warband.scannedAt })
     return list
+end
+
+-- Decision fields added at runtime (Evaluator.BuildDecision). They are
+-- recomputed on every use, and `rule` would duplicate rule tables into every
+-- snapshot, so they are removed before the game writes saved variables.
+local TRANSIENT_FIELDS = {
+    "rule", "curated", "blockedReasons", "eligibleForBankMove", "eligibleForRecall",
+    "ruleStatus", "bankTargetStorage", "reason", "key",
+}
+
+function P.CompactSnapshots()
+    local function compact(list)
+        for _, item in ipairs(list or {}) do
+            for _, field in ipairs(TRANSIENT_FIELDS) do item[field] = nil end
+        end
+    end
+    for _, char in pairs(Roster()) do
+        if char.scans then
+            compact(char.scans.bags)
+            compact(char.scans.bank)
+        end
+    end
+    compact(Warband().items)
+    if ns.DB.unassignedBankScan then compact(ns.DB.unassignedBankScan.items) end
 end
