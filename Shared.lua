@@ -639,16 +639,25 @@ local function CanReadValue(value)
     return not issecretvalue or not issecretvalue(value)
 end
 
+-- Is this frame visible on screen? IsVisible, not IsShown: a child keeps its
+-- own shown flag while its parent is hidden (in game, BankPanelCopperButton
+-- read as shown away from any bank). Forbidden frames error on any method
+-- call ("bad self"), which broke every refresh in game, so they are skipped
+-- and the call is protected.
+local function IsFrameVisible(frame)
+    if type(frame) ~= "table" or not frame.IsVisible then return false end
+    if frame.IsForbidden then
+        local okForbidden, forbidden = pcall(frame.IsForbidden, frame)
+        if not okForbidden or forbidden then return false end
+    end
+    local ok, shown = pcall(frame.IsVisible, frame)
+    return ok and CanReadValue(shown) and shown and true or false
+end
+
 local function GetShownGlobalFrame(names)
     for _, name in ipairs(names) do
         local frame = _G[name]
-        -- IsVisible, not IsShown: a child keeps its own shown flag while its
-        -- parent is hidden (in game, BankPanelCopperButton read as shown away
-        -- from any bank).
-        if frame and frame.IsVisible then
-            local shown = frame:IsVisible()
-            if CanReadValue(shown) and shown then return frame end
-        end
+        if IsFrameVisible(frame) then return frame end
     end
     return nil
 end
@@ -657,11 +666,10 @@ local function GetShownNamedFrameByPattern(namePatterns)
     if not EnumerateFrames then return nil end
     local frame = EnumerateFrames()
     while frame do
-        if frame.GetName and frame.IsVisible then
-            local shown = frame:IsVisible()
-            if CanReadValue(shown) and shown then
-                local name = frame:GetName()
-                if CanReadValue(name) and name then
+        if frame.GetName and IsFrameVisible(frame) then
+            do
+                local okName, name = pcall(frame.GetName, frame)
+                if okName and CanReadValue(name) and name then
                     local lowerName = name:lower()
                     for _, pattern in ipairs(namePatterns) do
                         if lowerName:find(pattern, 1, true) then return frame end
@@ -677,8 +685,8 @@ end
 local function IsGlobalFrameShown(name)
     local frame = _G[name]
     if not frame or not frame.IsShown then return false end
-    local shown = frame:IsShown()
-    return CanReadValue(shown) and shown or false
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and CanReadValue(shown) and shown or false
 end
 
 local function IsBankViewableByAPI()

@@ -434,3 +434,13 @@ T.test("a child of a hidden bank panel is not a bank", function()
     g:Core().UpdateContext()
     T.eq(g.ns.DB.context.bankOpen, false)
 end)
+T.test("forbidden frames don't break context detection", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    local forbidden = g.env.CreateFrame("Frame", "SomeBankishForbiddenFrame", g.env.UIParent)
+    forbidden.IsForbidden = function() return true end
+    forbidden.IsVisible = function() error("calling 'IsVisible' on bad self") end
+    forbidden.GetName = function() error("calling 'GetName' on bad self") end
+    local ok, err = pcall(g:Core().UpdateContext)
+    T.ok(ok, tostring(err))
+    T.eq(g.ns.DB.context.bankOpen, false)
+end)
