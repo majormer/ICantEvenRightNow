@@ -387,19 +387,40 @@ local function SearchName(item)
     return name
 end
 
-local function UniqueNames(items)
-    local seen, names, skipped = {}, {}, 0
+-- The item level a piece of gear actually has (upgrades and bonuses
+-- included), or nil for non-gear.
+local function GearItemLevel(item)
+    if not (P.IsGearItem and P.IsGearItem(item)) then return nil end
+    if item.link and C_Item and C_Item.GetDetailedItemLevelInfo then
+        local level = C_Item.GetDetailedItemLevelInfo(item.link)
+        if type(level) == "number" and level > 0 then return level end
+    end
+    if type(item.itemLevel) == "number" and item.itemLevel > 0 then return item.itemLevel end
+    return nil
+end
+
+-- Search terms for Auctionator: exact name, plus the item level for gear so
+-- the results show that piece instead of every item level of the same name.
+local function SearchTerms(items)
+    local seen, terms, skipped = {}, {}, 0
     for _, item in ipairs(items) do
         local name = SearchName(item)
         if not name then
             skipped = skipped + 1
-        elseif not seen[name] then
-            seen[name] = true
-            table.insert(names, name)
+        else
+            local level = GearItemLevel(item)
+            local key = name .. ":" .. tostring(level)
+            if not seen[key] then
+                seen[key] = true
+                table.insert(terms, { searchString = name, isExact = true, minItemLevel = level, maxItemLevel = level })
+            end
         end
     end
-    table.sort(names)
-    return names, skipped
+    table.sort(terms, function(a, b)
+        if a.searchString ~= b.searchString then return a.searchString < b.searchString end
+        return (a.minItemLevel or 0) < (b.minItemLevel or 0)
+    end)
+    return terms, skipped
 end
 
 -- An auction candidate is worth noticeably more at auction AND has no reason
@@ -428,8 +449,10 @@ function P.AuctionCandidateItems()
     local list, seen = {}, {}
     for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
         for _, item in ipairs(P.GetScanList(scope)) do
-            if item.itemID and not seen[item.itemID] and P.IsAuctionCandidate(item) then
-                seen[item.itemID] = true
+            -- Gear of the same name at different item levels sells separately.
+            local key = item.itemID and (tostring(item.itemID) .. ":" .. tostring(GearItemLevel(item)))
+            if key and not seen[key] and P.IsAuctionCandidate(item) then
+                seen[key] = true
                 table.insert(list, item)
             end
         end
@@ -442,22 +465,31 @@ end
 local function SendToAuctionator(items, listName)
     local api = AuctionatorAPI()
     if not api then return false, "Auctionator is not installed." end
-    local names, skipped = UniqueNames(items)
+    local terms, skipped = SearchTerms(items)
     local skippedNote = skipped > 0 and (" " .. skipped .. " item" .. (skipped == 1 and " was" or "s were")
         .. " skipped because the game hasn't loaded their names yet; try again in a moment.") or ""
-    if #names == 0 then return false, "Nothing to check." .. skippedNote end
-    if ns.DB.context.auctionHouseOpen and api.MultiSearchExact then
-        local ok, err = pcall(api.MultiSearchExact, CALLER_ID, names)
+    if #terms == 0 then return false, "Nothing to check." .. skippedNote end
+    if ns.DB.context.auctionHouseOpen and (api.MultiSearchAdvanced or api.MultiSearchExact) then
+        local ok, err
+        if api.MultiSearchAdvanced then
+            ok, err = pcall(api.MultiSearchAdvanced, CALLER_ID, terms)
+        else
+            local names, seen = {}, {}
+            for _, term in ipairs(terms) do
+                if not seen[term.searchString] then seen[term.searchString] = true table.insert(names, term.searchString) end
+            end
+            ok, err = pcall(api.MultiSearchExact, CALLER_ID, names)
+        end
         if not ok then return false, "Auctionator search failed: " .. tostring(err) end
-        return true, "Searching " .. #names .. " item" .. (#names == 1 and "" or "s") .. " in Auctionator's Shopping tab." .. skippedNote
+        return true, "Searching " .. #terms .. " item" .. (#terms == 1 and "" or "s") .. " in Auctionator's Shopping tab." .. skippedNote
     end
     if not (api.CreateShoppingList and api.ConvertToSearchString) then
         return false, "This Auctionator version can't create shopping lists."
     end
     local searchStrings = {}
-    for _, name in ipairs(names) do
-        local ok, term = pcall(api.ConvertToSearchString, CALLER_ID, { searchString = name, isExact = true })
-        if ok and term then table.insert(searchStrings, term) end
+    for _, term in ipairs(terms) do
+        local ok, converted = pcall(api.ConvertToSearchString, CALLER_ID, term)
+        if ok and converted then table.insert(searchStrings, converted) end
     end
     local ok, err = pcall(api.CreateShoppingList, CALLER_ID, listName, searchStrings)
     if not ok then return false, "Could not save the shopping list: " .. tostring(err) end

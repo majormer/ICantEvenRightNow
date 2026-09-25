@@ -28,6 +28,26 @@ local function installAuctionator(w, opts)
             end
             table.insert(fake.searches, terms)
         end,
+        -- Mirrors v339 ValidateExtendedSearchTerms: string/number/boolean
+        -- fields only, no ; or ^, no quote-wrapped strings. Records names in
+        -- `searches` (like MultiSearchExact) and the full terms in `advanced`.
+        MultiSearchAdvanced = function(caller, terms)
+            verify(caller)
+            if not w.ahOpen then error("Details: Auction house is not open") end
+            local names = {}
+            for i, term in ipairs(terms) do
+                if type(term.searchString) ~= "string" then error("search term " .. i .. " must have searchString key") end
+                for key, value in pairs(term) do
+                    local t = type(value)
+                    if type(key) ~= "string" or (t ~= "string" and t ~= "number" and t ~= "boolean") then error("Bad search term " .. i) end
+                    if t == "string" and (value:match('^".*"$') or value:match("[;^]")) then error("Search term " .. i .. " contains ; or ^") end
+                end
+                table.insert(names, term.searchString)
+            end
+            fake.advanced = fake.advanced or {}
+            table.insert(fake.advanced, terms)
+            table.insert(fake.searches, names)
+        end,
         ConvertToSearchString = function(caller, term)
             verify(caller)
             return term.isExact and ('"' .. term.searchString .. '"') or term.searchString
@@ -276,4 +296,22 @@ T.test("items with unloaded data are never auction candidates", function()
     end, { prices = { [8701] = 900000 }, ages = { [8701] = 1 } })
     g:Core().ScanInventory("bags", true)
     T.eq(#g:P().AuctionCandidateItems(), 0, "unknown data is not treated as sellable")
+end)
+T.test("gear is searched at its own item level, one term per level", function()
+    local g = game(function(w)
+        w:defineItem(8901, { name = "Tarnished Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8901, 1)
+        w.equipped[16] = 305
+    end, { prices = { [8901] = 5000000 }, ages = { [8901] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    g:openAuctionHouse()
+    T.ok(g:P().CheckCandidatesInAuctionator())
+    local terms = g.world.auctionator.advanced[1]
+    T.eq(#terms, 1)
+    T.eq(terms[1].searchString, "Tarnished Blade")
+    T.eq(terms[1].minItemLevel, 260)
+    T.eq(terms[1].maxItemLevel, 260)
+    T.eq(terms[1].isExact, true)
 end)
