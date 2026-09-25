@@ -61,6 +61,7 @@ local REASONS = {
     possible_keepsake    = { disposition = "review", label = "Possibly a keepsake" },
     long_untouched       = { disposition = "review", label = "Untouched for over a year" },
     roles_needed         = { disposition = "review", label = "Assign character roles to see who can use this" },
+    outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
@@ -327,7 +328,9 @@ local function ExplainItem(item, ctx)
                 end
                 add("usable_gear", "Upgrade for " .. Names(labels))
             elseif #users > 0 then
-                add("usable_gear", "Can be worn by " .. Names(users, "name"))
+                -- Wearable but worse than what everyone wears (maybe an off-spec
+                -- or transmog piece): the player decides, the addon doesn't keep it.
+                add("outgrown_gear", "Wearable by " .. Names(users, "name") .. ", but not an upgrade")
             elseif collected then
                 add("appearance_collected", "You keep the appearance; none of your played characters wear this")
             else
@@ -379,7 +382,10 @@ local function ExplainItem(item, ctx)
     for _, r in ipairs(reasons) do
         if REASONS[r.id].disposition == "keep" then hasKeep = true break end
     end
-    if not hasKeep and item.quality ~= 0 and item.expansionID and not P.IsOldExpansion(item.expansionID) then
+    -- Gear is judged by who it upgrades once roles are set, not by expansion.
+    local judgedAsGear = IsGear(item) and AnyRolesAssigned()
+    if not hasKeep and not judgedAsGear and item.quality ~= 0 and item.expansionID
+        and not P.IsOldExpansion(item.expansionID) then
         add("current_expansion")
     end
 

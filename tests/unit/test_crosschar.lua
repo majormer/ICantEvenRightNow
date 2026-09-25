@@ -161,3 +161,18 @@ T.test("row menu 'Send to an alt...' opens a picker that queues the hand-off", f
     T.eq(g:P().GetHandoffs()[1].to, "Tailor-R")
     T.contains(g:printed(), "Marked Linen Cloth for Tailor")
 end)
+T.test("gear that isn't an upgrade for anyone is the player's call, even from the current expansion", function()
+    local saved = roster({ { player = MAIN, role = "main" } }, { Main = { [16] = 305 } })
+    local g = login(saved, MAIN, function(w)
+        w:defineItem(8102, { name = "Old Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 270, requiredLevel = 80, bindType = 1, sellPrice = 100, expansionID = 11 })
+        w.equipped[16] = 305
+        w:put(0, 1, 8102, 1)
+    end)
+    g:Core().ScanInventory("bags", true)
+    local P = g:P()
+    local blade = P.GetScanList("bags")[1]
+    local explanation = P.ExplainScanned(blade)
+    T.eq(explanation.primary.id, "outgrown_gear")
+    T.eq(explanation.disposition, "review")
+end)
