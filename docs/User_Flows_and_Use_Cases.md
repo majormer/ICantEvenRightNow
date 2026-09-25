@@ -8,7 +8,7 @@ The addon is strongest when users want to:
 - Move filtered subsets across storage tiers in controlled batches
 - Use explicit selection instead of one-click automation
 - Build repeatable behavior with item-level rules over time
-- Save common filter configurations for fast recall across sessions
+- Use built-in quick tasks and save complete route/filter workflows for fast recall across sessions
 
 It is not optimized for:
 
@@ -33,9 +33,9 @@ Common friction:
 - BoE vs WuE differentiation must be precise to avoid wasted pulls
 - Requires a fresh bank scan if the bank has not been scanned recently
 
-Saved preset opportunity:
+Quick task:
 
-- Save Binding=BoE, Expansion=All as "AH Pull" for one-click setup (not a default; must be saved once)
+- "Pull Auctionable BoEs" configures Bank (All Tabs) → Bags, Binding=BoE, Actionable only, and name sorting
 
 ### B. Main Character Cleanup Pass
 
@@ -53,9 +53,9 @@ Common friction:
 - Some expected items require a Protect rule to keep them out of the filtered list
 - Requires a fresh bag scan
 
-Saved preset opportunity:
+Quick task:
 
-- Default preset "Old Gear Dump" covers this case out of the box
+- "Deposit Old Items" configures Bags → Bank (All Tabs), Expansion=Not current, and Actionable only
 
 ### C. Warband Storage Consolidator
 
@@ -84,9 +84,9 @@ Primary flow:
 - Transfer tab, Source: Bags, Destination: Bank (or leave unset for review only), Upgrade filter: Upgrade
 - Optionally narrow by Slot
 
-Saved preset opportunity:
+Saved workflow opportunity:
 
-- Default preset "Upgrade Check" covers this case out of the box
+- Save a bags-specific upgrade review workflow when the built-in bank-withdrawal task is not the desired route
 
 ### E. Gear Upgrade Scout — Pull potential upgrades from bank
 
@@ -103,6 +103,10 @@ Common friction:
 
 - Requires a bank scan first
 - Only equippable gear with a higher item level than the current equipped slot will appear
+
+Quick task:
+
+- "Pull Bank Upgrades" configures Bank (All Tabs) → Bags, Upgrade=Upgrade, Actionable only, and item-level sorting
 
 ### F. Bank Organizer
 
@@ -151,16 +155,15 @@ Steps:
 1. Open bank
 2. Open Transfer tab → click "Scan Bank" (or scan bank from Summary tab first)
 3. Source: Bank (All Tabs), Destination: Bags
-4. Load saved "AH Pull" preset if you have one, or set Binding filter to BoE
-5. Enable "Actionable only" to hide blocked items
-6. Select visible rows
+4. Load the "Pull Auctionable BoEs" quick task
+5. Review the actionable results
+6. Select movable rows
 7. Transfer selected to bags
 8. Go to AH and list
 
 Friction points:
 
-- Bank must be open; otherwise all bank rows are blocked ("Bank is not open")
-- The "AH Pull" preset is user-saved, not a default — create it once under any name after step 4
+- Bank must be open; loading the quick task outside bank context applies its filters but leaves the current route unchanged and explains why
 
 ### Flow B: Legacy Bag Cleanup
 
@@ -169,8 +172,8 @@ Steps:
 1. Open bank
 2. Open Transfer tab → click "Scan Bags" (bag scan is the critical one; bank scan is optional for Summary accuracy)
 3. Source: Bags, Destination: Bank (All Tabs)
-4. Load "Old Gear Dump" preset or set Expansion filter to Not current
-5. Enable "Actionable only"
+4. Load the "Deposit Old Items" quick task or a saved workflow
+5. Review the actionable results
 6. Review the list; add Protect rules for anything that should stay in bags
 7. Select rows and Transfer selected
 8. Bank must be open or items will appear blocked ("Bank is not open")
@@ -186,7 +189,7 @@ Steps:
 
 1. Scan bags (Transfer tab "Scan Bags" button or Summary tab)
 2. Transfer tab → Source: Bags, Destination: Bank (if banking non-upgrades)
-3. Load "Upgrade Check" preset or set Upgrade filter to Upgrade
+3. Load a saved bags-upgrade workflow or set Upgrade filter to Upgrade
 4. Optionally narrow by Slot for a specific slot comparison
 5. Inspect the filtered list — these items beat what you have equipped
 6. Transfer non-upgrades to bank, or simply equip upgrade candidates directly from bags
@@ -202,7 +205,7 @@ Steps:
 
 1. Open bank → scan bank (Transfer tab "Scan Bank" or Summary tab)
 2. Transfer tab → Source: Bank (All Tabs), Destination: Bags
-3. Set Upgrade filter to Upgrade; optionally narrow by Slot or ilvl Min
+3. Load the "Pull Bank Upgrades" quick task; optionally narrow by Slot or ilvl Min
 4. Select candidates and transfer to bags
 5. Try items on in bags; bank or vendor what doesn't fit the character
 
@@ -216,9 +219,9 @@ Why this flow works well:
 Steps:
 
 1. Open bank → scan bank
-2. Transfer tab → Source: Bank (Private), Destination: Warband Bank
-3. Set Binding filter to WuE (Warbound Until Equipped) for WuE items, or leave at All and use the list's block reasons to identify ineligible items
-4. Enable "Actionable only" to skip soulbound or otherwise blocked items
+2. Load the "Consolidate Warbound Gear" quick task
+3. Optionally refine Binding or other filters
+4. Review the actionable results
 5. Select rows and transfer
 
 Why this flow works well:
@@ -230,9 +233,9 @@ Why this flow works well:
 
 Steps:
 
-1. At vendor: Transfer tab → Source: Bags, Destination: Vendor
-2. Apply Expansion: Not current and Type: Consumable filters for conservative selling
-3. Enable "Actionable only"
+1. At a vendor, open the Transfer tab
+2. Load the "Sell Old Consumables" quick task
+3. Optionally refine the filters
 4. Review the remaining list carefully — any item with a sell price can appear
 5. Select rows and Transfer (sell) selected
 6. Add Never Sell rules to any item that showed up unexpectedly
@@ -245,15 +248,15 @@ Why this flow works well:
 
 ## 4. Use Case Matrix
 
-| Use Case | Source | Destination | Core Filters | Default Preset |
+| Use Case | Source | Destination | Core Filters | Built-in Quick Task |
 | --- | --- | --- | --- | --- |
-| AH BoE pull | Bank (All Tabs) | Bags | Binding=BoE | — (user-saved) |
-| Legacy bag cleanup | Bags | Bank (All Tabs) | Expansion=Not current | Old Gear Dump |
-| Upgrade review (bags) | Bags | Bank or none | Upgrade=Upgrade | Upgrade Check |
-| Upgrade pull (bank) | Bank (All Tabs) | Bags | Upgrade=Upgrade | Upgrade Check |
-| Warband consolidation | Bank (Private) | Warband Bank | Binding=WuE or All | — |
+| AH BoE pull | Bank (All Tabs) | Bags | Binding=BoE | Pull Auctionable BoEs |
+| Legacy bag cleanup | Bags | Bank (All Tabs) | Expansion=Not current | Deposit Old Items |
+| Upgrade review (bags) | Bags | Bank or none | Upgrade=Upgrade | — (save a workflow) |
+| Upgrade pull (bank) | Bank (All Tabs) | Bags | Upgrade=Upgrade | Pull Bank Upgrades |
+| Warband consolidation | Bank (Private) | Warband Bank | Binding=Warband / WuE | Consolidate Warbound Gear |
 | Bank recall / organize | Bank (All Tabs) | Bags | Search, Type | — |
-| Vendor liquidation | Bags | Vendor | Expansion=Not current, Type=Consumable | — |
+| Vendor liquidation | Bags | Vendor | Expansion=Not current, Type=Consumable | Sell Old Consumables |
 | Exception control | — | — | Rules tab (item-ID based) | — |
 
 ## 5. Where the Addon is Most Valuable
@@ -263,7 +266,7 @@ Most valuable scenarios:
 - Repeated inventory maintenance across many characters
 - Users who care about safety and visibility over speed
 - Users who want deterministic, teachable behavior with rules
-- Users who run the same cleanup pattern repeatedly (saved filter presets eliminate repetitive setup)
+- Users who run the same cleanup pattern repeatedly (quick tasks and saved workflows eliminate repetitive setup)
 
 Less valuable scenarios:
 
@@ -275,5 +278,5 @@ Less valuable scenarios:
 - Manual intent should never be silently blocked; block reasons must be visible per row
 - Filters should map to player vocabulary (BoE, WuE, current, old, bank, bags)
 - "No rows" states should explain whether the cause is a missing scan, active filters, or context gating
-- High-frequency flows should be accessible via saved presets or slash commands to reduce repetitive setup
+- High-frequency flows should be accessible through quick tasks, saved workflows, or slash commands
 - The Transfer tab's conservative scope (manual selection, per-item block reasons) is a feature, not a limitation

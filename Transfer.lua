@@ -470,6 +470,8 @@ local function GetTransferBlockReason(item, source, dest)
     if dest == "Vendor" then
         if not ns.DB.context.vendorOpen then return "Vendor is not open" end
         if not IsVendorSellable(item) then return "Not vendor-sellable" end
+    elseif dest == STORAGE_WARBAND_BANK and item.accountBankAllowed == false then
+        return "Not eligible for Warband Bank"
     end
 
     if item.rule then
@@ -589,10 +591,13 @@ function Core.ExecuteTransferOne(plan)
     if moved then
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
+        UI.inventoryStatus = dest == "Vendor" and "Sold 1 item" or "Moved 1 item"
         Core.RefreshUI()
-        Print("Transferred: " .. (item.name or ("Item " .. item.itemID)))
+        Print((dest == "Vendor" and "Sold: " or "Transferred: ") .. (item.name or ("Item " .. item.itemID)))
         Core.ScheduleRescanAfterMove()
     else
+        UI.inventoryStatus = "Failed: " .. (err or "unknown error")
+        Core.RefreshUI()
         Print("Transfer failed: " .. (err or "unknown error"))
     end
 end
@@ -634,6 +639,10 @@ function Core.ExecuteTransferSelected()
     end
     UI.transferSelected = {}
     RemoveMovedItemsFromScan(movedKeys)
+    if moved > 0 or blocked > 0 then
+        local action = dest == "Vendor" and "sold" or "moved"
+        UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
+    end
     Core.RefreshUI()
     Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
     if #blockedDetails > 0 then

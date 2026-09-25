@@ -7,6 +7,14 @@ local Core = ns.Core
 local Data = ns.Data
 local P    = ns.Private
 
+local ITEM_BIND_ON_EQUIP = Enum and Enum.ItemBind and Enum.ItemBind.OnEquip or 2
+local ITEM_BIND_ON_USE = Enum and Enum.ItemBind and Enum.ItemBind.OnUse or 3
+local ITEM_BIND_QUEST = Enum and Enum.ItemBind and Enum.ItemBind.Quest or 4
+local ITEM_BIND_TO_WOW_ACCOUNT = Enum and Enum.ItemBind and Enum.ItemBind.ToWoWAccount or 7
+local ITEM_BIND_TO_BNET_ACCOUNT = Enum and Enum.ItemBind and Enum.ItemBind.ToBnetAccount or 8
+local ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED = Enum and Enum.ItemBind
+    and Enum.ItemBind.ToBnetAccountUntilEquipped or 9
+
 local STORAGE_BAGS          = P.STORAGE_BAGS
 local STORAGE_PRIVATE_BANK  = P.STORAGE_PRIVATE_BANK
 local STORAGE_REAGENT_BANK  = P.STORAGE_REAGENT_BANK
@@ -76,15 +84,19 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         accountBankAllowed = not fallbackIsBound,
     }
 
-    if bindType == 2 then
+    if bindType == ITEM_BIND_ON_EQUIP then
         details.bindingScope = "BoE"
-    elseif bindType == 3 then
+    elseif bindType == ITEM_BIND_ON_USE then
         details.bindingScope = "Bind on Use"
-    elseif bindType == 4 then
+    elseif bindType == ITEM_BIND_QUEST then
         details.bindingScope = "Quest"
         details.isBound = true
-    elseif bindType == 8 then
-        details.bindingScope = "Battle.net Account"
+    elseif bindType == ITEM_BIND_TO_WOW_ACCOUNT or bindType == ITEM_BIND_TO_BNET_ACCOUNT then
+        details.bindingScope = "Warbound"
+        details.isWarbandBound = true
+        details.accountBankAllowed = true
+    elseif bindType == ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED then
+        details.bindingScope = "Warbound Until Equipped"
         details.isWarbandBound = true
         details.accountBankAllowed = true
     end
@@ -131,12 +143,14 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         end
     elseif details.bindingScope ~= "Warbound Until Equipped" then
         details.accountBankAllowed = true
-        if not details.isWarbandBound and itemLocation
-            and C_Bank and C_Bank.IsItemAllowedInBankType
+        if itemLocation and C_Bank and C_Bank.IsItemAllowedInBankType
             and Enum and Enum.BankType and Enum.BankType.Account then
             local ok, allowed = pcall(C_Bank.IsItemAllowedInBankType, Enum.BankType.Account, itemLocation)
-            if ok and allowed then
-                details.isWarbandBound = true
+            if ok then
+                -- Bank eligibility and binding scope are separate concepts. A normal
+                -- unbound or BoE item may be accepted by the account bank without
+                -- becoming Warbound.
+                details.accountBankAllowed = allowed and true or false
             end
         end
     end
@@ -146,7 +160,10 @@ end
 
 local function IsItemWarboundUntilEquipped(item)
     if item.bindingScope == "Warbound Until Equipped" then return true end
-    if item.bindType and item.bindType ~= 2 then return false end
+    if item.bindType and item.bindType ~= ITEM_BIND_ON_EQUIP
+        and item.bindType ~= ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED then
+        return false
+    end
     if not (ItemLocation and C_Item and C_Item.IsBoundToAccountUntilEquip) then return false end
     if type(item.bagID) ~= "number" or type(item.slot) ~= "number" then return false end
     local itemLocation = ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot)
@@ -293,7 +310,7 @@ local function BuildDecision(item)
         expansionID = Data.CurrentExpansionID
         reason = "Mythic Keystone is protected as current seasonal content"
         table.insert(blocked, "Mythic Keystone")
-    elseif item.isBound and (item.classID == 2 or item.classID == 4) then
+    elseif item.isSoulbound and (item.classID == 2 or item.classID == 4) then
         reason = "Soulbound equipment"
         table.insert(blocked, "Soulbound equipment")
     elseif itemType == Data.ItemTypes.QUEST then

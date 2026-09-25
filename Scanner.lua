@@ -105,9 +105,10 @@ end
 -- Core.ScanInventory
 -- ===========================================================================
 
-function Core.ScanInventory(scope, quiet)
+function Core.ScanInventory(scope, quiet, retryAttempt)
     Core.UpdateContext()
     scope = (scope and scope:lower()) or BAG_SCOPE
+    retryAttempt = retryAttempt or 0
 
     local scanBags = scope == "" or scope == BAG_SCOPE or scope == "all"
     local scanBank = scope == BANK_SCOPE or scope == "all"
@@ -160,17 +161,20 @@ function Core.ScanInventory(scope, quiet)
     -- Some items may not be in the client cache yet; retry after a short delay
     -- to pick up expansionID and other fields that GetItemInfo returns as nil on first call.
     local needsRetry = false
-    for _, item in ipairs(ns.DB.scans.bags or {}) do
-        if item.expansionID == nil then needsRetry = true; break end
+    if scanBags then
+        for _, item in ipairs(ns.DB.scans.bags or {}) do
+            if item.expansionID == nil then needsRetry = true; break end
+        end
     end
-    if not needsRetry then
+    if scanBank and not needsRetry then
         for _, item in ipairs(ns.DB.scans.bank or {}) do
             if item.expansionID == nil then needsRetry = true; break end
         end
     end
-    if needsRetry then
+    if needsRetry and retryAttempt < 2 then
+        local retryScope = scanBags and scanBank and "all" or (scanBank and BANK_SCOPE or BAG_SCOPE)
         C_Timer.After(1.5, function()
-            Core.ScanInventory(scope, true)
+            Core.ScanInventory(retryScope, true, retryAttempt + 1)
         end)
     end
 end

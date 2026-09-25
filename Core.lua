@@ -27,6 +27,7 @@ local Print                      = P.Print
 local SafeCopyDefaults           = P.SafeCopyDefaults
 local MigrateLegacyTabFilters    = P.MigrateLegacyTabFilters
 local SeedDefaultSavedFilters    = P.SeedDefaultSavedFilters
+local MigrateSavedFiltersToWorkflows = P.MigrateSavedFiltersToWorkflows
 local NormalizeLegacyBankStorageKinds = P.NormalizeLegacyBankStorageKinds
 local RefreshBankTabData         = P.RefreshBankTabData
 local IsBankContextDetected      = P.IsBankContextDetected
@@ -121,20 +122,28 @@ function Core.HandleSlashCommand(msg)
     elseif cmd == "dump" then
         UI.transferSource = "Bags"
         UI.transferDest = STORAGE_ALL_BANK_TABS
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "recall" then
         UI.transferSource = STORAGE_ALL_BANK_TABS
         UI.transferDest = "Bags"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "organize" or cmd == "organizer" then
         UI.transferSource = STORAGE_ALL_BANK_TABS
         UI.transferDest = "Bags"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.ShowOrganizeUI()
     elseif cmd == "vendor" or cmd == "sell" then
         UI.transferSource = "Bags"
         UI.transferDest = "Vendor"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.ShowVendorUI()
     elseif cmd == "settings" or cmd == "options" then
         Core.CreateUI()
@@ -217,6 +226,7 @@ function Core.OnAddonLoaded()
     ns.DB = ICantEvenRightNowDB
     MigrateLegacyTabFilters()
     SeedDefaultSavedFilters()
+    MigrateSavedFiltersToWorkflows()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
     NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)
@@ -226,6 +236,46 @@ function Core.OnAddonLoaded()
     ScheduleQuickAccessRefresh()
     Print("Loaded. Type /icanteven to open the cleanup console.")
 end
+
+-- ===========================================================================
+-- Debounced inventory refresh
+-- ===========================================================================
+
+local inventoryRefreshScheduled = false
+local refreshBagsPending = false
+local refreshBankPending = false
+
+local function ScheduleInventoryRefresh(scope)
+    if scope == "bags" or scope == "all" then refreshBagsPending = true end
+    if scope == "bank" or scope == "all" then refreshBankPending = true end
+    UI.inventoryStatus = "Inventory changed — refreshing..."
+    if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+    if inventoryRefreshScheduled then return end
+
+    inventoryRefreshScheduled = true
+    C_Timer.After(0.25, function()
+        inventoryRefreshScheduled = false
+        Core.UpdateContext()
+
+        local scanBags = refreshBagsPending
+        local scanBank = refreshBankPending and ns.DB.context.bankOpen
+        refreshBagsPending = false
+        refreshBankPending = false
+
+        if scanBags and scanBank then
+            pcall(Core.ScanInventory, "all", true)
+        elseif scanBank then
+            pcall(Core.ScanInventory, "bank", true)
+        elseif scanBags then
+            pcall(Core.ScanInventory, "bags", true)
+        end
+
+        UI.inventoryStatus = "Updated just now"
+        if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+    end)
+end
+
+Core.ScheduleInventoryRefresh = ScheduleInventoryRefresh
 
 -- ===========================================================================
 -- Event frame
@@ -238,6 +288,10 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("BANKFRAME_OPENED")
 eventFrame:RegisterEvent("BANKFRAME_CLOSED")
 eventFrame:RegisterEvent("BANK_TAB_SETTINGS_UPDATED")
+eventFrame:RegisterEvent("BANK_TABS_CHANGED")
+eventFrame:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
+eventFrame:RegisterEvent("PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED")
+eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
 eventFrame:RegisterEvent("MERCHANT_SHOW")
@@ -309,7 +363,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     if event == "BANK_TAB_SETTINGS_UPDATED" then
         RefreshBankTabData()
-        Core.RefreshUI()
+        ScheduleInventoryRefresh("bank")
+    elseif event == "BANK_TABS_CHANGED" then
+        RefreshBankTabData()
+        ScheduleInventoryRefresh("bank")
+    elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED" then
+        ScheduleInventoryRefresh("bank")
+    elseif event == "BAG_UPDATE_DELAYED" then
+        ScheduleInventoryRefresh("bags")
     end
 
     ScheduleQuickAccessRefresh()

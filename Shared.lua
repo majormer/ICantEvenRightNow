@@ -127,6 +127,13 @@ P.UI = {
     transferVisible = {},
     transferSource = "Bags",
     transferDest = "Bank (All Tabs)",
+    activeQuickWorkflowName = nil,
+    activeSavedFilterName = nil,
+    transferCustomizeOpen = false,
+    settingsCommandHelpOpen = false,
+    transferContextMessage = nil,
+    refreshingTransferControls = false,
+    inventoryStatus = nil,
     visible = {},
     bankContextOpen = false,
     bankContextClosed = false,
@@ -542,10 +549,17 @@ P.GetTransferDestOptions   = GetTransferDestOptions
 -- Bank context detection
 -- ===========================================================================
 
+local function CanReadValue(value)
+    return not issecretvalue or not issecretvalue(value)
+end
+
 local function GetShownGlobalFrame(names)
     for _, name in ipairs(names) do
         local frame = _G[name]
-        if frame and frame.IsShown and frame:IsShown() then return frame end
+        if frame and frame.IsShown then
+            local shown = frame:IsShown()
+            if CanReadValue(shown) and shown then return frame end
+        end
     end
     return nil
 end
@@ -554,12 +568,15 @@ local function GetShownNamedFrameByPattern(namePatterns)
     if not EnumerateFrames then return nil end
     local frame = EnumerateFrames()
     while frame do
-        if frame.GetName and frame.IsShown and frame:IsShown() then
-            local name = frame:GetName()
-            if name then
-                local lowerName = name:lower()
-                for _, pattern in ipairs(namePatterns) do
-                    if lowerName:find(pattern, 1, true) then return frame end
+        if frame.GetName and frame.IsShown then
+            local shown = frame:IsShown()
+            if CanReadValue(shown) and shown then
+                local name = frame:GetName()
+                if CanReadValue(name) and name then
+                    local lowerName = name:lower()
+                    for _, pattern in ipairs(namePatterns) do
+                        if lowerName:find(pattern, 1, true) then return frame end
+                    end
                 end
             end
         end
@@ -570,22 +587,24 @@ end
 
 local function IsGlobalFrameShown(name)
     local frame = _G[name]
-    return frame and frame.IsShown and frame:IsShown() or false
+    if not frame or not frame.IsShown then return false end
+    local shown = frame:IsShown()
+    return CanReadValue(shown) and shown or false
 end
 
 local function IsBankViewableByAPI()
     if not C_Bank then return false end
     if C_Bank.AreAnyBankTypesViewable then
         local ok, viewable = pcall(C_Bank.AreAnyBankTypesViewable)
-        if ok and viewable then return true end
+        if ok and CanReadValue(viewable) and viewable then return true end
     end
     if C_Bank.FetchViewableBankTypes then
         local ok, bankTypes = pcall(C_Bank.FetchViewableBankTypes)
-        if ok and type(bankTypes) == "table" then
+        if ok and CanReadValue(bankTypes) and type(bankTypes) == "table" then
             for _, bankType in pairs(bankTypes) do
                 if bankType ~= nil then return true end
             end
-        elseif ok and bankTypes ~= nil then
+        elseif ok and CanReadValue(bankTypes) and bankTypes ~= nil then
             return true
         end
     end
@@ -594,7 +613,7 @@ local function IsBankViewableByAPI()
             local bankType = rawget(Enum.BankType, key)
             if bankType ~= nil then
                 local ok, viewable = pcall(C_Bank.IsBankTypeViewable, bankType)
-                if ok and viewable then return true end
+                if ok and CanReadValue(viewable) and viewable then return true end
             end
         end
     end
@@ -603,7 +622,7 @@ local function IsBankViewableByAPI()
             local bankType = rawget(Enum.BankType, key)
             if bankType ~= nil then
                 local ok, canView = pcall(C_Bank.CanViewBank, bankType)
-                if ok and canView then return true end
+                if ok and CanReadValue(canView) and canView then return true end
             end
         end
     end
@@ -616,7 +635,7 @@ local function IsBankStorageAccessible()
         for _, ids in ipairs({ PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }) do
             for _, bagID in ipairs(ids or {}) do
                 local ok, freeSlots = pcall(CContainer.GetContainerNumFreeSlots, bagID)
-                if ok and type(freeSlots) == "number" and freeSlots >= 0 then return true end
+                if ok and CanReadValue(freeSlots) and type(freeSlots) == "number" and freeSlots >= 0 then return true end
             end
         end
     end
@@ -624,7 +643,7 @@ local function IsBankStorageAccessible()
         for _, ids in ipairs({ PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }) do
             for _, bagID in ipairs(ids or {}) do
                 local ok, info = pcall(CContainer.GetContainerItemInfo, bagID, 1)
-                if ok and info ~= nil then return true end
+                if ok and CanReadValue(info) and info ~= nil then return true end
             end
         end
     end
@@ -649,7 +668,7 @@ local function IsPlayerBankInteractionActive()
     for _, interactionType in ipairs(types) do
         if interactionType ~= nil then
             local ok, active = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, interactionType)
-            if ok and active then return true end
+            if ok and CanReadValue(active) and active then return true end
         end
     end
     return false

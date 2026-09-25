@@ -33,6 +33,7 @@ local ARMOR_FILTER_PLATE  = P.ARMOR_FILTER_PLATE
 local STORAGE_PRIVATE_BANK = P.STORAGE_PRIVATE_BANK
 local STORAGE_REAGENT_BANK = P.STORAGE_REAGENT_BANK
 local STORAGE_WARBAND_BANK = P.STORAGE_WARBAND_BANK
+local STORAGE_ALL_BANK_TABS = P.STORAGE_ALL_BANK_TABS
 
 local BAG_SCOPE  = P.BAG_SCOPE
 local BANK_SCOPE = P.BANK_SCOPE
@@ -140,6 +141,7 @@ end
 
 local function IsUpgradeEligibleItem(item)
     return IsEquippable(item)
+        and INVTYPE_TO_SLOTS[item.equipLoc] ~= nil
         and IsStatBearingEquipment(item)
         and MeetsPlayerLevelRequirement(item)
         and IsPreferredClassEquipment(item)
@@ -177,6 +179,12 @@ local function EnsureFilterBranch(filters, key)
     return filters[key]
 end
 
+local function NormalizeItemLevel(value)
+    local parsed = tonumber(value)
+    if not parsed or parsed <= 0 then return nil end
+    return math.floor(parsed)
+end
+
 local function EnsureTabFilters(tabName)
     ns.DB.ui.tabFilters = ns.DB.ui.tabFilters or {}
     ns.DB.ui.tabFilters[tabName] = ns.DB.ui.tabFilters[tabName] or {}
@@ -197,7 +205,10 @@ local function EnsureTabFilters(tabName)
     if slot.include == nil      then slot.include      = "All" end
     if upgrade.include == nil   then upgrade.include   = "All" end
     if armorType.include == nil then armorType.include = ARMOR_FILTER_ALL end
-    -- itemLevel.min and itemLevel.max default to nil (no filter)
+    -- Zero and invalid values are not meaningful item-level constraints. This
+    -- also cleans up stale SavedVariables that previously stored a visible 0.
+    itemLevel.min = NormalizeItemLevel(itemLevel.min)
+    itemLevel.max = NormalizeItemLevel(itemLevel.max)
     name.includeText = name.includeText or ""
     name.excludeText = name.excludeText or ""
     filters.hideBlocked    = filters.hideBlocked    and true or false
@@ -345,8 +356,8 @@ end
 local function SetFilterItemLevel(tabName, min, max)
     local filters = EnsureTabFilters(tabName)
     EnsureFilterBranch(filters, "itemLevel")
-    filters.itemLevel.min = (min and min ~= "") and tonumber(min) or nil
-    filters.itemLevel.max = (max and max ~= "") and tonumber(max) or nil
+    filters.itemLevel.min = NormalizeItemLevel(min)
+    filters.itemLevel.max = NormalizeItemLevel(max)
 end
 
 local function SetFilterSlot(tabName, value)
@@ -447,7 +458,7 @@ local function BuildFilterSummary(tabName)
         table.insert(parts, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
     end
     if not IsAllFilterValue(filters.bind.include) then
-        table.insert(parts, "Bind: " .. tostring(filters.bind.include))
+        table.insert(parts, "Binding: " .. tostring(filters.bind.include))
     end
     if not IsAllFilterValue(filters.location.include) then
         table.insert(parts, "Location: " .. tostring(filters.location.include))
@@ -466,8 +477,10 @@ local function BuildFilterSummary(tabName)
         table.insert(parts, "Slot: " .. label)
     end
     if filters.armorType and not IsAllFilterValue(filters.armorType.include) then
-        local label = GetMultiSelectLabel(filters.armorType.include, "All")
-        table.insert(parts, "Armor: " .. label)
+        table.insert(parts, "Armor: " .. GetArmorTypeFilterLabel(filters.armorType.include))
+    end
+    if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
+        table.insert(parts, "Upgrade: " .. tostring(filters.upgrade.include))
     end
     if filters.itemLevel then
         local ilvl = filters.itemLevel
@@ -482,9 +495,24 @@ local function BuildFilterSummary(tabName)
     return #parts > 0 and table.concat(parts, "  |  ") or "Filters: All"
 end
 
+local function GetActiveFilterCount(tabName)
+    local filters = EnsureTabFilters(tabName)
+    local count = 0
+    for _, branch in ipairs({ "expansion", "type", "bind", "location", "slot", "armorType", "upgrade" }) do
+        if filters[branch] and not IsAllFilterValue(filters[branch].include) then
+            count = count + 1
+        end
+    end
+    if filters.itemLevel and (filters.itemLevel.min or filters.itemLevel.max) then
+        count = count + 1
+    end
+    return count
+end
+
 P.GetExpansionFilterLabel = GetExpansionFilterLabel
 P.GetMultiSelectLabel     = GetMultiSelectLabel
 P.BuildFilterSummary      = BuildFilterSummary
+P.GetActiveFilterCount    = GetActiveFilterCount
 
 -- ===========================================================================
 -- Filter matching
@@ -792,10 +820,10 @@ P.GetArmorTypeFilterOptions  = GetArmorTypeFilterOptions
 P.GetUpgradeFilterOptions    = GetUpgradeFilterOptions
 
 -- ===========================================================================
--- Saved Filters ("Favorites")
--- Presets store the five categorical filter fields: expansion, bind, type,
--- slot, upgrade. ilvl range and search text are excluded — they are too
--- query-specific to be useful as reusable presets.
+-- Saved Workflows (legacy name: Saved Filters)
+-- New entries capture the transfer route, filter state, actionable-only state,
+-- and sort order. Legacy filter-only entries remain valid and leave the current
+-- route unchanged when applied.
 -- ===========================================================================
 
 local DEFAULT_SAVED_FILTERS = {
@@ -807,6 +835,10 @@ local DEFAULT_SAVED_FILTERS = {
         slot      = "All",
         armorType = ARMOR_FILTER_ALL,
         upgrade   = "All",
+        source    = "Bags",
+        dest      = STORAGE_ALL_BANK_TABS,
+        hideBlocked = true,
+        sort      = "Name",
     },
     {
         name      = "Upgrade Check",
@@ -816,8 +848,57 @@ local DEFAULT_SAVED_FILTERS = {
         slot      = "All",
         armorType = ARMOR_FILTER_ALL,
         upgrade   = "Upgrade",
+        source    = STORAGE_ALL_BANK_TABS,
+        dest      = "Bags",
+        hideBlocked = true,
+        sort      = "Item Level",
     },
 }
+
+local QUICK_WORKFLOWS = {
+    {
+        name = "Deposit Old Items",
+        source = "Bags", dest = STORAGE_ALL_BANK_TABS,
+        expansion = EXPANSION_FILTER_NOT_CURRENT, bind = BIND_FILTER_ALL,
+        type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
+        hideBlocked = true, sort = "Name",
+    },
+    {
+        name = "Pull Bank Upgrades",
+        source = STORAGE_ALL_BANK_TABS, dest = "Bags",
+        expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_ALL,
+        type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "Upgrade",
+        hideBlocked = true, sort = "Item Level",
+    },
+    {
+        name = "Pull Auctionable BoEs",
+        source = STORAGE_ALL_BANK_TABS, dest = "Bags",
+        expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_BOE,
+        type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
+        hideBlocked = true, sort = "Name",
+    },
+    {
+        name = "Sell Old Consumables",
+        source = "Bags", dest = "Vendor",
+        expansion = EXPANSION_FILTER_NOT_CURRENT, bind = BIND_FILTER_ALL,
+        type = Data.ItemTypes.CONSUMABLE, slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
+        hideBlocked = true, sort = "Vendor Value",
+    },
+    {
+        name = "Consolidate Warbound Gear",
+        source = STORAGE_PRIVATE_BANK, dest = STORAGE_WARBAND_BANK,
+        expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_WARBAND,
+        type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
+        hideBlocked = true, sort = "Name",
+    },
+}
+
+local function CopyFilterValue(value)
+    if type(value) ~= "table" then return value end
+    local copy = {}
+    for key, entry in pairs(value) do copy[key] = entry end
+    return copy
+end
 
 -- Seeds the two default presets the first time the addon runs (or when the
 -- saved-filter list is empty and the seed flag has never been set).
@@ -834,10 +915,37 @@ local function SeedDefaultSavedFilters()
                 slot      = preset.slot,
                 armorType = preset.armorType or ARMOR_FILTER_ALL,
                 upgrade   = preset.upgrade,
+                source    = preset.source,
+                dest      = preset.dest,
+                hideBlocked = preset.hideBlocked,
+                sort      = preset.sort,
             })
         end
     end
     ns.DB.savedFiltersSeeded = true
+end
+
+local function MigrateSavedFiltersToWorkflows()
+    if (ns.DB.savedWorkflowSchemaVersion or 0) >= 1 then return end
+    -- Existing entries intentionally remain filter-only: silently assigning a
+    -- route would change what a familiar preset does. Newly seeded and newly
+    -- saved entries already use the complete workflow schema.
+    ns.DB.savedWorkflowSchemaVersion = 1
+end
+
+local function GetQuickWorkflowOptions()
+    local opts = {}
+    for _, workflow in ipairs(QUICK_WORKFLOWS) do
+        table.insert(opts, { text = workflow.name, value = workflow.name })
+    end
+    return opts
+end
+
+local function FindQuickWorkflow(name)
+    for _, workflow in ipairs(QUICK_WORKFLOWS) do
+        if workflow.name == name then return workflow end
+    end
+    return nil
 end
 
 local function GetSavedFilters()
@@ -865,19 +973,30 @@ end
 local function ApplySavedFilter(preset, tabName)
     if not preset then return end
     local filters = EnsureTabFilters(tabName)
-    filters.expansion.include = preset.expansion
-    filters.bind.include      = preset.bind
-    filters.type.include      = preset.type
+    local legacyFilterOnly = preset.source == nil and preset.dest == nil
+        and preset.hideBlocked == nil and preset.search == nil
+        and preset.itemLevelMin == nil and preset.itemLevelMax == nil
+        and preset.sort == nil
+    filters.expansion.include = preset.expansion or EXPANSION_FILTER_ALL
+    filters.bind.include      = preset.bind or BIND_FILTER_ALL
+    filters.type.include      = CopyFilterValue(preset.type or "All")
     EnsureFilterBranch(filters, "slot")
-    filters.slot.include      = preset.slot
+    filters.slot.include      = CopyFilterValue(preset.slot or "All")
     EnsureFilterBranch(filters, "armorType")
     filters.armorType.include = preset.armorType or ARMOR_FILTER_ALL
     EnsureFilterBranch(filters, "upgrade")
-    filters.upgrade.include   = preset.upgrade
+    filters.upgrade.include   = preset.upgrade or "All"
+    if not legacyFilterOnly then
+        filters.hideBlocked       = preset.hideBlocked and true or false
+        filters.name.includeText  = preset.search or ""
+        filters.itemLevel.min     = NormalizeItemLevel(preset.itemLevelMin)
+        filters.itemLevel.max     = NormalizeItemLevel(preset.itemLevelMax)
+        if preset.sort then ns.DB.ui.transferSort = preset.sort end
+    end
 end
 
--- Saves the current categorical filter state under the given name.
--- Overwrites any existing preset with the same name.
+-- Saves the current route, filter state, actionable-only setting, and sort mode.
+-- Overwrites any existing workflow with the same name.
 local function SaveFilter(name, tabName)
     if not name or name == "" then return false end
     local filters = EnsureTabFilters(tabName)
@@ -885,10 +1004,17 @@ local function SaveFilter(name, tabName)
         name      = name,
         expansion = filters.expansion.include,
         bind      = filters.bind.include,
-        type      = filters.type.include,
-        slot      = filters.slot and filters.slot.include or "All",
+        type      = CopyFilterValue(filters.type.include),
+        slot      = CopyFilterValue(filters.slot and filters.slot.include or "All"),
         armorType = filters.armorType and filters.armorType.include or ARMOR_FILTER_ALL,
         upgrade   = filters.upgrade and filters.upgrade.include or "All",
+        source    = UI.transferSource,
+        dest      = UI.transferDest,
+        hideBlocked = filters.hideBlocked and true or false,
+        search    = filters.name.includeText ~= "" and filters.name.includeText or nil,
+        itemLevelMin = filters.itemLevel and filters.itemLevel.min or nil,
+        itemLevelMax = filters.itemLevel and filters.itemLevel.max or nil,
+        sort      = ns.DB.ui.transferSort or "Name",
     }
     ns.DB.savedFilters = ns.DB.savedFilters or {}
     for i, existing in ipairs(ns.DB.savedFilters) do
@@ -915,8 +1041,11 @@ local function DeleteSavedFilter(name)
 end
 
 P.SeedDefaultSavedFilters = SeedDefaultSavedFilters
+P.MigrateSavedFiltersToWorkflows = MigrateSavedFiltersToWorkflows
 P.GetSavedFilters         = GetSavedFilters
 P.GetSavedFiltersOptions  = GetSavedFiltersOptions
+P.GetQuickWorkflowOptions = GetQuickWorkflowOptions
+P.FindQuickWorkflow       = FindQuickWorkflow
 P.FindSavedFilter         = FindSavedFilter
 P.ApplySavedFilter        = ApplySavedFilter
 P.SaveFilter              = SaveFilter

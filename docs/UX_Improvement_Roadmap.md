@@ -2,7 +2,7 @@
 
 ## 1. Context
 
-This document tracks UX friction and improvement opportunities as the addon evolves. Items marked **Done** were addressed during the 0.3.0 or 0.4.0 cycles.
+This document tracks UX friction and improvement opportunities as the addon evolves. Items marked **Done** have shipped or are implemented in the current development cycle.
 
 ## 2. UX Goals
 
@@ -41,47 +41,41 @@ This document tracks UX friction and improvement opportunities as the addon evol
 - **Upgrade filter API fix**: Replaced removed `GetInventoryItemLevel` API with `C_Item.GetCurrentItemLevel` (patch 12.x).
 - **Slot/Armor Type filter fix**: Resolved forward-reference error that caused Lua errors when using Slot or Armor Type filters.
 
+### Implemented for 0.6.0
+
+- **Quick tasks**: Five built-in route/filter setups cover the most common deposit, withdrawal, vendor, and Warband workflows.
+- **Complete saved workflows**: Saved entries now include Source, Destination, every filter, Actionable only, query fields, and sort order while retaining legacy custom presets.
+- **Progressive filter disclosure**: Search, item level, Actionable only, and sorting remain visible; categorical filters live in an expandable drawer with an active count.
+- **Result funnel**: Source, matching, movable, blocked, and selected counts make each narrowing stage visible.
+- **Contextual empty states**: Missing scans, empty storage, filter exclusions, and hidden blocked results now have distinct explanations.
+- **Contextual primary action**: The footer says Deposit, Withdraw, Move, or Sell and includes the selected count and vendor value where applicable.
+- **Route swap and sorting**: Non-vendor routes can be reversed, and results can be sorted by six useful dimensions.
+- **Event-driven refresh**: Bank-open scans and debounced bag/bank change events keep visible data current; the panel reports refresh and transfer status.
+- **Context lifecycle**: Source/Destination options refresh as bank or vendor access changes, and a panel opened from those contexts closes when the context closes.
+
 ## 4. Current Friction Areas
 
-### A. Empty-state Explanations
+### A. Block-reason Breakdown
 
-Status: Partial — block reasons exist per-row, but top-level empty states ("0 items") do not yet summarize why.
+Status: Open — the result funnel shows total blocked rows, while detailed reasons remain per-item.
 
-Proposed:
+Potential next step: add a compact breakdown such as "3 protected, 2 no space" without crowding the primary list.
 
-- Show a count summary when list is empty: e.g. "12 items filtered out — 3 blocked by rules, 9 outside Expansion filter."
-- Distinguish between: no scan data, nothing passes filters, all rows blocked.
+Priority: P2
 
-Priority: P1
+### B. Workflow Management
 
-### B. Scan on Context Open
+Status: Open — workflows can be saved, overwritten, loaded, and removed, but not reordered or duplicated.
 
-Status: Deferred — the addon does not auto-scan when a bank or vendor window opens.
+Potential next step: add lightweight rename/duplicate controls only if real use shows the current name-overwrite model is limiting.
 
-Proposed:
+Priority: P3
 
-- When bank window opens and last scan is stale, trigger a background bank scan automatically.
-- Show a brief notice when an auto-scan completes.
+### C. Scan Freshness
 
-Priority: P1
+Status: Partial — inventory changes refresh automatically while context permits, but freshness is expressed as a timestamp/status rather than a confidence indicator.
 
-### C. Auto-close Stale Context
-
-Status: Partial — Source/Destination dropdowns now validate and reset to valid defaults with in-panel notices when context changes (bank/vendor close).
-
-Remaining:
-
-- Context notices are shown but dropdowns are not automatically cleared mid-session without user interaction.
-
-Priority: P2 (deferred; current validation with notices provides good UX)
-
-### D. Workflow-specific Footer Actions
-
-Status: Not started.
-
-Proposed:
-
-- Contextual button label text, for example "Bank Selected" when Destination is Bank, "Sell Selected" when Destination is Vendor.
+Potential next step: flag bank results as stale after changing characters or when the bank has not been opened in the current session.
 
 Priority: P2
 
@@ -100,7 +94,7 @@ The roadmap should improve speed and clarity without relaxing core safety princi
 
 A successful AH pull UX should satisfy all:
 
-1. From bank, user can run one command or load a saved preset.
+1. From bank, user can load the built-in "Pull Auctionable BoEs" quick task.
 2. List shows only auctionable BoE items.
 3. WuE items are excluded unless explicitly requested.
 4. Selected items are immediately transferable.

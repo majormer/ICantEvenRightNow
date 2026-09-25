@@ -17,14 +17,15 @@ The addon is intentionally cautious. Unknown, quest, legendary, and protected it
 - **Armor Type Filter** - Filter armor items by type (Cloth, Leather, Mail, Plate) for targeted gear management.
 - **Current-Content Protection** - Keeps current expansion and protected seasonal items, including Mythic Keystones, out of old-content cleanup flows.
 - **Explainable Decisions** - Shows recommendation, reason, blocking status, and rule state before you act.
-- **Saved Filter Presets** - Save named combinations of Expansion, Binding, Type, Slot, and Upgrade filters for one-click reload across sessions.
+- **Quick Tasks** - Load complete setups for common jobs such as depositing old items, pulling upgrades or auctionable BoEs, selling old consumables, and consolidating Warbound gear.
+- **Saved Workflows** - Save Source, Destination, filters, Actionable only, search, item-level range, and sort order for one-click reuse across sessions.
 
 ### Cleanup Console UI
 
 The addon has four tabs:
 
 1. **Summary** - Inventory scope counts: items in bags, items in bank, old-content counts, Warband bank items, active rules, and last scan timestamps.
-2. **Transfer** - Move items between any combination of Bags, Private Bank, Warband Bank, Vendor, or individual Bank tabs. Filter by Expansion, Binding, Type, Slot, Upgrade, item level, or name. Save named filter presets to reload common setups instantly. Per-item block reasons and an actionable-only toggle keep the list focused.
+2. **Transfer** - Move items between any combination of Bags, Private Bank, Warband Bank, Vendor, or individual Bank tabs. Start with a quick task or saved workflow, refine by Expansion, Binding, Type, Slot, Upgrade, item level, or name, then sort and select. Per-item block reasons and an Actionable only toggle keep the list focused.
 3. **Rules** - Item-ID overrides: Protect, Ignore, or Never Sell. Each rule shows its origin and can be removed individually.
 4. **Settings** - Configure the minimap launcher and inspect quick-access status.
 
@@ -34,7 +35,7 @@ Quick access uses a minimap launcher. The minimap launcher uses LibDataBroker/Li
 
 Actions are enabled only when the related game context is available:
 
-- Bags, private bank, reagent bank, and warband bank scanning
+- Bags, character bank tabs, and Warband bank scanning
 - Bank-open checks for movement and organization
 - Merchant-open checks for selling
 - Combat-state checks before sensitive actions
@@ -42,9 +43,9 @@ Actions are enabled only when the related game context is available:
 
 ### Safety-First Design
 
-- **Scoped Selection** - Select visible or recommended rows instead of using broad destructive actions.
+- **Scoped Selection** - Select movable rows instead of using broad destructive actions.
 - **Explicit Confirmation** - The addon acts only on selected rows.
-- **Manual Actions Allowed** - In Move tab, manual bank/recall actions are available regardless of recommendation when rules, context, and capacity allow it.
+- **Manual Intent Preserved** - Transfer choices remain player-driven when rules, context, and capacity allow them.
 - **Rule Overrides** - Item-ID rules let you protect favorites or teach the addon how to handle edge cases.
 
 ## Installation
@@ -84,15 +85,22 @@ Actions are enabled only when the related game context is available:
 1. Open the console with `/icanteven`.
 2. Scan bags, bank, or all available storage.
 3. In the Transfer tab, choose a Source and Destination.
-4. Apply filters — Expansion, Binding, Type, Slot, Upgrade, or item level — to narrow the list.
-5. Load a saved filter preset or save the current filter combination for reuse.
+4. Load a quick task or saved workflow, or configure the route manually.
+5. Refine and sort the results; save the complete setup as a workflow if you want to reuse it.
 6. Select the rows you want to act on.
 7. Transfer or sell selected items.
 8. Add Rules for any item you want handled differently next time.
 
 ## Recent Changes
 
-**0.5.0** (2026-05-10):
+**0.6.0** (in development):
+- Added five quick tasks and complete saved workflows
+- Added compact advanced filters, route swapping, and six result sort modes
+- Added source/match/movable/blocked/selected counts and contextual empty states
+- Added contextual Deposit, Withdraw, Move, and Sell actions with last-result status
+- Added debounced inventory refresh and WoW Retail 12.1 compatibility metadata
+
+**0.5.0** (2026-05-11):
 - Added Armor Type filter for gear (Cloth/Leather/Mail/Plate)
 - Transfer tab is now the default landing tab
 - Fixed Upgrade filter crash (API change in patch 12.x)
@@ -119,7 +127,7 @@ ICantEvenRightNow/
 ├── Debug.lua              # Debug utilities
 ├── Shared.lua             # Constants, bag ID resolution, context detection, storage helpers
 ├── Evaluator.lua          # Binding detection, item classification, decision building
-├── Filter.lua             # Filter state, matching logic, option builders, saved presets, upgrade detection
+├── Filter.lua             # Filter state, matching logic, quick/saved workflows, sorting inputs, upgrade detection
 ├── Scanner.lua            # Container scanning and bank diagnostics
 ├── Transfer.lua           # Movement execution and vendor selling
 ├── UI.lua                 # UI construction and refresh (FauxScrollFrame, tab frames)
@@ -133,7 +141,8 @@ The addon uses a modular architecture introduced in 0.4.0. Modules communicate t
 
 - **Source / Destination** - Where items are coming from and going to. The player sets both explicitly.
 - **Filter** - Narrows the Transfer list by Expansion, Binding, Type, Slot, Upgrade potential, item level, or name search.
-- **Saved Filter Preset** - A named combination of categorical filters that can be saved and reloaded in one click.
+- **Quick Task** - A built-in route and filter setup for a common inventory job.
+- **Saved Workflow** - A user-named route, filter, actionable-only, query, and sort setup that can be reloaded in one click.
 - **Block Reason** - Why a specific item cannot be transferred right now (bank closed, vendor closed, no slots, Protect rule, etc.).
 - **Rule** - An item-ID override: Protect, Ignore, or Never Sell.
 
@@ -141,11 +150,11 @@ Transfer intent is always player-driven. The addon classifies and explains; the 
 
 ### Saved Variables
 
-- `ICantEvenRightNowDB` - Stores rules, UI state, context state, scan data, error log, and saved filter presets.
+- `ICantEvenRightNowDB` - Stores rules, UI state, context state, scan data, error log, and saved workflows.
 
 ## Compatibility
 
-- **Game Version:** World of Warcraft Retail (12.x / Midnight)
+- **Game Version:** World of Warcraft Retail 12.1 (Midnight)
 - **Dependencies:** None required
 - **Optional:** LibStub, LibDataBroker-1.1, and LibDBIcon-1.0 for standard minimap launcher integration
 - **Conflicts:** None known

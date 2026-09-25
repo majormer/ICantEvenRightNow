@@ -18,9 +18,12 @@ If you want full automation with zero review, this addon is probably not a fit. 
 - Scan bags, private bank (all tabs or individual), and warband bank storage.
 - Unified Transfer tab: pick any Source and Destination — Bags, Bank tabs, Warband Bank, or Vendor — and act on exactly that combination.
 - Filter by expansion, binding, item type, slot, upgrade potential, item level, or name search within any transfer.
-- Saved filter presets: save and reload common filter combinations instantly.
+- Five quick tasks configure common deposit, withdrawal, vendor, and Warband jobs instantly.
+- Saved workflows remember the route, filters, Actionable only, search, item-level range, and sort order.
+- Compact advanced filters, route swapping, and sorting by name, status, item level, vendor value, expansion, or binding.
 - Scrollable item list with per-item block reasons.
 - Actionable-only toggle: hide blocked rows and focus on what you can move right now.
+- Result counts show how many source items match, can move, are blocked, and are selected.
 - Per-item block reasons explain exactly why an item cannot be moved (bank closed, vendor closed, no slots, item rule, equipped, etc.).
 - Protect current-content, quest, legendary, and rule-protected items by default.
 - Per-item rules: Protect, Ignore, Never Sell. Rules always win.
@@ -33,8 +36,8 @@ If you want full automation with zero review, this addon is probably not a fit. 
 1. Open the console with `/icanteven`.
 2. Click `Scan Bags` on the Transfer tab.
 3. Open your bank, then click `Scan Bank`.
-4. Set **From** to your source (e.g. Bags) and **To** to your destination (e.g. Bank (All Tabs)).
-5. Filter by expansion and item type, select rows, then click **Transfer Selected**.
+4. Load a quick task or set **From** and **To** manually.
+5. Refine the results, select movable rows, then use the contextual action button.
 
 Tip: use the Actionable Only checkbox to hide anything currently blocked so you only see what you can act on right now.
 
@@ -43,28 +46,24 @@ Tip: use the Actionable Only checkbox to hide anything currently blocked so you 
 ### 1) Legacy Bag Cleanup
 
 - Open bank.
-- Transfer tab → From: Bags, To: Bank (All Tabs).
-- Filter Expansion to an old expansion.
-- Review rows and click Transfer Selected.
+- Load **Deposit Old Items**.
+- Review rows and deposit the selected items.
 
 ### 2) AH Prep (Find Auctionable Gear)
 
 - Open bank.
-- Transfer tab → From: Bank (All Tabs), To: Bags.
-- Filter Binding to BoE (not Type).
+- Load **Pull Auctionable BoEs**.
 - Select and recall only what you want to list.
 
 ### 3) Vendor Pass
 
 - At a vendor with items in your bags.
-- Transfer tab → From: Bags, To: Vendor.
-- Filter by Expansion (Not current) and Type (Consumable) for conservative selling.
-- Review rows — Never Sell rules block protected items automatically — then Sell Selected.
+- Load **Sell Old Consumables**.
+- Review rows — Never Sell rules block protected items automatically — then use the Sell action.
 
 ### 4) Warband Storage Shuffle
 
-- Transfer tab → From: Bags, To: Warband Bank (or vice versa).
-- No special mode needed; it is just another Source/Destination pair.
+- Open the bank and load **Consolidate Warbound Gear**, or configure any other Source/Destination pair manually.
 
 ## Per-Item Rules
 

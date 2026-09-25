@@ -150,9 +150,11 @@ ns.Data.DefaultDB = {
         },
         showBankButton = false,
         showVendorButton = false,
+        transferSort = "Name",
         search = "",
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
-    savedFilters = {},       -- User-named filter presets: array of { name, expansion, bind, type, slot, armorType, upgrade }
+    savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once
+    savedWorkflowSchemaVersion = 0,
 }

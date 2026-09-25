@@ -73,8 +73,8 @@ Primary responsibilities:
 - Upgrade detection: `GetEquippedItemLevel` using `C_Item.GetCurrentItemLevel`, `INVTYPE_TO_SLOTS` mapping
 - Slot label mapping: `EQUIPLOC_TO_SLOT_LABEL`
 - Armor type label mapping: `ARMOR_SUBCLASS_LABEL`, `GetArmorTypeFilterLabel`
-- Saved filter presets: `SeedDefaultSavedFilters`, `GetSavedFiltersOptions`, `FindSavedFilter`, `ApplySavedFilter`, `SaveFilter`, `DeleteSavedFilter`
-- Label helpers: `GetExpansionFilterLabel`, `GetMultiSelectLabel`, `BuildFilterSummary`
+- Quick and saved workflows: `GetQuickWorkflowOptions`, `FindQuickWorkflow`, `SeedDefaultSavedFilters`, `MigrateSavedFiltersToWorkflows`, `ApplySavedFilter`, `SaveFilter`, `DeleteSavedFilter`
+- Label and state helpers: `GetExpansionFilterLabel`, `GetMultiSelectLabel`, `BuildFilterSummary`, `GetActiveFilterCount`
 
 ### `Scanner.lua`
 
@@ -104,8 +104,8 @@ Primary responsibilities:
 - All frame construction (`BuildSummaryTab`, `BuildTransferTab`, `BuildRulesTab`, `BuildSettingsTab`)
 - Per-tab refresh: `Core.RefreshSummary`, `Core.RefreshTransfer`, `Core.RefreshRules`
 - Transfer tab: FauxScrollFrame scrollable list (8 visible rows, `ROW_HEIGHT = 42`)
-- Transfer tab filter row: Expansion, Type, Binding, Slot, Upgrade dropdowns
-- Transfer tab presets row: Load dropdown, name EditBox, Save and Remove buttons
+- Transfer tab workflows: built-in quick tasks plus load/save/remove for complete user workflows
+- Transfer tab refinement: persistent high-frequency controls, expandable categorical filters, sorting, result funnel, and contextual actions
 - Quick-access minimap launcher construction and updates
 - Context notice display
 
@@ -114,8 +114,8 @@ Primary responsibilities:
 Primary responsibilities:
 
 - Addon lifecycle (`Core.OnAddonLoaded`)
-- DB initialisation: `SafeCopyDefaults(Data.DefaultDB, ...)` + `MigrateLegacyTabFilters` + `SeedDefaultSavedFilters`
-- Event registration and dispatch
+- DB initialisation: `SafeCopyDefaults(Data.DefaultDB, ...)` + filter/workflow migrations + default workflow seeding
+- Event registration and debounced bag/bank refresh dispatch
 - Context detection updates (`Core.UpdateContext`)
 - Inventory scanning entry point (`Core.ScanInventory`)
 - Transfer execution entry points (`Core.ExecuteTransferOne`, `Core.ExecuteTransferSelected`)
@@ -132,9 +132,10 @@ Key sections:
 - `context`: Live interaction/combat state flags
 - `lastScan`: Timestamps for bags and bank scans
 - `scans.bags` and `scans.bank`: Last scanned item records
-- `ui`: UI preferences and active filter state (`ui.tabFilters`)
-- `savedFilters`: Array of named filter presets `{ name, expansion, bind, type, slot, upgrade }`
-- `savedFiltersSeeded`: Bool — true after default presets are written once
+- `ui`: UI preferences, Transfer sort mode, and active filter state (`ui.tabFilters`)
+- `savedFilters`: Backward-compatible storage for named workflows; current entries include route, filters, Actionable only, query fields, and sort mode
+- `savedFiltersSeeded`: Bool — true after default entries are written once
+- `savedWorkflowSchemaVersion`: Migration gate for the expanded workflow schema
 - `errorLog`: Capped array of Lua error entries `{ time, msg }`
 
 Rule schema (per itemID):
@@ -157,6 +158,7 @@ Filter state schema (per tab, under `ui.tabFilters[tabName]`):
 - `itemLevel.min`, `itemLevel.max`: optional numeric bounds (equippable gear only)
 - `name.includeText`, `name.excludeText`: search strings
 - `hideBlocked`: bool
+- `advancedEnabled`: bool controlling the categorical filter drawer
 
 ## 4. Container and Storage Model
 
@@ -164,7 +166,7 @@ Storage tiers represented internally:
 
 - Bags
 - Private Bank
-- Reagent Bank (only when distinct IDs are present in the client)
+- Reagent Bank (legacy compatibility only; removed from current Retail)
 - Warband Bank
 - Bank (All Tabs) — convenience aggregate for source/dest selection
 - Bank: [named tab] — individual bank tabs resolved from `C_Bank` API
@@ -184,7 +186,7 @@ High-level sequence:
 5. Build per-item records with metadata from `GetItemInfo`
 6. Enrich binding details via `GetBindingDetails`
 7. Save scan results to `ns.DB.scans`
-8. Schedule cache-warm rescan when item info is incomplete
+8. Schedule up to two cache-warm rescans when item info is incomplete
 
 Scan record fields include:
 
@@ -223,13 +225,14 @@ All filter state lives in `ns.DB.ui.tabFilters[tabName]`, lazily initialised by 
 
 Matching is stateless: `MatchesTabFilters(item, tabName)` and `PlanMatchesTabFilters(plan, tabName)` read the DB directly.
 
-Saved filter presets:
+Quick and saved workflows:
 
 - Stored in `ns.DB.savedFilters` as an ordered array
-- Each preset stores: `name`, `expansion`, `bind`, `type`, `slot`, `armorType`, `upgrade`
-- ilvl range and search text are intentionally excluded (too query-specific for reuse)
-- `SeedDefaultSavedFilters` writes two defaults on first load: "Old Gear Dump" and "Upgrade Check"
-- Applying a preset calls `ApplySavedFilter(preset, tabName)`, then `Core.RefreshUI`
+- Built-in quick tasks cover old-item deposits, upgrade/BoE pulls, old-consumable sales, and Warbound consolidation
+- New saved workflows store route, categorical filters, Actionable only, search, item-level range, and sort mode
+- Legacy custom filter-only presets remain valid and preserve query-specific state when loaded
+- `SeedDefaultSavedFilters` writes two complete defaults on first load; `MigrateSavedFiltersToWorkflows` preserves all existing entries as legacy filter-only presets
+- Applying a workflow calls `ApplySavedFilter`, validates the requested context, updates the route when available, and refreshes the UI
 
 ## 8. UI Model
 
@@ -245,17 +248,20 @@ UI state is persisted in DB filters and toggles.
 Transfer tab layout:
 
 1. Source / Destination dropdowns (context-gated: bank options hidden unless bank is open; vendor hidden unless vendor is open)
-2. Preset row: "Preset:" dropdown to load a saved filter, name EditBox, Save and Remove buttons
-3. Filter rows: Expansion, Type, Binding, Slot, Armor Type, Upgrade dropdowns; ilvl min/max inputs; Search text
-4. Action row: "Actionable only" toggle, Transfer All, Transfer Selected, Deselect All buttons
+2. Workflow row: built-in quick-task dropdown, saved-workflow dropdown, name EditBox, Save and Remove buttons
+3. Refine row: Search, ilvl min/max, Actionable only, Sort, advanced-filter toggle, and Clear
+4. Expandable filter row: Expansion, Type, Binding, Slot, Armor Type, and Upgrade
 5. Scrollable item list: FauxScrollFrame, 8 visible rows, each row shows item link, item level, binding, and block reason
+6. Result funnel and contextual primary action: source/match/movable/blocked/selected counts plus Deposit, Withdraw, Move, or Sell
 
 Interaction model:
 
 - Source/Destination determines candidates; filters narrow them
 - "Actionable only" hides blocked rows for focused batch operations
+- Quick tasks and saved workflows configure intent but never select or move items
 - Hard blockers come from Protect rules, context, capacity, and Never Sell rules
 - Per-row block reason text explains why an item cannot be transferred
+- Empty states distinguish missing scans, empty storage, filter exclusions, and hidden blocked rows
 
 Quick access behavior:
 
@@ -281,7 +287,7 @@ Core command groups:
 - Good explainability (block reasons surfaced per item)
 - Single Transfer tab replaces the old three-tab Move/Organize/Vendor split
 - Filter system is comprehensive: Expansion, Binding, Type, Slot, Armor Type, Upgrade, ilvl, Search
-- Saved filter presets reduce repetitive setup for common workflows
+- Quick tasks and complete saved workflows reduce repetitive setup
 - Works across modern and shifting bank API layouts
 
 ### Constraints

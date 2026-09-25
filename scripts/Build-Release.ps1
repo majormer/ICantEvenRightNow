@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Version = "0.1.0"
+    [string]$Version = "0.6.0"
 )
 
 $AddonName = "ICantEvenRightNow"
@@ -29,9 +29,17 @@ New-Item -Path $ReleasePath -ItemType Directory -Force | Out-Null
 $FilesToCopy = @(
     "$AddonName.toc",
     "$AddonName.png",
+    "ICantEvenRightNow_icon.png",
+    "ICantEvenRightNow_icon.tga",
     "Core.lua",
     "Data.lua",
     "Debug.lua",
+    "Shared.lua",
+    "Evaluator.lua",
+    "Filter.lua",
+    "Scanner.lua",
+    "Transfer.lua",
+    "UI.lua",
     "LICENSE",
     "CHANGELOG.md"
 )
