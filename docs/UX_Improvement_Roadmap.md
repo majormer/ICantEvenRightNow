@@ -326,7 +326,51 @@ Verified 2026-09-25 against BetterBags `main` (v0.5.11, Interface 120100): exter
 - Display only: categories never trigger actions.
 - BetterBags treats character and Warband bank tabs as one bank view; categories apply there too.
 
-## 9. Safety Guardrails to Preserve
+## 9. Planned: Value Awareness and Auction Data (target 0.6.0)
+
+Status: Planned. Priority: P1 for vendor protection, P2 for the rest. APIs verified 2026-09-25 (see local API notes).
+
+### V1. Price sources, in order
+
+1. **Auctionator** if installed: `Auctionator.API.v1.GetAuctionPriceByItemID/Link` plus `GetAuctionAgeByItemID/Link` for freshness.
+2. **TSM** if installed: `TSM_API.GetCustomPriceValue` (e.g. DBMarket, DBRegionMarketAvg, DBRegionSaleRate). Most DB sources need the TSM desktop app. Call the API only; never embed TSM code (All Rights Reserved).
+3. **Own targeted lookup** as a fallback: a "Price my items" button while the auction house is open, querying only items the player owns, paced by `C_AuctionHouse.IsThrottledMessageSystemReady()`. No `ReplicateItems` full scan (15-minute account-wide throttle, collides with Auctionator).
+
+Every price is stored as `{price, source, timestamp}`. Commodity prices are region-wide and shared by all characters; non-commodity prices are realm-specific and stored with the realm.
+
+### V2. Freshness
+
+- Every price shows its source and age ("~250g, Auctionator, 2 days").
+- Stale thresholds (defaults about 3 days for commodities, 7 for gear; configurable). Stale prices raise a Home card: "Prices are 9 days old: visit an auction house to refresh."
+- With no price source, auction features stay hidden and one card explains how to enable them.
+
+### V3. Vendor protection (safety)
+
+- The Sell task flags items worth substantially more at auction than at a vendor ("Worth ~250g at auction. Sell for 2g?") and does not pre-select them.
+- Uncollected appearances, toys, mounts, and pets get a "Keep: not collected" flag and are excluded from sell pre-selection.
+
+### V4. Auction vs vendor vs keep
+
+- Compare auction price × 0.95 (5% cut) with vendor price; suggest auctioning only above a user-set minimum gain. Deposits (a share of vendor price, lost if unsold) count against slow sellers; TSM sale rate adds "rarely sells" when available.
+- `C_AuctionHouse.IsSellItemValid(itemLocation, false)` and binding rule out items that cannot be auctioned.
+
+### V5. Auction candidates across the account
+
+- Home card: "Auction candidates: 14 items, ~3,200g (prices 2 days old)", drawing on bags, character banks, and the Warband bank snapshot.
+- The task gathers candidates for posting; posting and buying stay with Auctionator/TSM.
+- With W0/W4, candidates can travel to the account's auction character through the Warband bank via the hand-off queue.
+
+### V6. Other value signals
+
+- **Collection status**: transmog (`C_TransmogCollection`, exact-source check; any-source needs more work), toys, mounts, pets.
+- **Disenchant value** from Auctionator or TSM ("Destroy"); no Blizzard API. With roles: "Disenchant (Alt C, Enchanter) ~40g vs vendor 3g".
+- **Crafting use**: show both "~80g at auction" and "used by Alt C (Tailoring)".
+- **Account quantity**: "You have 6 of these across the account."
+- **Recipe already known**: no API found; likely tooltip text. Unverified.
+
+Safety: prices are advisory. The addon never posts or buys, and no action happens without selection and confirmation.
+
+## 10. Safety Guardrails to Preserve
 
 Do not remove:
 
@@ -337,7 +381,7 @@ Do not remove:
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
 
-## 10. Acceptance Criteria for AH Pull UX
+## 11. Acceptance Criteria for AH Pull UX
 
 A successful AH pull UX should satisfy all:
 
