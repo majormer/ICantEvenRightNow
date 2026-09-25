@@ -205,10 +205,11 @@ Status: Planned. Priority: P1.
 
 ### H3. Pre-selection for quick tasks
 
-Status: Planned. Priority: P1. **Open decision for the user.**
+Status: Planned. Priority: P1. Decided 2026-09-25: a setting, off by default.
 
-- Option: loading a quick task pre-selects its movable items; the action button still reads "Deposit 23" and still requires a click after the list is visible.
-- Proposed as a setting, off by default, until the user decides.
+- When enabled, loading a quick task (from a Home card or the task list) pre-selects its movable items; the action button still reads "Deposit 23" and still requires a click after the list is visible.
+- When disabled (default), tasks load with nothing selected, as today.
+- Blocked items are never pre-selected, and pre-selection never triggers an action on its own.
 
 ### H4. Faster review
 
