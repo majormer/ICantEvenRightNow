@@ -85,7 +85,7 @@ local function GetAllTasks()
         if not task.isAvailable or task.isAvailable() then
             table.insert(tasks, { name = task.name, kind = "extra", preset = task.preset,
                 description = task.description, predicate = task.predicate, count = task.count, open = task.open,
-                secondary = task.secondary })
+                secondary = task.secondary, valueMode = task.valueMode })
         end
     end
     for _, preset in ipairs(P.GetSavedFilters()) do
@@ -145,7 +145,7 @@ P.GetTaskPlans = TaskPlans
 -- Evaluate a task into card data.
 local function EvaluateTask(task)
     local card = {
-        name = task.name, kind = task.kind, description = task.description,
+        name = task.name, kind = task.kind, description = task.description, valueMode = task.valueMode,
         ready = 0, waiting = 0, value = 0, needs = nil, task = task,
     }
     if task.count then
@@ -155,6 +155,7 @@ local function EvaluateTask(task)
         for _, plan in ipairs(TaskPlans(task)) do
             local item = plan.item
             local stackValue = (item.sellPrice or 0) * (item.count or 1)
+            if task.valueMode == "auction" and P.GetItemValue then stackValue = (P.GetItemValue(item)) end
             if plan.movable then
                 card.ready = card.ready + 1
                 card.value = card.value + stackValue
@@ -220,7 +221,9 @@ end
 
 -- One-line card summary: "23 ready (4g 12s)" / "12 waiting: Visit a bank".
 function P.CardSummary(card)
-    local money = card.value > 0 and (" (" .. P.FormatMoney(card.value) .. ")") or ""
+    local money = card.value > 0
+        and (" (" .. (card.valueMode == "auction" and "~" or "") .. P.FormatMoney(card.value)
+            .. (card.valueMode == "auction" and " at auction" or "") .. ")") or ""
     if card.ready > 0 then
         local extra = card.waiting > 0 and (", " .. card.waiting .. " more elsewhere") or ""
         return card.ready .. " ready" .. money .. extra

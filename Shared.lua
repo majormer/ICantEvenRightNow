@@ -531,6 +531,16 @@ local function LocationKey(item)
     return table.concat({ item.scope or "?", tostring(item.bagID), tostring(item.slot), tostring(item.itemID) }, ":")
 end
 
+-- A readable item name: the cached name, else the name inside the hyperlink,
+-- else "Item <id>". Never returns an empty string.
+local function ItemDisplayName(name, link, itemID)
+    if type(name) == "string" and name ~= "" then return name end
+    local fromLink = type(link) == "string" and link:match("%[(.-)%]") or nil
+    if fromLink and fromLink ~= "" then return fromLink end
+    return "Item " .. tostring(itemID or "?")
+end
+P.ItemDisplayName = ItemDisplayName
+
 local function SlotKey(bagID, slot)
     return tostring(bagID) .. ":" .. tostring(slot)
 end

@@ -387,12 +387,21 @@ local function UniqueNames(items)
     return names
 end
 
+-- An auction candidate is worth noticeably more at auction AND has no reason
+-- to be kept (current-expansion content, used by a crafter or played
+-- character, uncollected appearance, protected, keepsake, active quest...).
+function P.IsAuctionCandidate(item)
+    if (P.AuctionAdvice(item)) ~= "auction" then return false end
+    if P.ExplainScanned and P.ExplainScanned(item).disposition == "keep" then return false end
+    return true
+end
+
 -- Auction candidates this character holds (bags, character bank, Warband bank).
 function P.AuctionCandidateItems()
     local list, seen = {}, {}
     for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
         for _, item in ipairs(P.GetScanList(scope)) do
-            if item.itemID and not seen[item.itemID] and (P.AuctionAdvice(item)) == "auction" then
+            if item.itemID and not seen[item.itemID] and P.IsAuctionCandidate(item) then
                 seen[item.itemID] = true
                 table.insert(list, item)
             end
@@ -454,7 +463,8 @@ function P.RegisterValueTasks()
         preset = { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
-        predicate = function(item) return (P.AuctionAdvice(item)) == "auction" end,
+        predicate = function(item) return P.IsAuctionCandidate(item) end,
+        valueMode = "auction",
         isAvailable = function() return P.HasPriceSource() end,
         secondary = {
             label = function()

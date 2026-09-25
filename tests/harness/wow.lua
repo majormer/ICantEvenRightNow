@@ -559,7 +559,6 @@ function World:_buildEnv()
             quality = def.quality, isReadable = false, hasLoot = false,
             hyperlink = world:itemLink(stack.itemID), isFiltered = false,
             hasNoValue = (def.sellPrice or 0) <= 0, itemID = stack.itemID, isBound = stack.bound,
-            itemName = def.name,
         }
     end
     G.C_Container = {

@@ -93,8 +93,9 @@ T.test("Auction Candidates: 'Check in Auctionator' searches every candidate at t
     T.eq(widget.secondary:GetText(), "Check in Auctionator")
     g:click(widget.secondary)
     local searched = g.world.auctionator.searches[1]
-    T.same(searched, { "Cataclysm Broadsword", "Obsidium Ore" }, "bags and bank candidates, by exact name")
-    T.contains(g:printed(), "Searching 2 items in Auctionator's Shopping tab")
+    -- The BoE broadsword is wearable by this Main, so it is kept, not suggested.
+    T.same(searched, { "Obsidium Ore" }, "candidates by exact name; items a played character uses are excluded")
+    T.contains(g:printed(), "Searching 1 item in Auctionator's Shopping tab")
 end)
 
 T.test("away from the AH, candidates are saved as an Auctionator shopping list", function()
@@ -136,4 +137,45 @@ T.test("names Auctionator would reject are cleaned", function()
     g:openAuctionHouse()
     T.ok(g:P().CheckCandidatesInAuctionator())
     T.same(g.world.auctionator.searches[1], { "OddName" })
+end)
+
+T.test("current-expansion and in-use items are never auction candidates", function()
+    local g = game(function(w)
+        w:defineItem(8301, { name = "Void-Touched Drums", classID = 0, subclassID = 8, maxStack = 20,
+            sellPrice = 100, expansionID = 11 })
+        w:put(0, 1, 8301, 39)                -- current expansion: keep
+        w:put(0, 2, I.VALUABLE_ORE, 20)      -- old, unused: candidate
+        w:put(0, 3, I.LINEN, 200)            -- old, but a crafter uses it: keep
+    end, { prices = { [8301] = 500000, [I.VALUABLE_ORE] = 90000, [I.LINEN] = 60000 },
+           ages = { [8301] = 1, [I.VALUABLE_ORE] = 1, [I.LINEN] = 1 } })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:db().characters["Main-R"].professions = { { name = "Tailoring", skillLine = 197 } }
+    g:Core().ScanInventory("bags", true)
+    local ids = {}
+    for _, item in ipairs(P.AuctionCandidateItems()) do ids[item.itemID] = true end
+    T.no(ids[8301], "current-expansion drums are not suggested for auction")
+    T.no(ids[I.LINEN], "linen your tailor uses is kept")
+    T.ok(ids[I.VALUABLE_ORE], "old unused ore is a candidate")
+end)
+
+T.test("Auction Candidates card shows the auction value, not the vendor value", function()
+    local g = game(function(w) w:put(6, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:openBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.contains(g:P().CardSummary(card), "1 ready (~171g 0s at auction)")
+end)
+
+T.test("items whose data hasn't loaded still get a readable name", function()
+    local g = game(function(w)
+        w:defineItem(8401, { name = "Slowly Loading Gem", classID = 7, maxStack = 20, cached = false, neverLoads = true })
+        w:put(0, 1, 8401, 3)
+    end)
+    local item = scanned(g, 8401)
+    T.eq(item.name, "Slowly Loading Gem", "name taken from the item link")
+    T.eq(g:P().ItemDisplayName("", nil, 42), "Item 42")
+    T.eq(g:P().ItemDisplayName(nil, "|cff|Hitem:1|h[]|h|r", 7), "Item 7")
 end)

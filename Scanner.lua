@@ -87,7 +87,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
             table.insert(output, {
                 itemID        = itemID,
-                name          = name or info.itemName or ("Item " .. itemID),
+                name          = P.ItemDisplayName(name or info.itemName, link or info.hyperlink, itemID),
                 link          = link,
                 icon          = icon or info.iconFileID,
                 quality       = quality or info.quality,

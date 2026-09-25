@@ -2076,7 +2076,7 @@ function Core.RefreshTransferUncached()
                 SetMembersSelected(not isSelected)
                 Core.RefreshUI()
             end)
-            local name = item.name or ("Item " .. item.itemID)
+            local name = P.ItemDisplayName(item.name, item.link, item.itemID)
             if #members > 1 then
                 name = name .. "  x" .. display.total .. " in " .. #members .. " stacks"
             end
