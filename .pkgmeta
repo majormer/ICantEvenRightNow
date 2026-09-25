@@ -16,6 +16,7 @@ ignore:
   - .git-blame-ignore-revs
   - .luarc.json
   - scripts
+  - tests
   - build
   - .release
   - "*.zip"

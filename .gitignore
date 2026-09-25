@@ -60,3 +60,6 @@ test_*.lua
 .aider*
 .copilot/
 .mcp.json
+
+# Local-only test fixtures (real SavedVariables copies; never committed)
+tests/fixtures/local/

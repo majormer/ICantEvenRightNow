@@ -4,6 +4,9 @@
 #   .\scripts\Test-Addon.ps1          full check
 #   .\scripts\Test-Addon.ps1 -Hook    used by .githooks/pre-commit (missing luac is a warning)
 #
+# Also runs the offline test suite: lua tests/run.lua tests/**/test_*.lua
+# (run one test by name: $env:ICER_TEST_FILTER = "part of test name").
+#
 # Lua compiler lookup order: $env:LUAC, LUAC=... in .env, then luac5.1 / luac / luac5.4 on PATH.
 # WoW runs Lua 5.1; a newer luac is fine for syntax but misses 5.1-only errors.
 
@@ -32,6 +35,22 @@ function Resolve-Luac {
         if ($candidate -and (Test-Path $candidate)) { return $candidate }
     }
     foreach ($name in @("luac5.1", "luac", "luac5.4", "luac54")) {
+        $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($cmd) { return $cmd.Source }
+    }
+    return $null
+}
+
+# The interpreter that matches the compiler: lua.exe beside luac, else lua5.1 / lua on PATH.
+function Resolve-Lua([string]$LuacPath) {
+    if ($LuacPath) {
+        $dir = Split-Path -Parent $LuacPath
+        foreach ($name in @("lua.exe", "lua5.1.exe", "lua")) {
+            $candidate = Join-Path $dir $name
+            if (Test-Path $candidate) { return $candidate }
+        }
+    }
+    foreach ($name in @("lua5.1", "lua")) {
         $cmd = Get-Command $name -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($cmd) { return $cmd.Source }
     }
@@ -72,6 +91,22 @@ try {
     if (-not ($hasVersion -or $hasUnreleased)) {
         $failures.Add("CHANGELOG.md has neither a [$($m.Version)] nor an [Unreleased] section.")
     }
+
+    # 6. Offline test suite (tests/**/test_*.lua) under the Lua interpreter next to luac
+    $script:testSummary = $null
+    $testFiles = @(Get-ChildItem -Path "tests" -Recurse -Filter "test_*.lua" -ErrorAction SilentlyContinue |
+        ForEach-Object { Resolve-Path -Relative $_.FullName } | ForEach-Object { $_ -replace '\\', '/' -replace '^\./', '' })
+    if ($testFiles.Count -gt 0) {
+        $lua = Resolve-Lua $luac
+        if ($lua) {
+            $out = & $lua "tests/run.lua" @testFiles 2>&1
+            $script:testSummary = ($out | Select-Object -Last 1)
+            if ($LASTEXITCODE -ne 0) { $failures.Add("Tests failed:`n$($out -join "`n")") }
+        } else {
+            $msg = "No Lua interpreter found; tests not run. Install Lua 5.1 (lua.exe next to luac)."
+            if ($Hook) { $warnings.Add($msg) } else { $failures.Add($msg) }
+        }
+    }
 }
 finally {
     Pop-Location
@@ -84,4 +119,5 @@ if ($failures.Count -gt 0) {
 }
 $luacLabel = if ($luac) { " (luac: $luac)" } else { "" }
 Write-Host "OK    $($m.AddonName) $($m.Version): $($m.CodeFiles.Count) code files, $($m.Assets.Count) assets$luacLabel" -ForegroundColor Green
+if ($script:testSummary) { Write-Host "OK    $($script:testSummary)" -ForegroundColor Green }
 exit 0
