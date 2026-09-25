@@ -91,14 +91,10 @@ ns.Data.DefaultDB = {
         mailboxOpen = false,
         inCombat = false,
     },
-    lastScan = {
-        bags = 0,
-        bank = 0,
-    },
-    scans = {
-        bags = {},
-        bank = {},
-    },
+    -- Roster and per-character snapshots (Characters.lua). Keyed "Name-Realm".
+    characters = {},
+    -- Account-wide Warband bank snapshot and tab data.
+    warband = { items = {}, scannedAt = 0, tabs = {} },
     ui = {
         tabFilters = {},
         showMinimapIcon = true,

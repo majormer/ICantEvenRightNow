@@ -1812,8 +1812,8 @@ function Core.RefreshSummary()
     local counts = CountSummary()
     local contextText = GetContextText()
     panel.context:SetText(contextText)
-    panel.lastScan:SetText("Last scanned  •  Bags " .. FormatTimestamp(ns.DB.lastScan.bags)
-        .. "  •  Bank " .. FormatTimestamp(ns.DB.lastScan.bank))
+    panel.lastScan:SetText("Last scanned  •  Bags " .. FormatTimestamp(P.GetLastScan(BAG_SCOPE))
+        .. "  •  Bank " .. FormatTimestamp(P.GetLastScan(BANK_SCOPE)))
     panel.rescan:SetText(IsBankContextDetected() and "Rescan all" or "Scan bags")
     panel.rescan:SetEnabled(not ns.DB.context.inCombat)
 
@@ -1955,7 +1955,7 @@ function Core.RefreshTransfer()
         if plan.movable then movableCount = movableCount + 1 end
     end
 
-    local lastScan = source == "Bags" and ns.DB.lastScan.bags or ns.DB.lastScan.bank
+    local lastScan = P.GetLastScan(source == "Bags" and BAG_SCOPE or BANK_SCOPE)
     local emptyMsg
     local emptyActionMode
     local emptyActionText

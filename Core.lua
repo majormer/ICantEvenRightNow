@@ -244,7 +244,8 @@ function Core.OnAddonLoaded()
     MigrateSavedFiltersToWorkflows()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
-    NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)
+    P.EnsureCurrentCharacter()
+    NormalizeLegacyBankStorageKinds(P.GetCurrentCharacter().scans.bank)
     Core.RegisterSlashCommands()
     Core.UpdateContext()
     Core.UpdateQuickAccessButtons()
@@ -317,6 +318,8 @@ eventFrame:RegisterEvent("MAIL_SHOW")
 eventFrame:RegisterEvent("MAIL_CLOSED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
+eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -330,6 +333,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    -- Keep the roster's facts (level, professions) current for this character.
+    if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED" then
+        -- PLAYER_LEVEL_UP passes the new level; UnitLevel can lag behind it.
+        P.EnsureCurrentCharacter(event == "PLAYER_LEVEL_UP" and (...) or nil)
+        if event ~= "PLAYER_LOGIN" then return end
+    end
 
 
     local interactionType = ...

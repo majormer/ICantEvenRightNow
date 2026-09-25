@@ -16,7 +16,7 @@ local ADDON_NAME, ns = ...
 local P = ns.Private
 
 -- Bump when a new step is appended to STEPS.
-local SCHEMA_VERSION = 1
+local SCHEMA_VERSION = 2
 P.SCHEMA_VERSION = SCHEMA_VERSION
 
 local EXPANSION_FILTER_ALL = P.EXPANSION_FILTER_ALL
@@ -241,6 +241,43 @@ STEPS[1] = function(db, report)
     end
     report.ported.tasks = tasks
     report.ported.settings = true
+end
+
+-- Step 2: account-wide scans become per-character and account snapshots.
+-- The owner of an old scan is unknown at load time: the first character to
+-- log in claims the bag scan (Characters.lua), Warband items move to the
+-- account snapshot, and character-bank items stay unassigned until a bank
+-- visit refreshes them.
+STEPS[2] = function(db, report)
+    local scans = db.scans
+    if type(scans) == "table" then
+        local lastScan = type(db.lastScan) == "table" and db.lastScan or {}
+        if type(scans.bags) == "table" and #scans.bags > 0 and not db.pendingBagScanClaim then
+            db.pendingBagScanClaim = { items = scans.bags, scannedAt = lastScan.bags or 0 }
+        end
+        if type(scans.bank) == "table" then
+            local warbandItems, characterBankItems = {}, {}
+            for _, item in ipairs(scans.bank) do
+                if type(item) == "table" and item.storageKind == P.STORAGE_WARBAND_BANK then
+                    table.insert(warbandItems, item)
+                else
+                    table.insert(characterBankItems, item)
+                end
+            end
+            db.warband = db.warband or {}
+            if not db.warband.items or #db.warband.items == 0 then
+                db.warband.items = warbandItems
+                db.warband.scannedAt = lastScan.bank or 0
+            end
+            if #characterBankItems > 0 then
+                db.unassignedBankScan = { items = characterBankItems, scannedAt = lastScan.bank or 0 }
+                AddNote(report.converted, "Your bank list will refresh the next time each character opens a bank.", nil)
+            end
+        end
+        db.scans = nil
+        db.lastScan = nil
+    end
+    db.characters = db.characters or {}
 end
 
 -- ---------------------------------------------------------------------------

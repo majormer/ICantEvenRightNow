@@ -370,10 +370,10 @@ end
 
 local function GetAllDecisions()
     local decisions = {}
-    for _, item in ipairs(ns.DB.scans.bags or {}) do
+    for _, item in ipairs(P.GetScanList(BAG_SCOPE)) do
         table.insert(decisions, BuildDecision(item))
     end
-    for _, item in ipairs(ns.DB.scans.bank or {}) do
+    for _, item in ipairs(P.GetScanList(BANK_SCOPE)) do
         table.insert(decisions, BuildDecision(item))
     end
     return decisions

@@ -37,15 +37,7 @@ local CContainer = C_Container
 -- ===========================================================================
 
 local function RemoveMovedItemsFromScan(movedKeys)
-    for _, scope in ipairs({ BAG_SCOPE, BANK_SCOPE }) do
-        local kept = {}
-        for _, item in ipairs(ns.DB.scans[scope] or {}) do
-            if not movedKeys[P.LocationKey(item)] then
-                table.insert(kept, item)
-            end
-        end
-        ns.DB.scans[scope] = kept
-    end
+    P.RemoveFromSnapshots(movedKeys)
 end
 
 P.RemoveMovedItemsFromScan = RemoveMovedItemsFromScan
@@ -177,8 +169,8 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
         for _, bagID in ipairs(BAG_IDS) do
             missingData = ScanContainerBag(bagID, BAG_SCOPE, bagItems) or missingData
         end
-        ns.DB.scans.bags = bagItems
-        ns.DB.lastScan.bags = time()
+        P.SetScanList(BAG_SCOPE, bagItems)
+        P.MarkScanned(BAG_SCOPE)
         if not quiet then
             Print("Scanned bags: " .. #bagItems .. " item stacks.")
         end
@@ -186,6 +178,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
 
     if scanBank then
         local bankItems = {}
+        local warbandItems = {}
         for _, bagID in ipairs(PRIVATE_BANK_IDS) do
             -- GetStorageKindForBagID returns a named BankTab:N key when tab data is
             -- available (populated by RefreshBankTabData on bank open), otherwise
@@ -196,13 +189,16 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
             missingData = ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_REAGENT_BANK) or missingData
         end
         for _, bagID in ipairs(WARBAND_BANK_IDS) do
-            missingData = ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_WARBAND_BANK) or missingData
+            missingData = ScanContainerBag(bagID, BANK_SCOPE, warbandItems, STORAGE_WARBAND_BANK) or missingData
         end
         NormalizeLegacyBankStorageKinds(bankItems)
-        ns.DB.scans.bank = bankItems
-        ns.DB.lastScan.bank = time()
+        -- Character bank belongs to this character; the Warband bank is shared
+        -- by the account, so its snapshot is stored once.
+        P.SetScanList(BANK_SCOPE, bankItems)
+        P.MarkScanned(BANK_SCOPE)
+        P.SetWarbandItems(warbandItems)
         if not quiet then
-            Print("Scanned bank: " .. #bankItems .. " item stacks.")
+            Print("Scanned bank: " .. (#bankItems + #warbandItems) .. " item stacks.")
         end
     end
 
