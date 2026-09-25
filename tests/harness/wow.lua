@@ -367,12 +367,21 @@ end
 
 function World:sell(bagID, slot)
     local stack = self:getStack(bagID, slot)
-    if not stack or stack.locked then return end
+    if not stack or (stack.locked and not stack.selling) then return end
     local def = self.items[stack.itemID]
     if (def.sellPrice or 0) <= 0 then
         table.insert(self.log, "UI_ERROR: That item cannot be sold.")
         return
     end
+    if self.asyncMoves and not stack.selling then
+        -- Like the server: the stack stays in the slot, locked, until the
+        -- sale settles, and a bag update fires meanwhile.
+        stack.locked, stack.selling = true, true
+        self:fire("BAG_UPDATE_DELAYED")
+        self:after(0.6, function() self:sell(bagID, slot) end)
+        return
+    end
+    if stack.selling then stack.locked = false end
     self.containers[bagID].slots[slot] = nil
     self.money = self.money + def.sellPrice * stack.count
     local record = { itemID = stack.itemID, count = stack.count, price = def.sellPrice }

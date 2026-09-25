@@ -1675,6 +1675,8 @@ local function BuildTransferTab(parent)
             SetFilterHideBlocked("Transfer", false)
             ClearActiveWorkflowState()
             Core.RefreshUI()
+        elseif self.mode == "home" then
+            Core.ShowHomeUI()
         end
     end)
     parent.emptyAction:Hide()
@@ -1977,14 +1979,17 @@ function Core.RefreshTransferUncached()
         emptyActionMode = "scan"
         emptyScanScope = source == "Bags" and BAG_SCOPE or BANK_SCOPE
         emptyActionText = source == "Bags" and "Scan bags" or "Scan bank"
+    elseif #matched == 0 and (UI.activeQuickWorkflowName or UI.activeSavedFilterName) and not UI.activeTaskModified then
+        -- An opened task with nothing left is finished, not over-filtered.
+        local taskName = UI.activeQuickWorkflowName or UI.activeSavedFilterName
+        emptyMsg = taskName == "Pull Bank Upgrades" and "No bank upgrades found."
+            or ("All done: nothing left for “" .. taskName .. "”.")
+        emptyActionMode = "home"
+        emptyActionText = "Back to Home"
     elseif #allCandidates == 0 then
         emptyMsg = "No items were found in " .. GetStorageDisplayName(source) .. "."
     elseif #matched == 0 then
-        if UI.activeQuickWorkflowName == "Pull Bank Upgrades" then
-            emptyMsg = "No bank upgrades found."
-        else
-            emptyMsg = "No items match the active filters."
-        end
+        emptyMsg = "No items match the active filters."
         emptyActionMode = "clear"
         emptyActionText = "Clear filters"
     elseif #visible == 0 and filters.hideBlocked then
