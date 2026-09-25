@@ -642,8 +642,11 @@ end
 local function GetShownGlobalFrame(names)
     for _, name in ipairs(names) do
         local frame = _G[name]
-        if frame and frame.IsShown then
-            local shown = frame:IsShown()
+        -- IsVisible, not IsShown: a child keeps its own shown flag while its
+        -- parent is hidden (in game, BankPanelCopperButton read as shown away
+        -- from any bank).
+        if frame and frame.IsVisible then
+            local shown = frame:IsVisible()
             if CanReadValue(shown) and shown then return frame end
         end
     end
@@ -654,8 +657,8 @@ local function GetShownNamedFrameByPattern(namePatterns)
     if not EnumerateFrames then return nil end
     local frame = EnumerateFrames()
     while frame do
-        if frame.GetName and frame.IsShown then
-            local shown = frame:IsShown()
+        if frame.GetName and frame.IsVisible then
+            local shown = frame:IsVisible()
             if CanReadValue(shown) and shown then
                 local name = frame:GetName()
                 if CanReadValue(name) and name then
