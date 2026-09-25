@@ -78,8 +78,8 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                 = C_Item.GetItemInfo(infoKey)
             if not name and infoKey ~= itemID then
-                -- The link lookup can come back empty even when the item is
-                -- cached by ID (seen in game); fall back to the item ID.
+                -- If the link lookup comes back empty while the item may be
+                -- cached by ID, fall back to the item ID.
                 name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                     maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                     = C_Item.GetItemInfo(itemID)
