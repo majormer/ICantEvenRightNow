@@ -177,3 +177,20 @@ T.test("gear that isn't an upgrade for anyone is the player's call, even from th
     T.eq(explanation.primary.id, "outgrown_gear")
     T.eq(explanation.disposition, "review")
 end)
+T.test("a hand-off that can't move says why on its card", function()
+    local saved = roster({ { player = MAIN, role = "main" }, { player = TAILOR, role = "crafter" } })
+    local g = T.game({ savedVariables = saved, player = MAIN, setup = function(w)
+        F.defineItems(w)
+        F.addBank(w, { warbandSize = 1 })
+        w:put(0, 1, I.LINEN, 20)
+        w:put(12, 1, I.OLD_SWORD, 1) -- the only Warband slot is taken
+    end })
+    g:openBank()
+    local P = g:P()
+    T.ok(P.QueueHandoff(P.GetScanList("bags")[1], "Tailor-R"))
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Send to Alts" then card = c end end
+    T.eq(card.ready, 0)
+    T.eq(card.blocked, 1)
+    T.contains(P.CardSummary(card), "1 blocked: ")
+end)

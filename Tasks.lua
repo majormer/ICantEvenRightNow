@@ -183,6 +183,12 @@ local function EvaluateTask(task)
                 card.waiting = card.waiting + 1
                 card.value = card.value + stackValue
                 card.needs = card.needs or CONTEXT_BLOCKS[plan.blocked]
+            elseif plan.blocked and task.kind == "extra" and task.predicate then
+                -- Items the player asked for (e.g. marked for an alt) but that
+                -- can't move: say why instead of "Nothing to do" (in game: a
+                -- full Warband tab hid a queued hand-off).
+                card.blocked = (card.blocked or 0) + 1
+                card.blockedReason = card.blockedReason or plan.blocked
             end
         end
     end
@@ -218,7 +224,7 @@ function P.GetTaskCards()
     end)
     local function rank(card)
         if card.ready > 0 then return 1 end
-        if card.waiting > 0 then return 2 end
+        if card.waiting > 0 or (card.blocked or 0) > 0 then return 2 end
         return 3
     end
     table.sort(cards, function(a, b)
@@ -263,6 +269,8 @@ function P.CardSummary(card)
         return card.ready .. " ready" .. money .. extra
     elseif card.waiting > 0 then
         return card.waiting .. " waiting: " .. (card.needs or "change location")
+    elseif (card.blocked or 0) > 0 then
+        return card.blocked .. " blocked: " .. tostring(card.blockedReason)
     end
     return "Nothing to do right now"
 end
