@@ -182,7 +182,134 @@ Status: Idea. Priority: P3. Depends on W0 and W1.
 - Use W0 roles and snapshot character facts to explain routing: "Reagent for Tailoring (Alt C, Crafter)", "Plate upgrade for Alt D (Leveling)", "No other character uses this; keep in character bank", "No active character can use this; sell it".
 - Hints only: they explain and pre-filter, and never move items on their own.
 
-## 6. Safety Guardrails to Preserve
+## 6. Planned: Home Screen and Friction Fixes (target 0.6.0)
+
+Assessment basis (2026-09-25): code review of the 0.6.0 Transfer tab. The main job today (deposit old items at a bank) takes: open bank, open console by minimap or slash command, pick a task, Select Movable, page through a 6-row list, Deposit. Steps 2 to 4 repeat on every visit.
+
+### H1. Home screen of task cards (replaces Summary and the Task dropdown)
+
+Status: Planned. Priority: P1.
+
+- The console opens to a Home screen of task cards, one per quick task and saved workflow, each showing a live count and value, e.g. "Deposit Old Items: 23 ready", "Sell Old Consumables: 8 (12g), at a vendor", "Waiting for you: 3".
+- Cards are ordered by what the current context allows; unavailable cards say what they need ("Visit a bank") instead of failing after selection.
+- Clicking a card opens its review list (the Transfer view). Summary counts are no longer passive numbers; each count is a card.
+- The Transfer view keeps route and filter editing for custom work.
+- Scan age is shown on cards that rely on non-live data ("bank as of yesterday").
+
+### H2. Presence at the bank and vendor
+
+Status: Planned. Priority: P1.
+
+- When a bank or vendor opens, show a small non-blocking notice with the top card's count ("23 ready to deposit") that opens Home. A setting chooses Notice (default), Auto-open, or Off.
+- The earlier bank/vendor frame launchers were disabled intentionally; the notice must not attach to or depend on specific bag or bank frames (see Known Pitfalls).
+
+### H3. Pre-selection for quick tasks
+
+Status: Planned. Priority: P1. **Open decision for the user.**
+
+- Option: loading a quick task pre-selects its movable items; the action button still reads "Deposit 23" and still requires a click after the list is visible.
+- Proposed as a setting, off by default, until the user decides.
+
+### H4. Faster review
+
+Status: Planned. Priority: P1.
+
+- Group identical items into one row ("Linen Cloth ×3 stacks").
+- Optional grouping by category with counts.
+- Compact row density option; the list currently shows 6 rows of 42 px.
+
+### H5. Vendor buyback safety
+
+Status: Planned. Priority: P1 (safety).
+
+- The vendor buyback list holds a limited number of items (believed 12; verify in game). Large sell batches make earlier items unrecoverable.
+- Sell in buyback-sized batches or warn before a larger sell ("30 items; only the last 12 can be bought back").
+
+### H6. One place to save a task
+
+Status: Planned. Priority: P2.
+
+- "Save as task…" next to the current task name saves the full current state (route, filters, sort).
+- The Customize drawer shrinks to route editing only.
+- Editing a loaded task shows "Deposit Old Items (modified)" instead of "Custom transfer".
+
+## 7. Planned: Onboarding Across Characters (target 0.6.0)
+
+Goal: zero required setup, at most one question per character, and every answer makes the next character easier.
+
+### Principles
+
+1. Useful on first open with no setup; conservative defaults already protect current-content, quest, legendary, and ruled items.
+2. Account-wide by default: rules, saved tasks, settings, and the Warband bank snapshot are shared by every character automatically (the addon already uses account-wide SavedVariables).
+3. The only per-character setup is the W0 role, and it is always offered with a suggested answer.
+4. Never block. An unanswered question leaves the character Unassigned, which is ignored and therefore safe.
+5. Each answer improves the next suggestion.
+6. On return, show what changed since last time instead of asking again.
+
+### O1. Role suggestions
+
+Status: Planned. Priority: P1. Depends on W0/W1.
+
+Suggested, never assumed; one click to accept or change:
+
+- First character to load the addon at max level: suggest Main / Active.
+- Max level: suggest Main / Active (or the role most often chosen for max-level characters so far).
+- Below max level and gaining levels between sessions: suggest Leveling.
+- Low level with professions: suggest Crafter.
+- Low level without professions, or parked in a garrison: suggest Utility.
+- Offer "Same as <last configured character> (Crafter)".
+- Once several characters share a pattern (e.g. three low-level alts set to Crafter), offer to make that the default suggestion for matching new characters.
+
+### O2. Roster setup in bulk
+
+Status: Planned. Priority: P1.
+
+- The Characters list shows every known character with its suggested role, last seen, level, and professions.
+- "Accept all suggestions" and multi-select role assignment, so dozens of alts are sorted in one sitting from any character.
+- Characters appear only after logging in once with the addon; the list says so.
+
+### O3. Lifecycle walkthroughs (acceptance scenarios)
+
+| Moment | What the player sees | Setup cost |
+|---|---|---|
+| Main, first login | One-time welcome notice. Opening the console shows Home with bag-based cards and one role card ("This looks like your main. Main / Active?"). Bank cards say "Visit a bank". | 1 click |
+| Main, first bank visit | Notice "23 ready to deposit". Bank and Warband bank are scanned; Warband tabs and their Blizzard tab settings are recorded for routing. | 0 |
+| Main, day 2 | No prompts. Home cards show counts, with scan ages for non-live data. At a bank: notice, card, review, confirm. | 0 |
+| Alt, first login | Rules, tasks, and settings already apply. One role card with a suggestion (e.g. "Crafter: low level with Tailoring and Enchanting", or "Same as Alt C"). Account cards appear immediately ("Waiting for you: 3", "Warband has 12 reagents for your Tailoring"). | 0 to 1 click |
+| Alt, day 2 | No prompts; role-appropriate cards only (a Utility alt sees Send to Warband and Sell, never upgrades). | 0 |
+| Alt, day 30 | Character facts refresh silently at login. A "Since you were last here" card: hand-off items waiting, bank snapshot age, and a role check only if something changed (e.g. "Reached max level; switch Leveling to Main?"). Stale hand-off entries clear on the next Warband scan. | 0 to 1 click |
+| Sender side | Hand-off items not collected after a long time show on the sender's Home ("3 items waiting for Alt B for 30 days"). | 0 |
+
+### O4. In-context opt-ins
+
+Status: Planned. Priority: P2.
+
+- If BetterBags is loaded, a one-time Home card offers to enable the categories (section 8) instead of hiding the option in Settings.
+- Settings stays available for everything, but no feature requires visiting it.
+- If no Warband tab has "assign to" settings, a card explains that setting them in Blizzard's bank tab settings enables smart routing. The addon does not change tab settings itself.
+
+## 8. Planned: BetterBags Categories (target 0.6.0)
+
+Status: Planned. Priority: P2. Optional; off until enabled.
+
+Verified 2026-09-25 against BetterBags `main` (v0.5.11, Interface 120100): external addons get the Categories module via `LibStub("AceAddon-3.0"):GetAddon("BetterBags")`, register `RegisterCategoryFunction(id, func)` (func returns a category name or nil per item), and refresh with `WipeCategory` then `ReprocessAllItems`. **Categories are assigned per item ID, not per slot**, so only decisions that hold for every copy of an item can be published.
+
+| Category | Contents |
+|---|---|
+| Protected | Items with a Protect rule |
+| Never Sell | Items with a Never Sell rule |
+| Sell Candidates | Items the Sell task would offer (old consumables, junk) |
+| Old Content | Items the Deposit Old Items task would move |
+| For the Warband | Warbound items and reagents used by a Crafter, Main, or Leveling character's professions |
+| Waiting for You | Items in this character's hand-off queue |
+
+- Not published: per-copy decisions such as "upgrade for Alt D" (copies differ in item level and binding).
+- `## OptionalDeps: BetterBags`; hook on `ADDON_LOADED`. Default priority so the player's own categories win; players can reprioritize, disable, or delete ours in BetterBags' Categories pane.
+- Refresh after rule, role, or scan changes: `WipeCategory` + `ReprocessAllItems`, deferred until out of combat.
+- Display only: categories never trigger actions.
+- BetterBags treats character and Warband bank tabs as one bank view; categories apply there too.
+
+## 9. Safety Guardrails to Preserve
 
 Do not remove:
 
@@ -193,7 +320,7 @@ Do not remove:
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
 
-## 7. Acceptance Criteria for AH Pull UX
+## 10. Acceptance Criteria for AH Pull UX
 
 A successful AH pull UX should satisfy all:
 
