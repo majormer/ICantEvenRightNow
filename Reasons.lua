@@ -237,6 +237,26 @@ local function GearUsers(item)
 end
 P.GearUsersFor = GearUsers
 
+-- Gear-receiving characters for whom this item beats what they wear
+-- (two-slot items compare against the weaker slot; empty slot = 0).
+local function UpgradeUsers(item)
+    local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
+    if not slots or not item.itemLevel or item.itemLevel <= 0 then return {} end
+    local users = {}
+    for _, char in ipairs(GearUsers(item)) do
+        if char.equipped then
+            local lowest
+            for _, slot in ipairs(slots) do
+                local level = char.equipped[slot] or 0
+                if not lowest or level < lowest then lowest = level end
+            end
+            if item.itemLevel > (lowest or 0) then table.insert(users, char) end
+        end
+    end
+    return users
+end
+P.UpgradeUsersFor = UpgradeUsers
+
 local function AnyRolesAssigned()
     local counts = P.CountByRole()
     return (counts.main + counts.leveling + counts.crafter + counts.utility) > 0
@@ -299,7 +319,14 @@ local function ExplainItem(item, ctx)
         if collected == false then add("appearance_uncollected") end
         if AnyRolesAssigned() then
             local users = GearUsers(item)
-            if #users > 0 then
+            local upgrades = UpgradeUsers(item)
+            if #upgrades > 0 then
+                local labels = {}
+                for _, char in ipairs(upgrades) do
+                    labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
+                end
+                add("usable_gear", "Upgrade for " .. Names(labels))
+            elseif #users > 0 then
                 add("usable_gear", "Can be worn by " .. Names(users, "name"))
             elseif collected then
                 add("appearance_collected", "You keep the appearance; none of your played characters wear this")
@@ -554,4 +581,29 @@ function P.RegisterReasonTasks()
             hideBlocked = true, sort = "Vendor Value" },
         predicate = CanGoAndSellable,
     })
+end
+-- One line naming who benefits from an item, or nil (W6).
+function P.WhoBenefits(item)
+    if P.IsGearItem(item) then
+        local upgrades = UpgradeUsers(item)
+        if #upgrades > 0 then
+            local labels = {}
+            for _, char in ipairs(upgrades) do
+                labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
+            end
+            return "Upgrade for " .. Names(labels)
+        end
+        local users = GearUsers(item)
+        if #users > 0 then return "Can be worn by " .. Names(users, "name") end
+    end
+    if item.classID == 7 then
+        local users = CraftersFor(item) or {}
+        if #users > 0 then
+            local labels = {}
+            for _, u in ipairs(users) do labels[#labels + 1] = u.character.name .. " (" .. u.profession .. ")" end
+            return "Used by " .. Names(labels)
+        end
+    end
+    if item.isWarbandBound then return "Warbound: any of your characters can use it" end
+    return nil
 end

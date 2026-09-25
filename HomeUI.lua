@@ -457,3 +457,120 @@ function P.OnContextOpened()
     frame.text:SetText(card.name .. ": " .. P.CardSummary(card))
     frame:Show()
 end
+
+-- Cross-character hand-offs (Warband.lua) need both tasks and Home notices.
+if P.RegisterHandoffTasks then P.RegisterHandoffTasks() end
+if P.RegisterHandoffNotice then P.RegisterHandoffNotice() end
+-- ---------------------------------------------------------------------------
+-- Hand-off picker (W4): choose which alt an item is for.
+-- ---------------------------------------------------------------------------
+
+function P.ShowHandoffPicker(item)
+    local kit = Kit()
+    local frame = UI.handoffPicker
+    if not frame then
+        frame = CreateFrame("Frame", "ICantEvenRightNowHandoffPicker", UIParent, "BackdropTemplate")
+        frame:SetSize(260, 60)
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        frame:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 8,
+            insets = { left = 2, right = 2, top = 2, bottom = 2 } })
+        frame.title = kit.CreateLabel(frame, "", "GameFontHighlight")
+        frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -10)
+        frame.title:SetWidth(240)
+        frame.buttons = {}
+        for i = 1, 8 do
+            local button = kit.CreateButton(frame, "", 240, 20)
+            button:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -30 - (i - 1) * 22)
+            button:Hide()
+            frame.buttons[i] = button
+        end
+        frame.cancel = kit.CreateButton(frame, "Cancel", 80, 20)
+        frame.cancel:SetScript("OnClick", function() frame:Hide() end)
+        UI.handoffPicker = frame
+    end
+    local recipients = P.HandoffRecipients(item)
+    frame.title:SetText(#recipients > 0 and ("Send " .. (item.name or "item") .. " to:")
+        or "No other character with a matching role can use this.")
+    for i, button in ipairs(frame.buttons) do
+        local char = recipients[i]
+        if char then
+            button:SetText(char.name .. "  (" .. P.GetRoleLabel(P.GetRole(char)) .. ")")
+            button:SetScript("OnClick", function()
+                local ok, why = P.QueueHandoff(item, char.key)
+                if ok then
+                    P.Print("Marked " .. (item.name or "item") .. " for " .. char.name
+                        .. ". Deposit it with \"Send to Alts\" at a bank.")
+                else
+                    P.Print(why)
+                end
+                frame:Hide()
+                Core.RefreshUI()
+            end)
+            button:Show()
+        else
+            button:Hide()
+        end
+    end
+    local rows = math.min(#recipients, #frame.buttons)
+    frame.cancel:ClearAllPoints()
+    frame.cancel:SetPoint("TOPLEFT", frame, "TOPLEFT", 10, -30 - rows * 22 - 4)
+    frame:SetHeight(64 + rows * 22)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UI.frame or UIParent, "CENTER", 0, 0)
+    frame:Show()
+end
+
+-- ---------------------------------------------------------------------------
+-- Where is it? (W5)
+-- ---------------------------------------------------------------------------
+
+local function PlacesText(places)
+    local parts = {}
+    for i, place in ipairs(places) do
+        if i > 4 then parts[#parts + 1] = "+" .. (#places - 4) .. " more" break end
+        parts[#parts + 1] = place.label .. " " .. place.count .. " (" .. FormatAge(place.scannedAt) .. ")"
+    end
+    return table.concat(parts, ", ")
+end
+
+function P.WhereIsLines(query)
+    query = (query or ""):lower()
+    local lines = {}
+    if query == "" then
+        table.insert(lines, "Usage: /icanteven where <item name>")
+        return lines
+    end
+    local byItem, order = {}, {}
+    for _, snapshot in ipairs(P.AllSnapshots()) do
+        for _, item in ipairs(snapshot.items) do
+            if item.name and item.name:lower():find(query, 1, true) and not byItem[item.itemID] then
+                byItem[item.itemID] = item.name
+                table.insert(order, item.itemID)
+            end
+        end
+    end
+    if #order == 0 then
+        table.insert(lines, "No scanned item matches \"" .. query .. "\". Characters appear after logging in with the addon.")
+        return lines
+    end
+    for i, itemID in ipairs(order) do
+        if i > 8 then table.insert(lines, "(" .. (#order - 8) .. " more matches; be more specific)") break end
+        local total, places = P.CountAcrossAccount(itemID)
+        table.insert(lines, byItem[itemID] .. ": " .. total .. " - " .. PlacesText(places))
+    end
+    return lines
+end
+
+-- Item tooltips anywhere in the game: "Your account: ..." (setting, on by default).
+if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+        if not ns.DB or not ns.DB.ui or ns.DB.ui.whereTooltip == false then return end
+        local itemID = data and data.id
+        if not itemID or not tooltip or not tooltip.AddLine then return end
+        local ok, total, places = pcall(P.CountAcrossAccount, itemID)
+        if ok and total and total > 0 then
+            tooltip:AddLine("Your account: " .. total .. " - " .. PlacesText(places), 0.6, 0.8, 1)
+        end
+    end)
+end

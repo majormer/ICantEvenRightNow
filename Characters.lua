@@ -116,6 +116,23 @@ local function ReadProfessions()
     return list
 end
 
+-- Equipped item level per inventory slot, for "upgrade for <alt>" hints.
+local EQUIP_SLOTS = { 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }
+local function ReadEquipped()
+    if not (ItemLocation and ItemLocation.CreateFromEquipmentSlot and C_Item and C_Item.GetCurrentItemLevel) then
+        return nil
+    end
+    local equipped = {}
+    for _, slot in ipairs(EQUIP_SLOTS) do
+        local ok, location = pcall(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slot)
+        if ok and location and location:IsValid() then
+            local okLevel, level = pcall(C_Item.GetCurrentItemLevel, location)
+            if okLevel and type(level) == "number" then equipped[slot] = level end
+        end
+    end
+    return equipped
+end
+
 -- Creates or refreshes the current character's record. Safe to call often.
 local function EnsureCurrentCharacter(levelOverride)
     local roster = Roster()
@@ -145,6 +162,7 @@ local function EnsureCurrentCharacter(levelOverride)
     end
     local professions = ReadProfessions()
     if #professions > 0 or isNew then char.professions = professions end
+    char.equipped = ReadEquipped() or char.equipped
     char.lastSeen = Now()
     EnsureSnapshots(char)
 

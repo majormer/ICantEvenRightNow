@@ -512,6 +512,7 @@ function Core.ExecuteTransferOne(plan)
     end
     local moved, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
     if moved then
+        if P.OnItemMoved then P.OnItemMoved(item, dest) end
         HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
@@ -558,6 +559,7 @@ function Core.ExecuteTransferSelected()
             if not blockReason then
                 local didMove, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
                 if didMove then
+                    if P.OnItemMoved then P.OnItemMoved(item, dest) end
                     movedKeys[item.key] = true
                     moved = moved + 1
                 else

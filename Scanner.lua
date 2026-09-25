@@ -218,6 +218,8 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
         end
     end
 
+    if P.CleanupHandoffs then pcall(P.CleanupHandoffs) end
+
     if UI.frame and UI.frame:IsShown() then
         Core.RefreshUI()
     end

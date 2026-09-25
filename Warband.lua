@@ -115,3 +115,176 @@ function P.WarbandTabsHaveNoSettings()
     end
     return true
 end
+
+-- ===========================================================================
+-- Alt hand-off queue (W4)
+-- Mark an item "for Alt B" on any character; it travels through the normal
+-- Warband deposit; on Alt B a "Waiting for You" task collects it. The queue
+-- only records intent: every move is still reviewed and clicked.
+--   entry = { id, itemID, name, count, from, to, at, state = "queued" | "deposited" }
+-- ===========================================================================
+
+local HANDOFF_REMIND_DAYS = 14
+
+local function Queue()
+    ns.DB.handoff = ns.DB.handoff or { nextID = 1, entries = {} }
+    return ns.DB.handoff
+end
+
+local function Now() return time and time() or 0 end
+
+-- Characters who can receive this item, by role and usability.
+function P.HandoffRecipients(item)
+    local list = {}
+    local currentKey = P.currentCharacterKey
+    local isGear = P.IsGearItem and P.IsGearItem(item)
+    local capability = isGear and "receivesGear" or "receivesMaterials"
+    for _, char in ipairs(P.CharactersWith(capability)) do
+        if char.key ~= currentKey then
+            local ok = true
+            if isGear then
+                ok = P.CanCharacterUse(char, item, P.GetRole(char) == "leveling")
+            end
+            if ok then table.insert(list, char) end
+        end
+    end
+    -- Materials: prefer characters whose professions use it.
+    if not isGear and item.classID == 7 and P.CraftersFor then
+        local users = {}
+        for _, use in ipairs(P.CraftersFor(item) or {}) do users[use.character.key] = true end
+        table.sort(list, function(a, b)
+            if (users[a.key] or false) ~= (users[b.key] or false) then return users[a.key] and true or false end
+            return a.key < b.key
+        end)
+    end
+    return list
+end
+
+function P.QueueHandoff(item, toKey)
+    if item.accountBankAllowed == false then return false, "Not eligible for Warband Bank" end
+    local queue = Queue()
+    for _, entry in ipairs(queue.entries) do
+        if entry.itemID == item.itemID and entry.to == toKey and entry.from == P.currentCharacterKey then
+            return true
+        end
+    end
+    table.insert(queue.entries, {
+        id = queue.nextID, itemID = item.itemID, name = item.name, count = item.count or 1,
+        from = P.currentCharacterKey, to = toKey, at = Now(), state = "queued",
+    })
+    queue.nextID = queue.nextID + 1
+    return true
+end
+
+function P.CancelHandoff(id)
+    local queue = Queue()
+    for i, entry in ipairs(queue.entries) do
+        if entry.id == id then table.remove(queue.entries, i) return true end
+    end
+    return false
+end
+
+function P.GetHandoffs(filter)
+    local list = {}
+    for _, entry in ipairs(Queue().entries) do
+        if not filter or filter(entry) then table.insert(list, entry) end
+    end
+    return list
+end
+
+local function QueuedFromMe(itemID)
+    for _, entry in ipairs(Queue().entries) do
+        if entry.itemID == itemID and entry.from == P.currentCharacterKey and entry.state == "queued" then return entry end
+    end
+end
+
+local function WaitingForMe(itemID)
+    for _, entry in ipairs(Queue().entries) do
+        if entry.itemID == itemID and entry.to == P.currentCharacterKey and entry.state == "deposited" then return entry end
+    end
+end
+P.HandoffQueuedFromMe = QueuedFromMe
+P.HandoffWaitingForMe = WaitingForMe
+
+-- Called after a successful move (Transfer.lua).
+function P.OnItemMoved(item, dest)
+    if P.IsWarbandStorage(dest) then
+        local entry = QueuedFromMe(item.itemID)
+        if entry then
+            entry.state = "deposited"
+            entry.depositedAt = Now()
+        end
+    elseif dest == "Bags" and item.storageKind == P.STORAGE_WARBAND_BANK then
+        local entry = WaitingForMe(item.itemID)
+        if entry then P.CancelHandoff(entry.id) end
+    end
+end
+
+-- Drop entries whose items are gone (sold, withdrawn elsewhere). Runs after scans.
+function P.CleanupHandoffs()
+    local warbandIDs = {}
+    for _, item in ipairs(P.GetWarbandSnapshot().items or {}) do warbandIDs[item.itemID] = true end
+    local mine = {}
+    for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
+        for _, item in ipairs(P.GetScanList(scope)) do mine[item.itemID] = true end
+    end
+    local warbandScanned = (P.GetWarbandSnapshot().scannedAt or 0) > 0
+    local kept = {}
+    for _, entry in ipairs(Queue().entries) do
+        local keep = true
+        if entry.state == "deposited" and warbandScanned and not warbandIDs[entry.itemID] then
+            keep = false            -- taken out of the Warband bank elsewhere
+        elseif entry.state == "queued" and entry.from == P.currentCharacterKey and not mine[entry.itemID] then
+            keep = false            -- sender no longer has it
+        end
+        if keep then table.insert(kept, entry) end
+    end
+    Queue().entries = kept
+end
+
+function P.RegisterHandoffTasks()
+    if not P.RegisterTask then return end
+    P.RegisterTask({
+        name = "Send to Alts",
+        description = "Items you marked for another character, into the Warband bank.",
+        preset = { name = "Send to Alts", source = "Bags", dest = P.STORAGE_WARBAND_ROUTED,
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = false, sort = "Name" },
+        predicate = function(item) return QueuedFromMe(item.itemID) ~= nil end,
+        isAvailable = function() return #P.GetHandoffs(function(e) return e.from == P.currentCharacterKey and e.state == "queued" end) > 0 end,
+    })
+    P.RegisterTask({
+        name = "Waiting for You",
+        description = "Items your other characters sent to this one through the Warband bank.",
+        preset = { name = "Waiting for You", source = P.STORAGE_WARBAND_BANK, dest = "Bags",
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = false, sort = "Name" },
+        predicate = function(item) return WaitingForMe(item.itemID) ~= nil end,
+        isAvailable = function() return #P.GetHandoffs(function(e) return e.to == P.currentCharacterKey and e.state == "deposited" end) > 0 end,
+    })
+end
+
+-- Sender-side reminder for hand-offs nobody collected (registered by HomeUI.lua).
+function P.RegisterHandoffNotice()
+    P.RegisterHomeNotice(function()
+        local stale = {}
+        for _, entry in ipairs(Queue().entries) do
+            if entry.from == P.currentCharacterKey and entry.state == "deposited"
+                and (Now() - (entry.depositedAt or entry.at)) > HANDOFF_REMIND_DAYS * 86400 then
+                table.insert(stale, entry)
+            end
+        end
+        if #stale == 0 then return nil end
+        local recipient = P.GetCharacter(stale[1].to)
+        local days = math.floor((Now() - (stale[1].depositedAt or stale[1].at)) / 86400)
+        return {
+            id = "handoff-reminder", priority = 70,
+            text = #stale .. " item" .. (#stale == 1 and " has" or "s have") .. " been waiting for "
+                .. (recipient and recipient.name or "another character") .. " for " .. days .. " days.",
+            buttons = { { label = "Cancel them", onClick = function()
+                for _, entry in ipairs(stale) do P.CancelHandoff(entry.id) end
+                ns.Core.RefreshUI()
+            end } },
+        }
+    end)
+end

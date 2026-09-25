@@ -32,6 +32,7 @@ local ENUM = {
         Merchant = 5, Banker = 8, GuildBanker = 10, MailInfo = 17, Auctioneer = 21, AccountBanker = 68,
     },
     ItemQuality = { Poor = 0, Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Artifact = 6, Heirloom = 7 },
+    TooltipDataType = { Item = 0, Spell = 1, Unit = 2 },
 }
 
 local EXPANSIONS = {
@@ -853,6 +854,15 @@ function World:_buildEnv()
         end,
     }
 
+    -- Tooltip post-calls: tests fire them with world:showItemTooltip(itemID).
+    world.tooltipPostCalls = {}
+    G.TooltipDataProcessor = {
+        AddTooltipPostCall = function(dataType, fn)
+            world.tooltipPostCalls[dataType] = world.tooltipPostCalls[dataType] or {}
+            table.insert(world.tooltipPostCalls[dataType], fn)
+        end,
+    }
+
     -- Secret values do not exist unless a test installs them.
     G.issecretvalue = nil
 
@@ -866,6 +876,16 @@ function World:_buildEnv()
     })
     self.G = G
     return env
+end
+
+-- Simulate hovering an item anywhere in the game; returns the added lines.
+function World:showItemTooltip(itemID)
+    local tooltip = self.env.GameTooltip
+    tooltip._lines = {}
+    for _, fn in ipairs(self.tooltipPostCalls[ENUM.TooltipDataType.Item] or {}) do
+        fn(tooltip, { id = itemID, type = ENUM.TooltipDataType.Item })
+    end
+    return tooltip._lines
 end
 
 -- Open/close contexts, firing the events the real client fires.

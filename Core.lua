@@ -218,6 +218,8 @@ function Core.HandleSlashCommand(msg)
         local scope = (arg1 or ""):lower() == "all" and "all" or "current"
         if scope == "current" then pcall(Core.ScanInventory, ns.DB.context.bankOpen and "all" or BAG_SCOPE, true) end
         for _, line in ipairs(P.WhyReportLines(scope)) do Print(line) end
+    elseif cmd == "where" then
+        for _, line in ipairs(P.WhereIsLines(arg1)) do Print(line) end
     elseif cmd == "migration" then
         local report = P.LatestMigrationReport()
         if not report then
@@ -329,6 +331,7 @@ eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
 eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
+eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -356,7 +359,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     -- Keep the roster's facts (level, professions) current for this character.
-    if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED" then
+    if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED"
+        or event == "PLAYER_EQUIPMENT_CHANGED" then
         -- PLAYER_LEVEL_UP passes the new level; UnitLevel can lag behind it.
         P.EnsureCurrentCharacter(event == "PLAYER_LEVEL_UP" and (...) or nil)
         if event ~= "PLAYER_LOGIN" then return end

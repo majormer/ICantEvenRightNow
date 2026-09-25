@@ -112,6 +112,7 @@ ns.Data.DefaultDB = {
         groupIdenticalRows = true,
         compactRows = false,
         contextNotice = "notice",    -- "notice" | "open" | "off" at a bank or vendor
+        whereTooltip = true,         -- W5: item tooltips show where the account holds the item
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.

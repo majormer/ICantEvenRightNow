@@ -540,6 +540,10 @@ local function BuildTransferRowDetail(plan, source, dest)
     elseif dest == P.STORAGE_WARBAND_ROUTED then
         local route = P.RouteToWarbandTab(item)
         status = "Ready to deposit to Warband: " .. (route and route.reason or "?")
+        local entry = P.HandoffQueuedFromMe and P.HandoffQueuedFromMe(item.itemID)
+        local recipient = entry and P.GetCharacter(entry.to)
+        local benefits = recipient and ("For " .. recipient.name) or (P.WhoBenefits and P.WhoBenefits(item))
+        if benefits then status = status .. "  -  " .. benefits end
     elseif source == "Bags" then
         status = "Ready to deposit to " .. GetStorageDisplayName(dest)
     else
@@ -1046,6 +1050,10 @@ local function SetTab(tabName)
 end
 
 AddRule = function(item, ruleType)
+    if ruleType == "handoff" then
+        if P.ShowHandoffPicker then P.ShowHandoffPicker(item) end
+        return
+    end
     local keepChoice = type(ruleType) == "string" and ruleType:match("^keep:(%a+)$")
     if keepChoice then
         P.SetKeepReason(item.itemID, keepChoice, item.name, keepChoice == "investment" and 90 or nil)
@@ -1224,8 +1232,10 @@ local function BuildSettingsTab(parent)
         { "Group identical items", "Stacks of the same item share one row." }, preselect)
     local compact = AddCheck("compactRows", "Compact rows (more items per screen)",
         { "Compact rows", "Shows 9 single-line rows instead of 6 detailed ones." }, grouping)
+    local whereTip = AddCheck("whereTooltip", "Show where items are in item tooltips",
+        { "Where is it?", "Item tooltips list how many your characters and Warband bank hold." }, compact)
     parent.noticeLabel = CreateLabel(parent, "At a bank or vendor:", "GameFontHighlightSmall")
-    parent.noticeLabel:SetPoint("TOPLEFT", compact, "BOTTOMLEFT", 4, -12)
+    parent.noticeLabel:SetPoint("TOPLEFT", whereTip, "BOTTOMLEFT", 4, -12)
     parent.noticeMode = CreateDropdown(parent, 170, {
         { text = "Show a small notice", value = "notice" },
         { text = "Open the console", value = "open" },
@@ -1685,6 +1695,7 @@ local function BuildTransferTab(parent)
             { text = "Keep for an alt", ruleType = "keep:alt" },
             { text = "Keep for an event", ruleType = "keep:event" },
             { text = "Investment (90 days)", ruleType = "keep:investment" },
+            { text = "Send to an alt...", ruleType = "handoff" },
         })
         parent.rows[i] = row
         row:Hide()
@@ -2113,6 +2124,8 @@ function Core.RefreshTransfer()
                     end
                     local loss = P.LossText(item, explanation)
                     if loss then GameTooltip:AddLine("If it goes: " .. loss, 0.6, 0.9, 0.6) end
+                    local benefits = P.WhoBenefits and P.WhoBenefits(item)
+                    if benefits then GameTooltip:AddLine("Who benefits: " .. benefits, 0.6, 0.8, 1) end
                 end
                 if P.ValueTooltipLines then
                     for _, line in ipairs(P.ValueTooltipLines(item)) do
@@ -2216,7 +2229,7 @@ function Core.RefreshSettings()
     end
     for _, check in ipairs(panel.workflowChecks or {}) do
         local value = ns.DB.ui[check.settingKey]
-        if check.settingKey == "groupIdenticalRows" then value = value ~= false end
+        if check.settingKey == "groupIdenticalRows" or check.settingKey == "whereTooltip" then value = value ~= false end
         check:SetChecked(value and true or false)
     end
     if panel.noticeMode then
