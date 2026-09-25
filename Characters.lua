@@ -163,6 +163,7 @@ local function EnsureCurrentCharacter(levelOverride)
     local professions = ReadProfessions()
     if #professions > 0 or isNew then char.professions = professions end
     char.equipped = ReadEquipped() or char.equipped
+    if P.NoteReturn and not isNew then P.NoteReturn(char, char.lastSeen) end
     char.lastSeen = Now()
     EnsureSnapshots(char)
 

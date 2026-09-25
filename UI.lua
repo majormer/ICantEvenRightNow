@@ -1234,8 +1234,17 @@ local function BuildSettingsTab(parent)
         { "Compact rows", "Shows 9 single-line rows instead of 6 detailed ones." }, grouping)
     local whereTip = AddCheck("whereTooltip", "Show where items are in item tooltips",
         { "Where is it?", "Item tooltips list how many your characters and Warband bank hold." }, compact)
+    local tips = AddCheck("tipsEnabled", "Show first-time tips",
+        { "Tips", "Short tips the first time you use each feature. Seen once per account." }, whereTip)
+    parent.resetTips = CreateButton(parent, "Show tips again", 120, 20)
+    parent.resetTips:SetPoint("LEFT", tips.label, "RIGHT", 10, 0)
+    parent.resetTips:SetScript("OnClick", function()
+        if P.ResetTips then P.ResetTips() end
+        UI.transferTip = nil
+        Print("Tips will show again.")
+    end)
     parent.noticeLabel = CreateLabel(parent, "At a bank or vendor:", "GameFontHighlightSmall")
-    parent.noticeLabel:SetPoint("TOPLEFT", whereTip, "BOTTOMLEFT", 4, -12)
+    parent.noticeLabel:SetPoint("TOPLEFT", tips, "BOTTOMLEFT", 4, -12)
     parent.noticeMode = CreateDropdown(parent, 170, {
         { text = "Show a small notice", value = "notice" },
         { text = "Open the console", value = "open" },
@@ -1808,6 +1817,9 @@ function Core.RefreshTransfer()
         noticeText = noticeText and (noticeText .. " " .. UI.transferContextMessage) or UI.transferContextMessage
         UI.transferContextMessage = nil
     end
+    if P.TransferTipFor and not noticeText then
+        noticeText = P.TransferTipFor(source, dest, #GetAllDecisions() > 0)
+    end
     SetContextNotice(panel.contextNotice, noticeText)
 
     SetDropdownText(panel.sourceDropdown, GetStorageDisplayName(source))
@@ -2229,7 +2241,10 @@ function Core.RefreshSettings()
     end
     for _, check in ipairs(panel.workflowChecks or {}) do
         local value = ns.DB.ui[check.settingKey]
-        if check.settingKey == "groupIdenticalRows" or check.settingKey == "whereTooltip" then value = value ~= false end
+        if check.settingKey == "groupIdenticalRows" or check.settingKey == "whereTooltip"
+            or check.settingKey == "tipsEnabled" then
+            value = value ~= false
+        end
         check:SetChecked(value and true or false)
     end
     if panel.noticeMode then

@@ -29,4 +29,5 @@ Tasks.lua
 UI.lua
 HomeUI.lua
 Value.lua
+Onboarding.lua
 Core.lua
