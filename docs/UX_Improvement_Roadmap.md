@@ -79,7 +79,7 @@ Potential next step: flag bank results as stale after changing characters or whe
 
 Priority: P2
 
-## 5. Planned: Warband Workflows (target 0.7.0)
+## 5. Planned: Warband Workflows (target 0.6.0)
 
 ### Principle: the Warband bank is for sharing
 
