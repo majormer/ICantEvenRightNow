@@ -1070,6 +1070,7 @@ AddRule = function(item, ruleType)
     elseif ruleType == "Never Sell" then
         rule.neverSell = true
     end
+    if Core.OnRulesChanged then Core.OnRulesChanged() end
     Core.RefreshUI()
 end
 
@@ -1234,8 +1235,15 @@ local function BuildSettingsTab(parent)
         { "Compact rows", "Shows 9 single-line rows instead of 6 detailed ones." }, grouping)
     local whereTip = AddCheck("whereTooltip", "Show where items are in item tooltips",
         { "Where is it?", "Item tooltips list how many your characters and Warband bank hold." }, compact)
+    local betterBags = AddCheck("betterBagsCategories", "Show categories in BetterBags",
+        { "BetterBags categories", "Protected, Never Sell, Sell Candidates, For the Warband, Old Content,",
+          "and Waiting for You appear as BetterBags categories. Display only." }, whereTip)
+    betterBags:SetScript("OnClick", function(self)
+        if P.SetBetterBagsCategories then P.SetBetterBagsCategories(self:GetChecked()) end
+        Core.RefreshUI()
+    end)
     local tips = AddCheck("tipsEnabled", "Show first-time tips",
-        { "Tips", "Short tips the first time you use each feature. Seen once per account." }, whereTip)
+        { "Tips", "Short tips the first time you use each feature. Seen once per account." }, betterBags)
     parent.resetTips = CreateButton(parent, "Show tips again", 120, 20)
     parent.resetTips:SetPoint("LEFT", tips.label, "RIGHT", 10, 0)
     parent.resetTips:SetScript("OnClick", function()
@@ -2214,6 +2222,7 @@ function Core.RefreshRules()
             row.sourceText:SetText(e.createdFrom or "")
             row.remove:SetScript("OnClick", function()
                 ns.DB.rules.items[e.itemID] = nil
+                if Core.OnRulesChanged then Core.OnRulesChanged() end
                 Core.RefreshRules()
             end)
             row:Show()

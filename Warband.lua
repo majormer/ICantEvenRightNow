@@ -173,13 +173,18 @@ function P.QueueHandoff(item, toKey)
         from = P.currentCharacterKey, to = toKey, at = Now(), state = "queued",
     })
     queue.nextID = queue.nextID + 1
+    if P.RequestBetterBagsRefresh then P.RequestBetterBagsRefresh() end
     return true
 end
 
 function P.CancelHandoff(id)
     local queue = Queue()
     for i, entry in ipairs(queue.entries) do
-        if entry.id == id then table.remove(queue.entries, i) return true end
+        if entry.id == id then
+            table.remove(queue.entries, i)
+            if P.RequestBetterBagsRefresh then P.RequestBetterBagsRefresh() end
+            return true
+        end
     end
     return false
 end

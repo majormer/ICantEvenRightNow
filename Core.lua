@@ -250,6 +250,7 @@ function Core.OnAddonLoaded()
             .. ". Some items need attention: /icanteven migration")
     end
     SeedDefaultSavedFilters()
+    if P.IsBetterBagsLoaded and P.IsBetterBagsLoaded() then pcall(P.OnBetterBagsLoaded) end
     MigrateSavedFiltersToWorkflows()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
@@ -340,11 +341,14 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Core.OnAddonLoaded()
         elseif ns.DB and addonName and addonName:lower():find("betterbags", 1, true) then
             ScheduleQuickAccessRefresh()
+            if addonName == "BetterBags" and P.OnBetterBagsLoaded then pcall(P.OnBetterBagsLoaded) end
         end
         return
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    if event == "PLAYER_REGEN_ENABLED" and P.OnCombatEnded then P.OnCombatEnded() end
 
     -- Auction house context and paced price lookups (Value.lua).
     if event == "AUCTION_HOUSE_SHOW" then

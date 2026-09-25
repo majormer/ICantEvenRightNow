@@ -5,7 +5,7 @@
 ## Version: 0.6.0
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\ICantEvenRightNow\ICantEvenRightNow.png
-## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
+## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0, BetterBags, Auctionator, TradeSkillMaster
 ## SavedVariables: ICantEvenRightNowDB
 
 ## X-Curse-Project-ID: 1534906
@@ -30,4 +30,5 @@ UI.lua
 HomeUI.lua
 Value.lua
 Onboarding.lua
+Integrations.lua
 Core.lua
