@@ -19,6 +19,10 @@ Release note rules:
 - A Swap button reverses non-vendor Source and Destination routes.
 - Live inventory changes now trigger a short, debounced refresh, and the item list also rescans when you open the console or a vendor.
 
+### Changed
+
+- Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
+
 ### Improved
 
 - The Transfer tab now opens in a task-first two-row layout: choose a task, review its route, search, and act without exposing route editing or workflow management.
@@ -49,8 +53,6 @@ Release note rules:
 - Zero item-level values are normalized to an empty filter instead of appearing and counting as an active constraint.
 - Transfer classification text no longer masquerades as a destination-specific movement reason.
 - New item rules retain the item name, and legacy rules use their stored source text as a readable fallback when item data is unavailable.
-- Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
-- The manual release builder now includes every runtime module and icon required by the current addon layout.
 
 ## [0.5.0] - 2026-05-11
 
