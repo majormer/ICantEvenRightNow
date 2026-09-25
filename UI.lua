@@ -553,17 +553,28 @@ end
 
 local NeedsBankStorage = P.NeedsBankStorage
 
+-- Editing a loaded task keeps its name and marks it "(modified)".
 local function ClearActiveWorkflowState()
+    if UI.activeQuickWorkflowName or UI.activeSavedFilterName then
+        UI.activeTaskModified = true
+    end
+end
+
+-- Forget the loaded task entirely (route no longer matches any task).
+local function ForgetActiveTask()
     UI.activeQuickWorkflowName = nil
     UI.activeSavedFilterName = nil
+    UI.activeTaskModified = false
 end
 
 local function ApplyTransferWorkflow(workflow, panel, savedName)
     if not workflow then return end
     ApplySavedFilter(workflow, "Transfer")
     UI.transferSelected = {}
+    UI.activeTaskPredicate = nil
     UI.activeSavedFilterName = savedName
     UI.activeQuickWorkflowName = savedName and nil or workflow.name
+    UI.activeTaskModified = false
 
     local routeNeedsBank = NeedsBankStorage(workflow.source) or NeedsBankStorage(workflow.dest)
     local routeNeedsVendor = workflow.dest == "Vendor"
@@ -610,6 +621,27 @@ local function ApplyTransferTask(value, panel)
         local name = value:sub(#SAVED_TASK_PREFIX + 1)
         ApplyTransferWorkflow(FindSavedFilter(name), panel, name)
     end
+end
+
+-- Open a task from Home: apply its route and filters, optionally pre-select
+-- its safe movable items (setting, off by default), and show the review list.
+function P.OpenTask(name)
+    local task = P.FindTask(name)
+    if not task then return false end
+    Core.CreateUI()
+    local panel = UI.frame.panels.Transfer
+    if task.open then
+        task.open()
+    elseif task.kind == "saved" then
+        ApplyTransferWorkflow(task.preset, panel, task.name)
+    else
+        ApplyTransferWorkflow(task.preset, panel, nil)
+        UI.activeQuickWorkflowName = task.name
+    end
+    UI.activeTaskPredicate = task.predicate
+    if P.IsPreselectEnabled() then P.PreselectTask(task) end
+    P.UIKit.SetTab("Transfer")
+    return true
 end
 
 local function BuildActiveFilterChips(filters)
@@ -787,8 +819,10 @@ local function ToggleConsole(tabName)
         Core.ShowVendorUI()
     elseif tabName == "Move" then
         Core.ShowMoveUI()
-    else
+    elseif tabName == "Transfer" then
         Core.ShowTransferUI()
+    else
+        Core.ShowHomeUI()
     end
 end
 
@@ -859,7 +893,7 @@ local function CreateStandardMinimapButton()
                     UI.frame:Show()
                     Core.RefreshUI()
                 else
-                    ToggleConsole("Transfer")
+                    ToggleConsole()
                 end
             end,
             OnTooltipShow = function(tooltip)
@@ -910,7 +944,7 @@ local function CreateMinimapButton()
         "Click to open or close the cleanup console.",
         "Use /icanteven minimap to hide this button.",
     }, function()
-        ToggleConsole("Transfer")
+        ToggleConsole()
     end)
     button:SetFrameStrata("FULLSCREEN_DIALOG")
     button:SetFrameLevel(80)
@@ -994,56 +1028,6 @@ local ScheduleQuickAccessRefresh  -- forward declared; defined below
 -- Summary helpers
 -- ===========================================================================
 
-local function GetContextText()
-    if ns.DB.context.inCombat then
-        return "In combat"
-    elseif ns.DB.context.vendorOpen then
-        return "Vendor open"
-    elseif ns.DB.context.bankOpen then
-        return "Bank open"
-    end
-    return "Bags only"
-end
-
-local function CountSummary()
-    local counts = {
-        totalBags = 0,
-        totalBank = 0,
-        totalWarband = 0,
-        oldInBags = 0,
-        oldInBank = 0,
-        unclassified = 0,
-        itemRules = 0,
-    }
-    for _, item in ipairs(GetAllDecisions() or {}) do
-        if item.scope == BAG_SCOPE then
-            counts.totalBags = counts.totalBags + 1
-        elseif item.storageKind == STORAGE_WARBAND_BANK then
-            counts.totalWarband = counts.totalWarband + 1
-        else
-            counts.totalBank = counts.totalBank + 1
-        end
-        if IsOldExpansion(item.expansionID) then
-            if item.scope == BAG_SCOPE then
-                counts.oldInBags = counts.oldInBags + 1
-            elseif item.scope == BANK_SCOPE then
-                counts.oldInBank = counts.oldInBank + 1
-            end
-        end
-        if item.reason == "Unclassified" then
-            counts.unclassified = counts.unclassified + 1
-        end
-    end
-    local rules = ns.DB and ns.DB.rules and ns.DB.rules.items or {}
-    for _, rule in pairs(rules) do
-        if rule.protect or rule.ignore or rule.neverSell then
-            counts.itemRules = counts.itemRules + 1
-        end
-    end
-    counts.totalScanned = counts.totalBags + counts.totalBank + counts.totalWarband
-    return counts
-end
-
 -- ===========================================================================
 -- SetTab / AddRule
 -- ===========================================================================
@@ -1068,70 +1052,23 @@ AddRule = function(item, ruleType)
     Core.RefreshUI()
 end
 
+-- Widget helpers shared with HomeUI.lua.
+P.UIKit = {
+    CreateButton = CreateButton,
+    CreateLabel = CreateLabel,
+    CreateDropdown = CreateDropdown,
+    SetDropdownText = SetDropdownText,
+    SetButtonStyle = SetButtonStyle,
+    ShowTooltip = ShowTooltip,
+    CreateEmptyLabel = CreateEmptyLabel,
+    SetEmptyLabel = SetEmptyLabel,
+    CloseOpenDropdown = CloseOpenDropdown,
+    SetTab = function(name) SetTab(name) end,
+}
+
 -- ===========================================================================
 -- Tab builders
 -- ===========================================================================
-
-local function BuildSummaryTab(parent)
-    parent.context = CreateLabel(parent, "", "GameFontHighlightLarge")
-    parent.context:SetPoint("TOPLEFT", 0, 0)
-
-    parent.lastScan = CreateLabel(parent, "", "GameFontDisableSmall")
-    parent.lastScan:SetPoint("TOPLEFT", parent.context, "BOTTOMLEFT", 0, -7)
-
-    parent.openTransfer = CreateButton(parent, "Open Transfer", 120, 26, "primary")
-    parent.openTransfer:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-    parent.openTransfer:SetScript("OnClick", function() SetTab("Transfer") end)
-
-    parent.rescan = CreateButton(parent, "Rescan", 96, 26)
-    parent.rescan:SetPoint("RIGHT", parent.openTransfer, "LEFT", -8, 0)
-    parent.rescan:SetScript("OnClick", function()
-        Core.ScanInventory(IsBankContextDetected() and "all" or BAG_SCOPE)
-    end)
-
-    parent.summaryValues = {}
-    local function CreateSummaryGroup(title, x, rows)
-        local group = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-        group:SetSize(254, 146)
-        group:SetPoint("TOPLEFT", parent, "TOPLEFT", x, -72)
-        group:SetBackdrop({
-            bgFile = "Interface\\Buttons\\WHITE8x8",
-            edgeFile = "Interface\\Buttons\\WHITE8x8",
-            edgeSize = 1,
-        })
-        group:SetBackdropColor(0.025, 0.03, 0.04, 0.72)
-        group:SetBackdropBorderColor(0.20, 0.21, 0.23, 0.90)
-
-        local heading = CreateLabel(group, title, "GameFontNormal")
-        heading:SetPoint("TOPLEFT", 12, -12)
-        for index, row in ipairs(rows) do
-            local y = -42 - (index - 1) * 30
-            local label = CreateLabel(group, row.label, "GameFontDisableSmall")
-            label:SetPoint("TOPLEFT", group, "TOPLEFT", 12, y)
-            local value = CreateLabel(group, "", "GameFontHighlight")
-            value:SetPoint("TOPRIGHT", group, "TOPRIGHT", -12, y)
-            value:SetJustifyH("RIGHT")
-            parent.summaryValues[row.key] = value
-        end
-        return group
-    end
-
-    CreateSummaryGroup("Inventory", 0, {
-        { key = "bags", label = "Bags" },
-        { key = "bank", label = "Character bank" },
-        { key = "warband", label = "Warband bank" },
-    })
-    CreateSummaryGroup("Cleanup", 276, {
-        { key = "oldBags", label = "Old items in bags" },
-        { key = "oldBanks", label = "Old items in banks" },
-        { key = "unclassified", label = "Unclassified" },
-    })
-    CreateSummaryGroup("Status", 552, {
-        { key = "total", label = "Scanned total" },
-        { key = "rules", label = "Item rules" },
-        { key = "scope", label = "Current context" },
-    })
-end
 
 local function BuildRulesTab(parent)
     local CONTENT_WIDTH = 806
@@ -1247,6 +1184,42 @@ local function BuildSettingsTab(parent)
     parent.note = CreateLabel(parent, "Bank and vendor launchers remain disabled.", "GameFontDisableSmall")
     parent.note:SetPoint("TOPLEFT", parent.minimap, "BOTTOMLEFT", 0, -10)
 
+    -- Workflow settings (right column).
+    parent.workflowHeading = CreateLabel(parent, "Workflow", "GameFontHighlightLarge")
+    parent.workflowHeading:SetPoint("TOPLEFT", parent, "TOPLEFT", 420, 0)
+    parent.workflowChecks = {}
+    local function AddCheck(key, label, tooltip, anchor)
+        local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
+        check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, anchor == parent.workflowHeading and -18 or -4)
+        check.settingKey = key
+        check.label = CreateLabel(parent, label, "GameFontHighlightSmall")
+        check.label:SetPoint("LEFT", check, "RIGHT", -2, 0)
+        check:SetScript("OnClick", function(self)
+            ns.DB.ui[key] = self:GetChecked() and true or false
+            Core.RefreshUI()
+        end)
+        check:SetScript("OnEnter", function(self) ShowTooltip(self, tooltip) end)
+        check:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        table.insert(parent.workflowChecks, check)
+        return check
+    end
+    local preselect = AddCheck("preselectQuickTasks", "Pre-select items when opening a task",
+        { "Pre-select items", "Opening a task checks its movable items for you.",
+          "You still review the list and click the action. Blocked items and",
+          "items flagged as worth keeping are never pre-selected." }, parent.workflowHeading)
+    local grouping = AddCheck("groupIdenticalRows", "Group identical items into one row",
+        { "Group identical items", "Stacks of the same item share one row." }, preselect)
+    local compact = AddCheck("compactRows", "Compact rows (more items per screen)",
+        { "Compact rows", "Shows 9 single-line rows instead of 6 detailed ones." }, grouping)
+    parent.noticeLabel = CreateLabel(parent, "At a bank or vendor:", "GameFontHighlightSmall")
+    parent.noticeLabel:SetPoint("TOPLEFT", compact, "BOTTOMLEFT", 4, -12)
+    parent.noticeMode = CreateDropdown(parent, 170, {
+        { text = "Show a small notice", value = "notice" },
+        { text = "Open the console", value = "open" },
+        { text = "Do nothing", value = "off" },
+    }, function(value) ns.DB.ui.contextNotice = value end)
+    parent.noticeMode:SetPoint("LEFT", parent.noticeLabel, "RIGHT", 8, 0)
+
     parent.refresh = CreateButton(parent, "Check launcher", 116)
     parent.refresh:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, -32)
     parent.refresh:SetScript("OnClick", function()
@@ -1266,7 +1239,7 @@ local function BuildSettingsTab(parent)
     end)
 
     parent.commandFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    parent.commandFrame:SetSize(CONTENT_WIDTH, 230)
+    parent.commandFrame:SetSize(CONTENT_WIDTH, 268)
     parent.commandFrame:SetPoint("TOPLEFT", parent.commandsToggle, "BOTTOMLEFT", 0, -10)
     parent.commandFrame:SetBackdrop({
         bgFile = "Interface\\Buttons\\WHITE8x8",
@@ -1282,8 +1255,9 @@ local function BuildSettingsTab(parent)
             title = "Workflows",
             x = 12,
             commands = {
-                { "/icanteven", "Open Transfer." },
+                { "/icanteven", "Open Home (task cards)." },
                 { "/icanteven transfer", "Open Transfer." },
+                { "/icanteven why [all]", "Why items are kept." },
                 { "/icanteven scan bags", "Scan bag contents." },
                 { "/icanteven scan bank", "Scan bank contents." },
                 { "/icanteven scan all", "Scan bags and bank." },
@@ -1297,8 +1271,9 @@ local function BuildSettingsTab(parent)
             title = "Views and Diagnostics",
             x = 12 + COLUMN_WIDTH + COLUMN_GAP,
             commands = {
-                { "/icanteven summary", "Open Summary." },
+                { "/icanteven characters", "Roles for your characters." },
                 { "/icanteven rules", "Open Rules." },
+                { "/icanteven migration", "Show the upgrade report." },
                 { "/icanteven settings", "Open Settings." },
                 { "/icanteven minimap", "Toggle minimap launcher." },
                 { "/icanteven buttons", "Print launcher status." },
@@ -1359,17 +1334,18 @@ local function BuildTransferTab(parent)
 
     -- The default view is task-first: one task picker, a readable route, and
     -- the two controls needed most often while reviewing results.
-    parent.taskLabel = CreateLabel(parent, "Task", "GameFontHighlightSmall")
-    parent.taskLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, TASK_Y - 5)
+    parent.homeButton = CreateButton(parent, "< Home", 70)
+    parent.homeButton:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, TASK_Y)
+    parent.homeButton:SetScript("OnClick", function() SetTab("Home") end)
 
-    parent.taskDropdown = CreateDropdown(parent, 250, GetTransferTaskOptions(), function(value)
-        ApplyTransferTask(value, parent)
-    end)
-    parent.taskDropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", 38, TASK_Y)
+    parent.taskTitle = CreateLabel(parent, "", "GameFontHighlight")
+    parent.taskTitle:SetPoint("LEFT", parent.homeButton, "RIGHT", 12, 0)
+    parent.taskTitle:SetWidth(250)
+    parent.taskTitle:SetWordWrap(false)
 
-    parent.routeSummary = CreateLabel(parent, "", "GameFontHighlight")
-    parent.routeSummary:SetPoint("LEFT", parent.taskDropdown, "RIGHT", 16, 0)
-    parent.routeSummary:SetWidth(290)
+    parent.routeSummary = CreateLabel(parent, "", "GameFontDisableSmall")
+    parent.routeSummary:SetPoint("LEFT", parent.taskTitle, "RIGHT", 10, 0)
+    parent.routeSummary:SetWidth(260)
     parent.routeSummary:SetWordWrap(false)
 
     parent.customizeToggle = CreateButton(parent, "Customize", 92)
@@ -1481,25 +1457,17 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
-    parent.presetsLabel = CreateLabel(parent, "Saved", "GameFontHighlightSmall")
-    parent.presetsLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, DRAWER_ROW_2_Y - 5)
-
-    parent.presetsDropdown = CreateDropdown(parent, 190, GetSavedFiltersOptions(), function(name)
-        local preset = FindSavedFilter(name)
-        ApplyTransferWorkflow(preset, parent, name)
-    end)
-    parent.presetsDropdown:SetPoint("TOPLEFT", parent, "TOPLEFT", 46, DRAWER_ROW_2_Y)
-
-    parent.presetNameLabel = CreateLabel(parent, "Name", "GameFontHighlightSmall")
-    parent.presetNameLabel:SetPoint("LEFT", parent.presetsDropdown, "RIGHT", CONTROL_GAP, 0)
+    -- Save as task (H6): saves the whole current state as a Home card.
+    parent.presetNameLabel = CreateLabel(parent, "Save as task", "GameFontHighlightSmall")
+    parent.presetNameLabel:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, DRAWER_ROW_2_Y - 5)
 
     parent.presetNameInput = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
-    parent.presetNameInput:SetSize(170, ROW_HEIGHT)
+    parent.presetNameInput:SetSize(220, ROW_HEIGHT)
     parent.presetNameInput:SetAutoFocus(false)
     parent.presetNameInput:SetMaxLetters(48)
-    parent.presetNameInput:SetPoint("LEFT", parent.presetNameLabel, "RIGHT", 4, 0)
+    parent.presetNameInput:SetPoint("TOPLEFT", parent, "TOPLEFT", 86, DRAWER_ROW_2_Y)
 
-    parent.savePreset = CreateButton(parent, "Save", 58)
+    parent.savePreset = CreateButton(parent, "Save task", 80)
     parent.savePreset:SetPoint("LEFT", parent.presetNameInput, "RIGHT", CONTROL_GAP, 0)
     parent.savePreset:SetScript("OnClick", function()
         local name = parent.presetNameInput:GetText()
@@ -1507,28 +1475,16 @@ local function BuildTransferTab(parent)
             SaveFilter(name, "Transfer")
             UI.activeSavedFilterName = name
             UI.activeQuickWorkflowName = nil
-            Core.RefreshUI()
-        end
-    end)
-
-    parent.deletePreset = CreateButton(parent, "Remove", 68, ROW_HEIGHT, "danger")
-    parent.deletePreset:SetPoint("LEFT", parent.savePreset, "RIGHT", CONTROL_GAP, 0)
-    parent.deletePreset:SetScript("OnClick", function()
-        local name = parent.presetNameInput:GetText()
-        if name and name ~= "" then
-            DeleteSavedFilter(name)
-            parent.presetNameInput:SetText("")
-            if UI.activeSavedFilterName == name then
-                ClearActiveWorkflowState()
-            end
+            UI.activeTaskModified = false
+            UI.transferContextMessage = "Saved \"" .. name .. "\". It's on Home now."
             Core.RefreshUI()
         end
     end)
 
     parent.customControls = {
         parent.fromLabel, parent.sourceDropdown, parent.flowArrow, parent.toLabel,
-        parent.destDropdown, parent.swapRoute, parent.presetsLabel, parent.presetsDropdown,
-        parent.presetNameLabel, parent.presetNameInput, parent.savePreset, parent.deletePreset,
+        parent.destDropdown, parent.swapRoute,
+        parent.presetNameLabel, parent.presetNameInput, parent.savePreset,
     }
 
     -- Filter drawer: categorical filters on the first row, refinement and sort
@@ -1668,19 +1624,21 @@ local function BuildTransferTab(parent)
     parent.emptyAction:Hide()
 
     -- Scrollable list using FauxScrollFrame
+    -- Normal rows: 6 x 42px with a detail line. Compact rows: 9 x 28px.
     parent.ROW_HEIGHT = 42
     parent.VISIBLE_ROWS = 6
+    parent.MAX_ROWS = 9
+    parent.LIST_INSET = LIST_INSET
     local ROW_HEIGHT = parent.ROW_HEIGHT
-    local VISIBLE_ROWS = parent.VISIBLE_ROWS
     parent.scrollFrame = CreateFrame("ScrollFrame", nil, parent.listFrame, "FauxScrollFrameTemplate")
     parent.scrollFrame:SetPoint("TOPLEFT",     parent.listFrame, "TOPLEFT",     LIST_INSET,   -LIST_INSET)
     parent.scrollFrame:SetPoint("BOTTOMRIGHT", parent.listFrame, "BOTTOMRIGHT", -SCROLLBAR_RIGHT_INSET,  LIST_INSET)
     parent.scrollFrame:SetScript("OnVerticalScroll", function(self, offset)
-        FauxScrollFrame_OnVerticalScroll(self, offset, ROW_HEIGHT, function() Core.RefreshUI() end)
+        FauxScrollFrame_OnVerticalScroll(self, offset, parent.ROW_HEIGHT, function() Core.RefreshUI() end)
     end)
 
     parent.rows = {}
-    for i = 1, VISIBLE_ROWS do
+    for i = 1, parent.MAX_ROWS do
         local row = CreateFrame("Button", nil, parent.listFrame, "BackdropTemplate")
         row:SetSize(ROW_WIDTH, 40)
         row:RegisterForClicks("LeftButtonUp")
@@ -1805,28 +1763,6 @@ function Core.RefreshTransferDropdowns()
     end
 end
 
-function Core.RefreshSummary()
-    local panel = UI.frame.panels.Summary
-    local counts = CountSummary()
-    local contextText = GetContextText()
-    panel.context:SetText(contextText)
-    panel.lastScan:SetText("Last scanned  •  Bags " .. FormatTimestamp(P.GetLastScan(BAG_SCOPE))
-        .. "  •  Bank " .. FormatTimestamp(P.GetLastScan(BANK_SCOPE)))
-    panel.rescan:SetText(IsBankContextDetected() and "Rescan all" or "Scan bags")
-    panel.rescan:SetEnabled(not ns.DB.context.inCombat)
-
-    local values = panel.summaryValues
-    values.bags:SetText(tostring(counts.totalBags))
-    values.bank:SetText(tostring(counts.totalBank))
-    values.warband:SetText(tostring(counts.totalWarband))
-    values.oldBags:SetText(tostring(counts.oldInBags))
-    values.oldBanks:SetText(tostring(counts.oldInBank))
-    values.unclassified:SetText(tostring(counts.unclassified))
-    values.total:SetText(tostring(counts.totalScanned))
-    values.rules:SetText(tostring(counts.itemRules))
-    values.scope:SetText(contextText)
-end
-
 function Core.RefreshTransfer()
     local panel = UI.frame.panels.Transfer
     local source = UI.transferSource or "Bags"
@@ -1850,20 +1786,11 @@ function Core.RefreshTransfer()
     SetDropdownText(panel.destDropdown, GetStorageDisplayName(dest))
     panel.swapRoute:SetEnabled(dest ~= "Vendor" and not ns.DB.context.inCombat)
 
-    panel.taskDropdown:SetOptions(GetTransferTaskOptions())
-    SetDropdownText(panel.taskDropdown, UI.activeQuickWorkflowName or UI.activeSavedFilterName or "Custom transfer")
+    local taskName = UI.activeQuickWorkflowName or UI.activeSavedFilterName
+    panel.taskTitle:SetText(taskName and (taskName .. (UI.activeTaskModified and " (modified)" or "")) or "Custom transfer")
     panel.routeSummary:SetText(GetStorageDisplayName(source) .. "  ->  " .. GetStorageDisplayName(dest))
     panel.rescan:SetText(IsBankContextDetected() and "Rescan all" or "Scan bags")
     panel.rescan:SetEnabled(not ns.DB.context.inCombat)
-
-    -- Update saved-workflow options (list may have changed since the tab was built).
-    local presetOpts = GetSavedFiltersOptions()
-    panel.presetsDropdown:SetOptions(presetOpts)
-    local loadedPresetName = UI.activeSavedFilterName
-    SetDropdownText(panel.presetsDropdown, loadedPresetName or (#presetOpts > 0 and "Saved workflow..." or "(none saved)"))
-    local currentPresetName = panel.presetNameInput:GetText()
-    local presetExists = currentPresetName ~= "" and FindSavedFilter(currentPresetName) ~= nil
-    panel.deletePreset:SetEnabled(presetExists)
     SetDropdownText(panel.expansionFilter, "Expansion: " .. GetExpansionFilterLabel(filters.expansion.include))
     SetMultiDropdownValue(panel.typeFilter, filters.type.include)
     SetDropdownText(panel.typeFilter, "Type: " .. GetMultiSelectLabel(filters.type.include, "All"))
@@ -1938,7 +1865,8 @@ function Core.RefreshTransfer()
     local matched = {}
     local visible = {}
     for _, plan in ipairs(allCandidates) do
-        if PlanMatchesTabFilters(plan, "Transfer") then
+        if PlanMatchesTabFilters(plan, "Transfer")
+            and (not UI.activeTaskPredicate or UI.activeTaskPredicate(plan.item)) then
             table.insert(matched, plan)
             if not filters.hideBlocked or plan.movable then
                 table.insert(visible, plan)
@@ -1947,6 +1875,24 @@ function Core.RefreshTransfer()
     end
     SortTransferPlans(visible, sortMode)
     UI.transferVisible = visible
+
+    -- Group identical items (same item, same status) into one row (H4).
+    local displayRows = {}
+    local groupIndex = {}
+    local grouping = ns.DB.ui.groupIdenticalRows ~= false
+    for _, plan in ipairs(visible) do
+        local groupKey = grouping and (tostring(plan.item.itemID) .. ":" .. tostring(plan.movable) .. ":" .. tostring(plan.blocked or ""))
+        local row = groupKey and groupIndex[groupKey]
+        if row then
+            table.insert(row.plans, plan)
+            row.total = row.total + (plan.item.count or 1)
+        else
+            row = { plans = { plan }, plan = plan, total = plan.item.count or 1 }
+            table.insert(displayRows, row)
+            if groupKey then groupIndex[groupKey] = row end
+        end
+    end
+    UI.transferRows = displayRows
 
     local movableCount = 0
     for _, plan in ipairs(matched) do
@@ -1997,8 +1943,11 @@ function Core.RefreshTransfer()
     end
 
     local actionLabel
+    local batch = P.VENDOR_BATCH_SIZE or 12
     if selectedCount == 0 then
         actionLabel = "Select items first"
+    elseif dest == "Vendor" and selectedCount > batch then
+        actionLabel = "Sell " .. batch .. " of " .. selectedCount
     elseif dest == "Vendor" then
         actionLabel = "Sell " .. selectedCount .. " (" .. FormatMoney(selectedVendorValue) .. ")"
     elseif dest == "Bags" then
@@ -2017,7 +1966,17 @@ function Core.RefreshTransfer()
     panel.selectAll:ClearAllPoints()
     panel.selectAll:SetPoint("RIGHT", selectedCount > 0 and panel.clearSel or panel.execute, "LEFT", -8, 0)
 
-    FauxScrollFrame_Update(panel.scrollFrame, #visible, panel.VISIBLE_ROWS, panel.ROW_HEIGHT)
+    local compact = ns.DB.ui.compactRows and true or false
+    panel.ROW_HEIGHT = compact and 28 or 42
+    panel.VISIBLE_ROWS = compact and panel.MAX_ROWS or 6
+    for i, row in ipairs(panel.rows) do
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT", panel.listFrame, "TOPLEFT", panel.LIST_INSET, -panel.LIST_INSET - (i - 1) * panel.ROW_HEIGHT)
+        row:SetHeight(compact and 26 or 40)
+        row.detailText:SetShown(not compact)
+    end
+
+    FauxScrollFrame_Update(panel.scrollFrame, #displayRows, panel.VISIBLE_ROWS, panel.ROW_HEIGHT)
     local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
     local startIndex = offset + 1
 
@@ -2026,10 +1985,16 @@ function Core.RefreshTransfer()
         .. movableCount .. " movable  •  " .. selectedCount .. " selected" .. statusSuffix)
 
     for i, row in ipairs(panel.rows) do
-        local plan = visible[startIndex + i - 1]
+        local display = i <= panel.VISIBLE_ROWS and displayRows[startIndex + i - 1] or nil
+        local plan = display and display.plan
         if plan then
             local item = plan.item
-            local isSelected = plan.movable and UI.transferSelected[plan.key] and true or false
+            local members = display.plans
+            local isSelected = plan.movable
+            for _, member in ipairs(members) do
+                if not UI.transferSelected[member.key] then isSelected = false break end
+            end
+            isSelected = isSelected and true or false
             row:Show()
             row.plan = plan
             row.icon:SetTexture(item.icon)
@@ -2042,17 +2007,32 @@ function Core.RefreshTransfer()
             else
                 row:SetBackdropColor(0, 0, 0, row.baseAlpha or 0.08)
             end
+            local function SetMembersSelected(selected)
+                for _, member in ipairs(members) do
+                    UI.transferSelected[member.key] = selected and true or nil
+                end
+            end
             row.check:SetScript("OnClick", function(self)
-                UI.transferSelected[plan.key] = self:GetChecked() and true or nil
+                SetMembersSelected(self:GetChecked())
                 Core.RefreshUI()
             end)
             row:SetScript("OnClick", function()
                 if not plan.movable then return end
-                UI.transferSelected[plan.key] = UI.transferSelected[plan.key] and nil or true
+                SetMembersSelected(not isSelected)
                 Core.RefreshUI()
             end)
-            row.nameText:SetText(item.name or ("Item " .. item.itemID))
-            row.detailText:SetText(BuildTransferRowDetail(plan, source, dest))
+            local name = item.name or ("Item " .. item.itemID)
+            if #members > 1 then
+                name = name .. "  x" .. display.total .. " in " .. #members .. " stacks"
+            end
+            if compact and plan.blocked then name = name .. "  -  Blocked: " .. plan.blocked end
+            row.nameText:SetText(name)
+            local detailPlan = plan
+            if #members > 1 then
+                detailPlan = { item = setmetatable({ count = display.total }, { __index = item }),
+                    blocked = plan.blocked, movable = plan.movable }
+            end
+            row.detailText:SetText(BuildTransferRowDetail(detailPlan, source, dest))
             local actionText
             if dest == "Vendor" then
                 actionText = "Sell"
@@ -2066,7 +2046,11 @@ function Core.RefreshTransfer()
             row.action:SetText(actionText)
             row.action:SetEnabled(plan.movable)
             row.action:SetScript("OnClick", function()
-                Core.ExecuteTransferOne(plan)
+                -- Acts on every stack in the row; vendor sales stop at one buyback batch.
+                local limit = dest == "Vendor" and (P.VENDOR_BATCH_SIZE or 12) or #members
+                for index = 1, math.min(limit, #members) do
+                    Core.ExecuteTransferOne(members[index])
+                end
             end)
             row.rule:SetScript("OnClick", function() ToggleRowRuleMenu(row, item) end)
             row:SetScript("OnEnter", function(self)
@@ -2189,6 +2173,15 @@ function Core.RefreshSettings()
     if panel.minimap then
         panel.minimap:SetChecked(ns.DB and ns.DB.ui and ns.DB.ui.showMinimapIcon ~= false)
     end
+    for _, check in ipairs(panel.workflowChecks or {}) do
+        local value = ns.DB.ui[check.settingKey]
+        if check.settingKey == "groupIdenticalRows" then value = value ~= false end
+        check:SetChecked(value and true or false)
+    end
+    if panel.noticeMode then
+        local labels = { notice = "Show a small notice", open = "Open the console", off = "Do nothing" }
+        SetDropdownText(panel.noticeMode, labels[ns.DB.ui.contextNotice or "notice"] or labels.notice)
+    end
     if panel.status then
         local mode = UI.minimapIconRegistered and "LibDBIcon" or "fallback"
         panel.status:SetText("Minimap launcher: " .. (ns.DB.ui.showMinimapIcon ~= false and "shown" or "hidden") .. " (" .. mode .. ")")
@@ -2214,8 +2207,10 @@ function Core.RefreshUI()
             SetTabVisual(tabBtn, tabName == tab, false)
         end
     end
-    if tab == "Summary" then
-        Core.RefreshSummary()
+    if tab == "Home" then
+        if P.RefreshHome then P.RefreshHome() end
+    elseif tab == "Characters" then
+        if P.RefreshCharacters then P.RefreshCharacters() end
     elseif tab == "Transfer" then
         Core.RefreshTransfer()
     elseif tab == "Rules" then
@@ -2255,7 +2250,7 @@ function Core.CreateUI()
     frame.panels = {}
     local previous
     for _, name in ipairs(TAB_ORDER) do
-        local tab = CreateTabButton(frame, name, name == "Transfer" and 104 or 92, function() SetTab(name) end)
+        local tab = CreateTabButton(frame, name, (name == "Transfer" or name == "Characters") and 104 or 92, function() SetTab(name) end)
         tab:SetFrameLevel(frame:GetFrameLevel() + 8)
         tab:SetPoint("TOPLEFT", previous or frame, previous and "TOPRIGHT" or "TOPLEFT", previous and 2 or 14, previous and 0 or -36)
         UI.tabs[name] = tab
@@ -2263,8 +2258,10 @@ function Core.CreateUI()
 
         local panel = CreatePanel(frame)
         frame.panels[name] = panel
-        if name == "Summary" then
-            BuildSummaryTab(panel)
+        if name == "Home" then
+            P.BuildHomeTab(panel)
+        elseif name == "Characters" then
+            P.BuildCharactersTab(panel)
         elseif name == "Transfer" then
             BuildTransferTab(panel)
         elseif name == "Rules" then
@@ -2283,6 +2280,7 @@ end
 
 local function ShowAndRefresh(tab)
     Core.CreateUI()
+    if P.HideContextNotice then P.HideContextNotice() end
     UI.activeTab = tab
     UI.frame:Show()
     -- Rescan on open: saved scans can be from an earlier session, and bags
@@ -2290,7 +2288,9 @@ local function ShowAndRefresh(tab)
     Core.ScanInventory("all", true)
 end
 
-function Core.ShowSummaryUI()  ShowAndRefresh("Summary")  end
+function Core.ShowHomeUI()     ShowAndRefresh("Home")     end
+function Core.ShowSummaryUI()  ShowAndRefresh("Home")     end
+function Core.ShowCharactersUI() ShowAndRefresh("Characters") end
 function Core.ShowTransferUI() ShowAndRefresh("Transfer") end
 function Core.ShowMoveUI()     ShowAndRefresh("Transfer") end
 function Core.ShowOrganizeUI() ShowAndRefresh("Transfer") end

@@ -75,7 +75,7 @@ P.VENDOR_ACTION_SELL   = "Sell at Vendor"
 -- ---------------------------------------------------------------------------
 P.ORGANIZE_PAGE_SIZE = 6
 P.VENDOR_PAGE_SIZE   = 6
-P.TAB_ORDER = { "Transfer", "Summary", "Rules", "Settings" }
+P.TAB_ORDER = { "Home", "Transfer", "Characters", "Rules", "Settings" }
 
 P.MYTHIC_KEYSTONE_ITEM_IDS = {
     [138019] = true,
@@ -118,7 +118,7 @@ P.UI = {
     bankButton = nil,
     vendorButton = nil,
     tabs = {},
-    activeTab = "Summary",
+    activeTab = "Home",
     rows = {},
     ruleRows = {},
     selected = {},

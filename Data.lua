@@ -108,6 +108,10 @@ ns.Data.DefaultDB = {
         showBankButton = false,
         showVendorButton = false,
         transferSort = "Name",
+        preselectQuickTasks = false, -- H3: off by default (player decision)
+        groupIdenticalRows = true,
+        compactRows = false,
+        contextNotice = "notice",    -- "notice" | "open" | "off" at a bank or vendor
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.

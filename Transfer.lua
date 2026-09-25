@@ -529,6 +529,11 @@ function Core.ExecuteTransferOne(plan)
     end
 end
 
+-- The vendor buyback list holds 12 items (confirmed in game). Selling at most
+-- 12 per click means every sale from one click can still be bought back.
+local VENDOR_BATCH_SIZE = 12
+P.VENDOR_BATCH_SIZE = VENDOR_BATCH_SIZE
+
 function Core.ExecuteTransferSelected()
     Core.UpdateContext()
     if ns.DB.context.inCombat then
@@ -541,8 +546,13 @@ function Core.ExecuteTransferSelected()
     local movedKeys = {}
     local blockedDetails = {}
     local foundStaleSlot = false
+    local processed = {}
+    local remaining = 0
     for _, plan in ipairs(UI.transferVisible or {}) do
-        if UI.transferSelected[plan.key] then
+        if UI.transferSelected[plan.key] and dest == "Vendor" and moved >= VENDOR_BATCH_SIZE then
+            remaining = remaining + 1
+        elseif UI.transferSelected[plan.key] then
+            processed[plan.key] = true
             local item = plan.item
             local blockReason = GetTransferBlockReason(item, source, dest)
             if not blockReason then
@@ -563,7 +573,8 @@ function Core.ExecuteTransferSelected()
             end
         end
     end
-    UI.transferSelected = {}
+    -- Items not reached (vendor batch limit) stay selected for the next click.
+    for key in pairs(processed) do UI.transferSelected[key] = nil end
     RemoveMovedItemsFromScan(movedKeys)
     if moved > 0 then
         HoldReservedSlotsUntilSettled()
@@ -571,9 +582,14 @@ function Core.ExecuteTransferSelected()
     if moved > 0 or blocked > 0 then
         local action = dest == "Vendor" and "sold" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
+            .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
     Core.RefreshUI()
-    Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
+    Print("Transfer complete: " .. moved .. " " .. (dest == "Vendor" and "sold" or "moved") .. ", " .. blocked .. " blocked.")
+    if remaining > 0 then
+        Print(remaining .. " more selected. Click Sell again for the next batch; the vendor can buy back your last "
+            .. VENDOR_BATCH_SIZE .. " sales.")
+    end
     if #blockedDetails > 0 then
         Print("Blocked: " .. table.concat(blockedDetails, "; "))
     end

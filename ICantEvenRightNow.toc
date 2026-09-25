@@ -25,5 +25,7 @@ Warband.lua
 Filter.lua
 Scanner.lua
 Transfer.lua
+Tasks.lua
 UI.lua
+HomeUI.lua
 Core.lua

@@ -106,8 +106,10 @@ function Core.HandleSlashCommand(msg)
     local cmd, arg1 = (msg or ""):match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
 
-    if cmd == "" then
-        Core.ShowTransferUI()
+    if cmd == "" or cmd == "home" then
+        Core.ShowHomeUI()
+    elseif cmd == "characters" or cmd == "roles" then
+        Core.ShowCharactersUI()
     elseif cmd == "scan" then
         Core.ScanInventory(arg1)
     elseif cmd == "summary" then
@@ -224,7 +226,7 @@ function Core.HandleSlashCommand(msg)
             for _, line in ipairs(P.MigrationReportLines(report)) do Print(line) end
         end
     else
-        Print("Commands: /icanteven, scan [bags|bank|all], summary, transfer, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
+        Print("Commands: /icanteven (Home), transfer, characters, why [all], scan [bags|bank|all], dump, recall, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
     end
 end
 
@@ -390,8 +392,13 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RefreshBankTabData()
         Core.RefreshTransferDropdowns()
         pcall(Core.ScanInventory, "all", true)
+        pcall(P.OnContextOpened)
     elseif vendorContextOpened then
         Core.ScanInventory(BAG_SCOPE, true)
+        pcall(P.OnContextOpened)
+    end
+    if bankContextClosed or vendorContextClosed then
+        P.HideContextNotice()
     end
 
     if event == "BANK_TAB_SETTINGS_UPDATED" then
