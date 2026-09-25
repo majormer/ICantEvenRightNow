@@ -101,8 +101,10 @@ P.BANK_FRAME_NAMES = {
     "WarbandBankPanelFrame", "BetterBagsBankFrame", "BetterBags_BankFrame",
     "BetterBagsBank",
 }
+-- No bare "bank" pattern: in game some unrelated frame containing "bank" in
+-- its name was shown at the auction house and made the addon think a bank was open.
 P.BANK_FRAME_PATTERNS = {
-    "betterbagsbagbank", "bank", "bagnonframebank", "combuctorframebank",
+    "betterbagsbagbank", "bagnonframebank", "combuctorframebank",
     "litebagbank", "inventorianbank", "bankpanel", "accountbank",
     "warbandbank", "adibagsbank", "sortedbank",
 }
@@ -758,11 +760,12 @@ local function IsPlayerBankInteractionActive()
     return false
 end
 
+-- Bank storage "accessible" is not used: away from a bank, bank bags still
+-- answer GetContainerNumFreeSlots (0 each), which read as an open bank.
 local function IsBankContextDetected()
     return IsPlayerBankInteractionActive()
         or (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
         or IsBankViewableByAPI()
-        or IsBankStorageAccessible()
 end
 
 P.GetShownGlobalFrame           = GetShownGlobalFrame

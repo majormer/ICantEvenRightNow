@@ -78,10 +78,19 @@ local function AuctionatorPrice(item)
     end
     if type(price) ~= "number" or price <= 0 then return nil end
     -- For gear, Auctionator may only know the base item, not this item level.
+    -- Below its item-level threshold (168 in v339) it stores gear by base item
+    -- only and still reports that price as exact, so treat it as approximate.
     local exact
-    if (item.classID == 2 or item.classID == 4) and item.link and api.IsAuctionDataExactByItemLink then
-        local okExact, value = pcall(api.IsAuctionDataExactByItemLink, CALLER_ID, item.link)
-        if okExact and value ~= nil then exact = value and true or false end
+    if (item.classID == 2 or item.classID == 4) then
+        local constants = Auctionator.Constants
+        local threshold = constants and type(constants.ITEM_LEVEL_THRESHOLD) == "number" and constants.ITEM_LEVEL_THRESHOLD or 168
+        local level = item.link and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link) or item.itemLevel
+        if not item.link or (type(level) == "number" and level < threshold) then
+            exact = false
+        elseif api.IsAuctionDataExactByItemLink then
+            local okExact, value = pcall(api.IsAuctionDataExactByItemLink, CALLER_ID, item.link)
+            if okExact and value ~= nil then exact = value and true or false end
+        end
     end
     return { price = price, source = "Auctionator", ageDays = age, exact = exact }
 end
@@ -461,6 +470,22 @@ function P.AuctionCandidateItems()
         end
     end
     return list
+end
+
+-- Diagnostic lines: each auction candidate with its price and value.
+function P.AuctionCandidateReport()
+    local lines, total = {}, 0
+    for _, item in ipairs(P.AuctionCandidateItems()) do
+        local value = P.GetItemValue(item) or 0
+        total = total + value
+        local price = P.GetAuctionPrice(item)
+        table.insert(lines, string.format("  %s%s x%d: %s each (%s) = %s", item.name or ("Item " .. tostring(item.itemID)),
+            GearItemLevel(item) and (" [" .. GearItemLevel(item) .. "]") or "", item.count or 1,
+            price and P.FormatMoney(price.price) or "?", price and P.FormatPriceSource(price) or "no price",
+            P.FormatMoney(value)))
+    end
+    table.insert(lines, 1, "Auction candidates: " .. (#lines) .. ", ~" .. P.FormatMoney(total) .. " after the auction cut.")
+    return lines
 end
 
 -- At the auction house: run an exact search for every name in Auctionator's

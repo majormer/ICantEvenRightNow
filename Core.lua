@@ -174,7 +174,8 @@ function Core.HandleSlashCommand(msg)
         Print("IsBankViewableByAPI=" .. tostring(IsBankViewableByAPI()))
         Print("IsBankStorageAccessible=" .. tostring(IsBankStorageAccessible()))
         local frameResult = GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)
-        Print("FrameDetected=" .. tostring(frameResult ~= nil) .. " (" .. tostring(frameResult) .. ")")
+        local frameName = frameResult and frameResult.GetName and frameResult:GetName() or nil
+        Print("FrameDetected=" .. tostring(frameResult ~= nil) .. " (" .. tostring(frameName) .. ")")
         Print("IsBankContextDetected=" .. tostring(IsBankContextDetected()))
         Print("context.bankOpen=" .. tostring(ns.DB.context.bankOpen))
         if C_Container and C_Container.GetContainerNumFreeSlots then
@@ -195,6 +196,8 @@ function Core.HandleSlashCommand(msg)
         Print("Debug mode: " .. (Debug.IsDebugEnabled() and "ON" or "OFF"))
     elseif cmd == "diag" then
         Debug.RunDiagnosticDump()
+    elseif cmd == "auction" then
+        for _, line in ipairs(P.AuctionCandidateReport()) do Print(line) end
     elseif cmd == "itemdata" then
         -- Which scanned stacks lack item data, and what the client says now.
         local bags = P.GetScanList(BAG_SCOPE) or {}

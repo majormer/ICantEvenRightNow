@@ -568,7 +568,8 @@ function World:_buildEnv()
             return c and c.size or 0
         end,
         GetContainerNumFreeSlots = function(bagID)
-            if not world:isAccessible(bagID) then return nil end
+            -- Seen in game (12.x): closed bank bags still answer, with 0.
+            if not world:isAccessible(bagID) then return world.containers[bagID] and 0 or nil end
             local c = world.containers[bagID]
             if not c then return 0 end
             local used = 0
