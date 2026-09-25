@@ -474,3 +474,83 @@ function P.WhyReportLines(scope)
     end
     return lines
 end
+
+-- ---------------------------------------------------------------------------
+-- UI helpers (Y4)
+-- ---------------------------------------------------------------------------
+
+-- Explain a scanned record using the location it came from (for time held).
+function P.ExplainScanned(item)
+    local locationKey
+    if item.storageKind == P.STORAGE_WARBAND_BANK then
+        locationKey = "warband"
+    elseif item.scope == BAG_SCOPE or item.scope == BANK_SCOPE then
+        locationKey = LocationKeyFor(item.scope)
+    end
+    return ExplainItem(item, { locationKey = locationKey })
+end
+
+local DISPOSITION_PREFIX = { free = "Can go", review = "Your call", keep = "Keep", info = "" }
+
+-- Short label for list rows: "Can go: Appearance already collected".
+function P.ReasonShortText(explanation)
+    if not explanation then return nil end
+    if explanation.primary.id == "unexplained" then return nil end
+    local prefix = DISPOSITION_PREFIX[explanation.disposition] or ""
+    return (prefix ~= "" and (prefix .. ": ") or "") .. explanation.label
+end
+
+-- What letting the item go would cost, in plain words.
+function P.LossText(item, explanation)
+    local parts = {}
+    local ids = {}
+    for _, r in ipairs(explanation.reasons) do ids[r.id] = true end
+    if ids.appearance_collected then parts[#parts + 1] = "You keep the appearance." end
+    if ids.collectible_learned then parts[#parts + 1] = "It stays in your collection." end
+    if ids.quest_done then parts[#parts + 1] = "The quest is already done." end
+    local value = (item.sellPrice or 0) * (item.count or 1)
+    if P.GetItemValue then
+        local best, source = P.GetItemValue(item)
+        if best and best > value and source ~= "vendor" then
+            parts[#parts + 1] = "Worth about " .. P.FormatMoney(best) .. " (" .. source .. ")."
+        elseif value > 0 then
+            parts[#parts + 1] = "Worth " .. P.FormatMoney(value) .. " at a vendor."
+        end
+    elseif value > 0 then
+        parts[#parts + 1] = "Worth " .. P.FormatMoney(value) .. " at a vendor."
+    end
+    if ids.unused_gear or ids.unused_material then
+        parts[#parts + 1] = "Nothing on your account uses it."
+    end
+    if #parts == 0 then return nil end
+    return table.concat(parts, " ")
+end
+
+-- Items the "can go" tasks act on: free to go and sellable at a vendor.
+local function CanGoAndSellable(item)
+    if (item.sellPrice or 0) <= 0 then return false end
+    local explanation = P.ExplainScanned(item)
+    return explanation.disposition == "free"
+end
+P.CanGoAndSellable = CanGoAndSellable
+
+-- Reason-driven tasks (registered once Tasks.lua is loaded).
+function P.RegisterReasonTasks()
+    if not P.RegisterTask then return end
+    P.RegisterTask({
+        name = "Pull Items That Can Go",
+        description = "Bank items you can let go of without losing anything, into your bags to sell.",
+        preset = { name = "Pull Items That Can Go", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = true, sort = "Vendor Value" },
+        predicate = CanGoAndSellable,
+    })
+    P.RegisterTask({
+        name = "Sell Items That Can Go",
+        description = "Junk, collected appearances, learned collectibles, and spent consumables.",
+        preset = { name = "Sell Items That Can Go", source = "Bags", dest = "Vendor",
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = true, sort = "Vendor Value" },
+        predicate = CanGoAndSellable,
+    })
+end

@@ -223,3 +223,6 @@ end
 function P.IsPreselectEnabled()
     return ns.DB and ns.DB.ui and ns.DB.ui.preselectQuickTasks == true
 end
+
+-- Reason-driven tasks live in Reasons.lua; register them now that tasks exist.
+if P.RegisterReasonTasks then P.RegisterReasonTasks() end

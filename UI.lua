@@ -545,6 +545,9 @@ local function BuildTransferRowDetail(plan, source, dest)
     if (item.count or 1) > 1 then
         table.insert(meta, "x" .. tostring(item.count))
     end
+    if P.ExplainScanned then
+        AddIfPresent(meta, P.ReasonShortText(P.ExplainScanned(item)))
+    end
     AddIfPresent(meta, item.bindingScope)
     AddIfPresent(meta, GetItemGearSummary(item))
     AddIfPresent(meta, item.expansionName)
@@ -1039,6 +1042,12 @@ local function SetTab(tabName)
 end
 
 AddRule = function(item, ruleType)
+    local keepChoice = type(ruleType) == "string" and ruleType:match("^keep:(%a+)$")
+    if keepChoice then
+        P.SetKeepReason(item.itemID, keepChoice, item.name, keepChoice == "investment" and 90 or nil)
+        Core.RefreshUI()
+        return
+    end
     local rule = EnsureRule(item.itemID)
     rule.name = item.name or rule.name
     rule.createdFrom = "Transfer tab"
@@ -1664,10 +1673,14 @@ local function BuildTransferTab(parent)
         row.rule = CreateButton(row, "+Rule", ROW_RULE_WIDTH, 22)
         row.rule:SetPoint("RIGHT", row, "RIGHT", -ROW_RULE_RIGHT, 0)
         -- Only live rule types: Protect / Ignore / Never Sell
-        row.ruleMenu = CreateRowRuleMenu(row, 104, {
+        row.ruleMenu = CreateRowRuleMenu(row, 150, {
             { text = "Protect",    ruleType = "Protect" },
             { text = "Ignore",     ruleType = "Ignore" },
             { text = "Never Sell", ruleType = "Never Sell" },
+            { text = "Keepsake",   ruleType = "keep:keepsake" },
+            { text = "Keep for an alt", ruleType = "keep:alt" },
+            { text = "Keep for an event", ruleType = "keep:event" },
+            { text = "Investment (90 days)", ruleType = "keep:investment" },
         })
         parent.rows[i] = row
         row:Hide()
@@ -2083,6 +2096,20 @@ function Core.RefreshTransfer()
                 if plan.blocked then
                     GameTooltip:AddLine("Blocked: " .. plan.blocked, 1, 0.35, 0.35)
                 end
+                if P.ExplainScanned then
+                    local explanation = P.ExplainScanned(item)
+                    GameTooltip:AddLine(" ")
+                    GameTooltip:AddLine("Why it's here: " .. explanation.label, 1, 0.82, 0.3)
+                    if explanation.evidence then GameTooltip:AddLine(explanation.evidence, 0.8, 0.8, 0.8) end
+                    if explanation.held then GameTooltip:AddLine("Held " .. explanation.held, 0.8, 0.8, 0.8) end
+                    for _, other in ipairs(explanation.reasons) do
+                        if other ~= explanation.primary and P.REASONS[other.id] then
+                            GameTooltip:AddLine("Also: " .. P.REASONS[other.id].label, 0.65, 0.65, 0.65)
+                        end
+                    end
+                    local loss = P.LossText(item, explanation)
+                    if loss then GameTooltip:AddLine("If it goes: " .. loss, 0.6, 0.9, 0.6) end
+                end
                 GameTooltip:Show()
             end)
             row:SetScript("OnLeave", function() GameTooltip:Hide() end)
@@ -2112,6 +2139,11 @@ function Core.RefreshRules()
         if rule.protect   then table.insert(flags, "Protect") end
         if rule.ignore    then table.insert(flags, "Ignore") end
         if rule.neverSell then table.insert(flags, "Never Sell") end
+        if rule.keepReason then
+            for _, choice in ipairs(P.KEEP_REASON_CHOICES or {}) do
+                if choice.value == rule.keepReason then table.insert(flags, choice.label) end
+            end
+        end
         if #flags > 0 then
             local resolvedName = nameLookup[itemID] or rule.name
             local createdFrom = rule.createdFrom or ""
