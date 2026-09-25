@@ -42,6 +42,7 @@ It is cautious on purpose. Protected, quest, current-content, and ruled items ar
 ### Value awareness
 
 - Auction prices from Auctionator or TSM when installed, or from **Price My Items** at an auction house (only items you own, paced).
+- With Auctionator: search all auction candidates in its Shopping tab with one click (or save them as a shopping list), and hand price checks to Auctionator. Gear prices known only for the base item are marked "approximate".
 - Each price shows its source and age. Items worth noticeably more at auction are flagged at vendors and never pre-selected for selling.
 
 ### Safety

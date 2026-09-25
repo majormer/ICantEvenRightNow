@@ -122,6 +122,11 @@ local function CreateCard(parent, index)
     card.open = kit.CreateButton(card, "Review", 84, 22)
     card.open:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 10)
 
+    -- Optional second action (e.g. "Check in Auctionator").
+    card.secondary = kit.CreateButton(card, "", 150, 22)
+    card.secondary:SetPoint("RIGHT", card.open, "LEFT", -6, 0)
+    card.secondary:Hide()
+
     card.remove = kit.CreateButton(card, "x", 22, 20, "danger")
     card.remove:SetPoint("TOPRIGHT", card, "TOPRIGHT", -8, -8)
     card.remove:Hide()
@@ -251,6 +256,21 @@ function P.RefreshHome()
             local name = card.name
             widget.open:SetScript("OnClick", function() P.OpenTask(name) end)
             widget:SetScript("OnClick", function() P.OpenTask(name) end)
+            local secondary = card.task and card.task.secondary
+            local showSecondary = secondary and (not secondary.isAvailable or secondary.isAvailable())
+            if showSecondary then
+                local label = type(secondary.label) == "function" and secondary.label() or secondary.label
+                widget.secondary:SetText(label or "")
+                widget.secondary:SetScript("OnClick", function()
+                    secondary.run()
+                    Core.RefreshUI()
+                end)
+                widget.secondary:Show()
+                widget.description:SetWidth(CARD_WIDTH - 280)
+            else
+                widget.secondary:Hide()
+                widget.description:SetWidth(CARD_WIDTH - 120)
+            end
             if card.kind == "saved" then
                 widget.remove:Show()
                 widget.remove:SetScript("OnClick", function()

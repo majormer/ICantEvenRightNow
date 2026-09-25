@@ -84,7 +84,8 @@ local function GetAllTasks()
     for _, task in ipairs(EXTRA_TASKS) do
         if not task.isAvailable or task.isAvailable() then
             table.insert(tasks, { name = task.name, kind = "extra", preset = task.preset,
-                description = task.description, predicate = task.predicate, count = task.count, open = task.open })
+                description = task.description, predicate = task.predicate, count = task.count, open = task.open,
+                secondary = task.secondary })
         end
     end
     for _, preset in ipairs(P.GetSavedFilters()) do

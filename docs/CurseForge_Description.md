@@ -41,6 +41,7 @@ If you want full automation with no review, this addon is probably not a fit. If
 ### Auction value
 
 - Prices from Auctionator or TSM, or look up your own items at the auction house.
+- With Auctionator: one click searches all your auction candidates in its Shopping tab, or saves them as a shopping list.
 - Items worth more at auction are flagged at vendors and never pre-selected for selling.
 
 ### Safety first

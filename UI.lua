@@ -642,7 +642,10 @@ function P.OpenTask(name)
     Core.CreateUI()
     local panel = UI.frame.panels.Transfer
     if task.open then
+        -- Action-only tasks (price checks) run here and stay on Home.
         task.open()
+        Core.RefreshUI()
+        return true
     elseif task.kind == "saved" then
         ApplyTransferWorkflow(task.preset, panel, task.name)
     else

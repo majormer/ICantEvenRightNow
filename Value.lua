@@ -77,7 +77,13 @@ local function AuctionatorPrice(item)
         end
     end
     if type(price) ~= "number" or price <= 0 then return nil end
-    return { price = price, source = "Auctionator", ageDays = age }
+    -- For gear, Auctionator may only know the base item, not this item level.
+    local exact
+    if (item.classID == 2 or item.classID == 4) and item.link and api.IsAuctionDataExactByItemLink then
+        local okExact, value = pcall(api.IsAuctionDataExactByItemLink, CALLER_ID, item.link)
+        if okExact and value ~= nil then exact = value and true or false end
+    end
+    return { price = price, source = "Auctionator", ageDays = age, exact = exact }
 end
 
 local function TSMPrice(item)
@@ -127,7 +133,8 @@ end
 function P.FormatPriceSource(price)
     if not price then return "" end
     local age = FormatAge(price.ageDays)
-    return price.source .. (age and (", " .. age) or "") .. (price.fresh and "" or ", stale")
+    return price.source .. (age and (", " .. age) or "") .. (price.exact == false and ", approximate" or "")
+        .. (price.fresh and "" or ", stale")
 end
 
 -- ---------------------------------------------------------------------------
@@ -346,6 +353,96 @@ function P.OnAuctionEvent(event, arg)
 end
 
 -- ---------------------------------------------------------------------------
+-- Auctionator hand-offs (searches and shopping lists; Auctionator has no
+-- posting API, so posting stays in its Selling tab)
+-- ---------------------------------------------------------------------------
+
+local SHOPPING_LIST_NAME = "I Can't Even: Auction Candidates"
+P.AUCTIONATOR_LIST_NAME = SHOPPING_LIST_NAME
+
+local function AuctionatorAPI()
+    return Auctionator and Auctionator.API and Auctionator.API.v1 or nil
+end
+
+function P.HasAuctionator()
+    local api = AuctionatorAPI()
+    return api ~= nil and api.MultiSearchExact ~= nil
+end
+
+-- Auctionator rejects terms containing ; or ^ or wrapped in quotes.
+local function CleanName(name)
+    return (tostring(name or ""):gsub('[;^"]', ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function UniqueNames(items)
+    local seen, names = {}, {}
+    for _, item in ipairs(items) do
+        local name = CleanName(item.name)
+        if name ~= "" and not name:match("^Item %d+$") and not seen[name] then
+            seen[name] = true
+            table.insert(names, name)
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+-- Auction candidates this character holds (bags, character bank, Warband bank).
+function P.AuctionCandidateItems()
+    local list, seen = {}, {}
+    for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
+        for _, item in ipairs(P.GetScanList(scope)) do
+            if item.itemID and not seen[item.itemID] and (P.AuctionAdvice(item)) == "auction" then
+                seen[item.itemID] = true
+                table.insert(list, item)
+            end
+        end
+    end
+    return list
+end
+
+-- At the auction house: run an exact search for every name in Auctionator's
+-- Shopping tab. Elsewhere: save them as a shopping list for next time.
+local function SendToAuctionator(items, listName)
+    local api = AuctionatorAPI()
+    if not api then return false, "Auctionator is not installed." end
+    local names = UniqueNames(items)
+    if #names == 0 then return false, "Nothing to check." end
+    if ns.DB.context.auctionHouseOpen and api.MultiSearchExact then
+        local ok, err = pcall(api.MultiSearchExact, CALLER_ID, names)
+        if not ok then return false, "Auctionator search failed: " .. tostring(err) end
+        return true, "Searching " .. #names .. " item" .. (#names == 1 and "" or "s") .. " in Auctionator's Shopping tab."
+    end
+    if not (api.CreateShoppingList and api.ConvertToSearchString) then
+        return false, "This Auctionator version can't create shopping lists."
+    end
+    local searchStrings = {}
+    for _, name in ipairs(names) do
+        local ok, term = pcall(api.ConvertToSearchString, CALLER_ID, { searchString = name, isExact = true })
+        if ok and term then table.insert(searchStrings, term) end
+    end
+    local ok, err = pcall(api.CreateShoppingList, CALLER_ID, listName, searchStrings)
+    if not ok then return false, "Could not save the shopping list: " .. tostring(err) end
+    return true, "Saved " .. #searchStrings .. " item" .. (#searchStrings == 1 and "" or "s")
+        .. " to the Auctionator shopping list \"" .. listName .. "\"."
+end
+P.SendToAuctionator = SendToAuctionator
+
+function P.CheckCandidatesInAuctionator()
+    local ok, message = SendToAuctionator(P.AuctionCandidateItems(), SHOPPING_LIST_NAME)
+    P.Print(message)
+    return ok
+end
+
+-- With Auctionator installed, price checks are handed to it instead of the
+-- addon's own paced lookup.
+function P.CheckPricesInAuctionator()
+    local ok, message = SendToAuctionator(ItemsNeedingPrices(), SHOPPING_LIST_NAME)
+    P.Print(message)
+    return ok
+end
+
+-- ---------------------------------------------------------------------------
 -- Tasks and notices
 -- ---------------------------------------------------------------------------
 
@@ -359,16 +456,33 @@ function P.RegisterValueTasks()
             hideBlocked = true, sort = "Vendor Value" },
         predicate = function(item) return (P.AuctionAdvice(item)) == "auction" end,
         isAvailable = function() return P.HasPriceSource() end,
+        secondary = {
+            label = function()
+                return ns.DB.context.auctionHouseOpen and "Check in Auctionator" or "Save to Auctionator"
+            end,
+            isAvailable = function() return P.HasAuctionator() and #P.AuctionCandidateItems() > 0 end,
+            run = function() P.CheckCandidatesInAuctionator() end,
+        },
     })
     P.RegisterTask({
         name = "Price My Items",
         description = "Look up auction prices for the items you own (only your items, paced).",
-        isAvailable = function() return ns.DB.context.auctionHouseOpen end,
+        isAvailable = function() return ns.DB.context.auctionHouseOpen and not P.HasAuctionator() end,
         count = function()
             local count = #ItemsNeedingPrices()
             return count, nil, 0
         end,
         open = function() P.StartPriceLookup() end,
+    })
+    P.RegisterTask({
+        name = "Check Prices in Auctionator",
+        description = "Search Auctionator for your items that have no recent price.",
+        isAvailable = function() return ns.DB.context.auctionHouseOpen and P.HasAuctionator() end,
+        count = function()
+            local count = #ItemsNeedingPrices()
+            return count, nil, 0
+        end,
+        open = function() P.CheckPricesInAuctionator() end,
     })
 end
 
