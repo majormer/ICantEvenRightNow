@@ -38,7 +38,7 @@ Release note rules:
 - Summary counts distinguish bags, the character bank, the Warband bank, and the total scanned inventory.
 - Summary metrics are grouped by Inventory, Cleanup, and Status; Rules size to their contents; Settings keeps the slash-command reference collapsed until requested.
 - Secondary controls use a quieter neutral treatment, with a single emphasized transfer action and red reserved for destructive Remove actions.
-- The addon download is about 90% smaller (roughly 3 MB to 0.4 MB) after resizing the addon-list icon to 256×256.
+- The addon download is over 90% smaller (about 3 MB down to about 0.2 MB) after resizing the addon-list icon to 256×256.
 
 ### Fixed
 
