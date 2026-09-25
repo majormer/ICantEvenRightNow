@@ -54,13 +54,31 @@ P.RemoveMovedItemsFromScan = RemoveMovedItemsFromScan
 -- Container scanning
 -- ===========================================================================
 
+-- Returns true when the item's data is not in the client cache yet (and asks
+-- the client to load it), so the caller knows a follow-up scan is worthwhile.
+local function RequestItemDataIfMissing(itemID)
+    if not (C_Item.IsItemDataCachedByID and C_Item.RequestLoadItemDataByID) then
+        return false
+    end
+    if C_Item.IsItemDataCachedByID(itemID) then
+        return false
+    end
+    C_Item.RequestLoadItemDataByID(itemID)
+    return true
+end
+
+-- Scans one container into output. Returns true if any item's data was missing.
 local function ScanContainerBag(bagID, scope, output, storageKind)
     storageKind = storageKind or GetStorageKindForBagID(bagID, scope)
+    local missingData = false
     local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
     for slot = 1, numSlots do
         local info = CContainer.GetContainerItemInfo(bagID, slot)
         local itemID = CContainer.GetContainerItemID(bagID, slot)
         if info and itemID then
+            if RequestItemDataIfMissing(itemID) then
+                missingData = true
+            end
             -- Prefer the hyperlink from container info: it carries upgrade-level suffixes
             -- and is more likely to trigger a cache hit than a bare itemID.
             local infoKey = info.hyperlink or itemID
@@ -99,14 +117,49 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             })
         end
     end
+    return missingData
+end
+
+-- ===========================================================================
+-- Item data retry
+-- Items not yet in the client cache come back with partial info. Rescan a few
+-- times while the client loads them, using one timer at most, then give up
+-- until the next real scan.
+-- ===========================================================================
+
+local ITEM_DATA_RETRY_DELAY = 1.5
+local ITEM_DATA_MAX_RETRIES = 3
+local itemDataRetryPending = false
+local itemDataRetryAttempts = 0
+local itemDataRetryScope = nil
+
+local function ScheduleItemDataRetry(scope)
+    if itemDataRetryScope ~= "all" then
+        itemDataRetryScope = scope
+    end
+    if itemDataRetryPending or itemDataRetryAttempts >= ITEM_DATA_MAX_RETRIES then
+        return
+    end
+    itemDataRetryAttempts = itemDataRetryAttempts + 1
+    itemDataRetryPending = true
+    C_Timer.After(ITEM_DATA_RETRY_DELAY, function()
+        itemDataRetryPending = false
+        local retryScope = itemDataRetryScope or BAG_SCOPE
+        itemDataRetryScope = nil
+        Core.ScanInventory(retryScope, true, true)
+    end)
 end
 
 -- ===========================================================================
 -- Core.ScanInventory
 -- ===========================================================================
 
-function Core.ScanInventory(scope, quiet)
+function Core.ScanInventory(scope, quiet, isItemDataRetry)
     Core.UpdateContext()
+    if not isItemDataRetry then
+        itemDataRetryAttempts = 0
+    end
+    local missingData = false
     scope = (scope and scope:lower()) or BAG_SCOPE
 
     local scanBags = scope == "" or scope == BAG_SCOPE or scope == "all"
@@ -122,7 +175,7 @@ function Core.ScanInventory(scope, quiet)
     if scanBags then
         local bagItems = {}
         for _, bagID in ipairs(BAG_IDS) do
-            ScanContainerBag(bagID, BAG_SCOPE, bagItems)
+            missingData = ScanContainerBag(bagID, BAG_SCOPE, bagItems) or missingData
         end
         ns.DB.scans.bags = bagItems
         ns.DB.lastScan.bags = time()
@@ -137,13 +190,13 @@ function Core.ScanInventory(scope, quiet)
             -- GetStorageKindForBagID returns a named BankTab:N key when tab data is
             -- available (populated by RefreshBankTabData on bank open), otherwise
             -- falls back to STORAGE_PRIVATE_BANK.
-            ScanContainerBag(bagID, BANK_SCOPE, bankItems)
+            missingData = ScanContainerBag(bagID, BANK_SCOPE, bankItems) or missingData
         end
         for _, bagID in ipairs(REAGENT_BANK_IDS) do
-            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_REAGENT_BANK)
+            missingData = ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_REAGENT_BANK) or missingData
         end
         for _, bagID in ipairs(WARBAND_BANK_IDS) do
-            ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_WARBAND_BANK)
+            missingData = ScanContainerBag(bagID, BANK_SCOPE, bankItems, STORAGE_WARBAND_BANK) or missingData
         end
         NormalizeLegacyBankStorageKinds(bankItems)
         ns.DB.scans.bank = bankItems
@@ -157,35 +210,38 @@ function Core.ScanInventory(scope, quiet)
         Core.RefreshUI()
     end
 
-    -- Some items may not be in the client cache yet; retry after a short delay
-    -- to pick up expansionID and other fields that GetItemInfo returns as nil on first call.
-    local needsRetry = false
-    for _, item in ipairs(ns.DB.scans.bags or {}) do
-        if item.expansionID == nil then needsRetry = true; break end
-    end
-    if not needsRetry then
-        for _, item in ipairs(ns.DB.scans.bank or {}) do
-            if item.expansionID == nil then needsRetry = true; break end
-        end
-    end
-    if needsRetry then
-        C_Timer.After(1.5, function()
-            Core.ScanInventory(scope, true)
-        end)
+    if missingData then
+        ScheduleItemDataRetry(scanBank and "all" or BAG_SCOPE)
     end
 end
 
 -- ===========================================================================
+-- Core.RequestRescan
+-- Coalesces bursts of bag events into a single quiet rescan.
+-- ===========================================================================
+
+local RESCAN_COALESCE_DELAY = 0.2
+local rescanQueued = false
+
+function Core.RequestRescan()
+    if rescanQueued then return end
+    rescanQueued = true
+    C_Timer.After(RESCAN_COALESCE_DELAY, function()
+        rescanQueued = false
+        Core.ScanInventory("all", true)
+    end)
+end
+
+-- ===========================================================================
 -- Core.ScheduleRescanAfterMove
+-- Fallback rescan once moved items have settled. BAG_UPDATE_DELAYED also
+-- triggers a rescan while the console is open.
 -- ===========================================================================
 
 function Core.ScheduleRescanAfterMove()
-    local delays = { 0.25, 0.8, 1.6 }
-    for _, delay in ipairs(delays) do
-        C_Timer.After(delay, function()
-            Core.ScanInventory("all", true)
-        end)
-    end
+    C_Timer.After(1.0, function()
+        Core.ScanInventory("all", true)
+    end)
 end
 
 -- ===========================================================================

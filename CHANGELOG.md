@@ -15,6 +15,15 @@ Release note rules:
 
 - Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
 
+### Fixed
+
+- Selling or moving an item now checks that the same item is still in its bag slot first. Previously, if your bags had changed since the last scan (sorting, looting, or a scan saved from an earlier session), the action could hit whatever item now occupied that slot, including a protected one. Items that have moved are skipped and the list refreshes.
+- The item list now rescans when you open the console, when you open a vendor, and whenever your bags change while the console is open.
+- Moves no longer report success when the item couldn't be picked up (for example, while an earlier move is still in progress), and are refused while you're holding an item on the cursor.
+- Several quick single-item transfers in a row no longer try to use the same empty target slot.
+- Bank-to-bank transfers no longer offer items that are already in the chosen destination, which previously did nothing but reported "moved".
+- Fixed background rescans repeating indefinitely when some item data never loaded, which could cause ongoing stutter over a long session.
+
 ## [0.5.0] - 2026-05-11
 
 ### Added

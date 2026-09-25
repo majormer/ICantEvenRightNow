@@ -238,6 +238,7 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("BANKFRAME_OPENED")
 eventFrame:RegisterEvent("BANKFRAME_CLOSED")
 eventFrame:RegisterEvent("BANK_TAB_SETTINGS_UPDATED")
+eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
 eventFrame:RegisterEvent("MERCHANT_SHOW")
@@ -261,6 +262,16 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    -- Keep the scan in step with the bags while the console is open, so rows
+    -- never point at slots whose contents have changed. Opening the console
+    -- rescans too, which covers changes made while it was hidden.
+    if event == "BAG_UPDATE_DELAYED" then
+        if UI.frame and UI.frame:IsShown() then
+            Core.RequestRescan()
+        end
+        return
+    end
 
     local interactionType = ...
     local bankInteraction = IsBankInteractionType(interactionType)
@@ -305,6 +316,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RefreshBankTabData()
         Core.RefreshTransferDropdowns()
         pcall(Core.ScanInventory, "all", true)
+    elseif vendorContextOpened then
+        Core.ScanInventory(BAG_SCOPE, true)
     end
 
     if event == "BANK_TAB_SETTINGS_UPDATED" then
