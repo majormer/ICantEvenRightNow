@@ -1266,10 +1266,14 @@ local function BuildSettingsTab(parent)
         UI.transferTip = nil
         Print("Tips will show again.")
     end)
+    local mailReminder = AddCheck("auctionMailReminder", "Warn before auction mail expires",
+        { "Auction mail reminder", "Auction returns and sale gold wait in the mail, which is deleted",
+          "after 30 days. Warns " .. (P.MAIL_WARN_DAYS or 10) .. " days ahead for any character",
+          "marked \"Auctions\" on the Characters tab (set automatically at an auction house)." }, tips)
     local logging = AddCheck("enhancedLogging", "Enhanced logging (for troubleshooting)",
         { "Enhanced logging", "Records scans, context changes, tasks, moves, sales, and errors",
           "into your saved data (last " .. (P.LOG_MAX_LINES or 2000) .. " lines).",
-          "View with /icanteven log; clear with /icanteven log clear." }, tips)
+          "View with /icanteven log; clear with /icanteven log clear." }, mailReminder)
     logging:SetScript("OnClick", function(self)
         P.SetLogging(self:GetChecked())
         Core.RefreshUI()

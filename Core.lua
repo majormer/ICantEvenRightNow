@@ -382,6 +382,7 @@ eventFrame:RegisterEvent("COMMODITY_SEARCH_RESULTS_UPDATED")
 eventFrame:RegisterEvent("ITEM_SEARCH_RESULTS_UPDATED")
 eventFrame:RegisterEvent("MAIL_SHOW")
 eventFrame:RegisterEvent("MAIL_CLOSED")
+eventFrame:RegisterEvent("MAIL_INBOX_UPDATE")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
@@ -411,7 +412,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_REGEN_ENABLED" and P.OnCombatEnded then P.OnCombatEnded() end
 
     -- Auction house context and paced price lookups (Value.lua).
+    if event == "MAIL_INBOX_UPDATE" then
+        pcall(P.RecordInbox)
+        return
+    end
     if event == "AUCTION_HOUSE_SHOW" then
+        pcall(P.NoteAuctionHouseVisit)
         UI.auctionContextOpen = true
         Core.UpdateContext()
         pcall(Core.ScanInventory, BAG_SCOPE, true)
@@ -427,6 +433,17 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     -- Keep the roster's facts (level, professions) current for this character.
+    -- Once per login: auction mail about to be deleted on any character.
+    if event == "PLAYER_LOGIN" and P.MailAtRisk then
+        C_Timer.After(8, function()
+            local ok, risks = pcall(P.MailAtRisk)
+            if not ok then return end
+            for _, risk in ipairs(risks) do
+                Print((risk.character.key == P.currentCharacterKey and "Your mailbox" or risk.character.name)
+                    .. ": " .. P.MailRiskText(risk) .. ".")
+            end
+        end)
+    end
     if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED"
         or event == "PLAYER_EQUIPMENT_CHANGED" then
         -- PLAYER_LEVEL_UP passes the new level; UnitLevel can lag behind it.

@@ -445,6 +445,13 @@ function World:_buildEnv()
     G.GetTime = function() return world.now end
     G.GetServerTime = function() return math.floor(world.now) end
     G.GetMoney = function() return world.money end
+    G.GetInboxNumItems = function() local n = #(world.inbox or {}) return n, n end
+    G.GetInboxHeaderInfo = function(i)
+        local m = (world.inbox or {})[i]
+        if not m then return nil end
+        return "icon", nil, m.sender or "Auction House", m.subject or "Mail", m.money or 0, 0, m.daysLeft or 30,
+            m.hasItem or 0, false, false, false, false, false
+    end
     G.geterrorhandler = function() return world.errorHandler or function(msg) error(msg, 0) end end
     G.seterrorhandler = function(fn) world.errorHandler = fn end
     G.InCombatLockdown = function() return world.inCombat end
@@ -937,6 +944,13 @@ function World:closeVendor()
     self.interaction = nil
     self:fire("PLAYER_INTERACTION_MANAGER_FRAME_HIDE", ENUM.PlayerInteractionType.Merchant)
     self:fire("MERCHANT_CLOSED")
+end
+
+-- Mailbox: world.inbox = { { money, hasItem, daysLeft }, ... }
+function World:openMailbox()
+    self.mailOpen = true
+    self:fire("MAIL_SHOW")
+    self:fire("MAIL_INBOX_UPDATE")
 end
 
 function World:openAuctionHouse()

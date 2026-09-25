@@ -30,6 +30,7 @@ Release note rules:
 - At a bank or vendor, a small notice names the top ready task (Settings: notice, open the console, or nothing).
 - First-time tips (once per account), a "What's new" card for players upgrading, and a welcome back for characters returning after a week or more. Leveling characters that reach max level are offered a switch to Main.
 - Optional pre-selection when opening a task (off by default); blocked items and items worth keeping are never pre-selected.
+- **Auction mail reminder.** Auction returns and sale gold wait in the mail, which is deleted after 30 days. The addon remembers when each character last visited the auction house and what its mailbox held, and warns on any character (Home notice and a chat line at login) 10 days before that mail could be deleted: "Kiosk: Auction returns and gold may be deleted in 4 days." Characters that visit an auction house are marked automatically; tick "Auctions" on the Characters tab for others. Setting: "Warn before auction mail expires" (on).
 - Setting: "Enhanced logging (for troubleshooting)" (off by default) records scans, bank/vendor detection, tasks, moves, sales, and errors in your saved data (last 2,000 lines). `/icanteven log` shows it; `/icanteven log clear` empties it. Attach it when reporting a problem.
 
 ### Changed

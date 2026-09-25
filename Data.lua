@@ -117,6 +117,7 @@ ns.Data.DefaultDB = {
         betterBagsCategories = false, -- Section 8: off until the player enables it
         auctionIncludeCurrent = false, -- Auction Candidates may include current-expansion items (farmers)
         enhancedLogging = false,     -- Troubleshooting: record actions into debugLog (Log.lua)
+        auctionMailReminder = true,  -- Warn before auction mail on any character is deleted (Mail.lua)
     },
     debugLog = { lines = {}, nextIndex = 1, count = 0 }, -- Enhanced logging ring buffer (Log.lua)
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.

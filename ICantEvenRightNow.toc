@@ -20,6 +20,7 @@ Shared.lua
 Log.lua
 Migration.lua
 Characters.lua
+Mail.lua
 Evaluator.lua
 Reasons.lua
 Warband.lua

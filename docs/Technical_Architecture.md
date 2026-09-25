@@ -27,6 +27,7 @@ Design intent:
 | `Log.lua` | Enhanced logging (off by default): `P.Log(category, fmt, ...)` into a 2,000-line ring buffer at `ICantEvenRightNowDB.debugLog`; `P.GetLogLines`, `P.ClearLog`, `P.SetLogging`. Keep calls out of hot loops. |
 | `Migration.lua` | `SCHEMA_VERSION`, source-version inference, copy-then-swap migration steps, `migrationBackup`, `legacy` parking, migration report |
 | `Characters.lua` | Roster keyed `Name-Realm`, character facts (class, armor type, level history, professions, equipped item levels), roles and capabilities, role suggestions, per-character and Warband snapshots (`GetScanList`, `AllSnapshots`) |
+| `Mail.lua` | Auction mail reminder: `auctionAt` on AUCTION_HOUSE_SHOW, `mail` inbox summary on MAIL_INBOX_UPDATE, `auctionFlag`; `P.MailDeadline`, `P.MailAtRisk` (10-day window), `P.MailRiskText`. Home notice `auction-mail` (priority 40, 12 when 3 days or less). |
 | `Evaluator.lua` | Binding detection, item type classification, decisions (`BuildDecision`, `GetAllDecisions`) |
 | `Reasons.lua` | "Why is this here?" detectors, time held per location, keep reasons, `ExplainItem`, `/icanteven why` report, who-benefits hints, reason-driven tasks |
 | `Warband.lua` | Warband tab routing by `depositFlags`, alt hand-off queue |

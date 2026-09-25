@@ -60,6 +60,22 @@ local function GetHomeNotices()
 end
 P.GetHomeNotices = GetHomeNotices
 
+-- Auction mail about to be deleted (Mail.lua). Urgent within 3 days.
+P.RegisterHomeNotice(function()
+    local risks = P.MailAtRisk and P.MailAtRisk() or {}
+    local risk = risks[1]
+    if not risk then return nil end
+    local char = risk.character
+    local isCurrent = char.key == P.currentCharacterKey
+    local more = #risks > 1 and (" (+" .. (#risks - 1) .. " more)") or ""
+    return {
+        id = "auction-mail", priority = risk.daysLeft <= 3 and 12 or 40,
+        text = (isCurrent and "Your mailbox" or (char.name or "?")) .. ": " .. P.MailRiskText(risk)
+            .. (isCurrent and ". Visit a mailbox to collect it." or (". Log in as " .. (char.name or "?") .. " and open the mailbox."))
+            .. more,
+    }
+end)
+
 -- Role question for the current character (onboarding O1/O3).
 P.RegisterHomeNotice(function()
     local char = P.GetCurrentCharacter()
@@ -365,12 +381,27 @@ function P.BuildCharactersTab(parent)
         row:SetBackdropColor(0, 0, 0, i % 2 == 0 and 0.18 or 0.08)
         row.name = kit.CreateLabel(row, "", "GameFontHighlight")
         row.name:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -4)
-        row.name:SetWidth(310)
+        row.name:SetWidth(245)
         row.name:SetWordWrap(false)
         row.facts = kit.CreateLabel(row, "", "GameFontDisableSmall")
         row.facts:SetPoint("TOPLEFT", row.name, "BOTTOMLEFT", 0, -2)
-        row.facts:SetWidth(310)
+        row.facts:SetWidth(245)
         row.facts:SetWordWrap(false)
+        row.auction = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        row.auction:SetSize(20, 20)
+        row.auction:SetPoint("LEFT", row, "LEFT", 256, 0)
+        row.auction:SetScript("OnClick", function(self)
+            if row.character then P.SetAuctionFlag(row.character.key, self:GetChecked()) end
+            Core.RefreshUI()
+        end)
+        row.auction:SetScript("OnEnter", function(self)
+            kit.ShowTooltip(self, { "Auction character", "Warns before this character's auction returns",
+                "and gold in the mail are deleted (30 days).",
+                "Set automatically when the character visits an auction house." })
+        end)
+        row.auction:SetScript("OnLeave", function() GameTooltip:Hide() end)
+        row.auctionLabel = kit.CreateLabel(row, "Auctions", "GameFontDisableSmall")
+        row.auctionLabel:SetPoint("LEFT", row.auction, "RIGHT", 0, 0)
         row.role = kit.CreateDropdown(row, 140, RoleOptions(), function(value)
             if row.character then P.SetCharacterRole(row.character.key, value) end
         end)
@@ -413,8 +444,13 @@ function P.RefreshCharacters()
             local isCurrent = char.key == P.currentCharacterKey
             row.name:SetText((char.name or "?") .. "-" .. (char.realm or "?")
                 .. (isCurrent and "  (you)" or ("  -  seen " .. FormatAge(char.lastSeen))))
-            row.facts:SetText("Level " .. tostring(char.level or "?") .. " " .. (char.className or "")
-                .. (#professions > 0 and ("  -  " .. table.concat(professions, ", ")) or ""))
+            local facts = "Level " .. tostring(char.level or "?") .. " " .. (char.className or "")
+                .. (#professions > 0 and ("  -  " .. table.concat(professions, ", ")) or "")
+            for _, risk in ipairs(P.MailAtRisk and P.MailAtRisk() or {}) do
+                if risk.character == char then facts = "|cffff8040" .. P.MailRiskText(risk) .. "|r" end
+            end
+            row.facts:SetText(facts)
+            row.auction:SetChecked(P.IsAuctionCharacter(char))
             local role = P.GetRole(char)
             kit.SetDropdownText(row.role, P.GetRoleLabel(role))
             local suggested, reason = P.SuggestRole(char)

@@ -457,7 +457,7 @@ A Settings checkbox, off by default, that records what the addon does so a probl
 - **Cost:** off by default and cheap when off (one boolean check). When on, never log inside per-frame or per-item hot loops beyond summary lines.
 - **Privacy:** item and character names only; nothing sent anywhere.
 
-## 12b. Proposed: Idle Auction-Character Reminder
+## 12b. Idle Auction-Character Reminder (built in 0.6.0 as the auction mail reminder)
 
 Auctions expire after at most 48 hours and come back by mail, sale gold arrives by mail too, and unopened mail is deleted after 30 days. An auction or bank-alt character left alone for a month can lose everything it listed. The addon can't read other characters' mailboxes, but it knows when each character last logged in.
 
@@ -465,7 +465,8 @@ Auctions expire after at most 48 hours and come back by mail, sale gold arrives 
 - **Where:** a Home notice on any character ("Merchantalt hasn't logged in for 24 days. Auction returns and gold in its mail are deleted after 30 days.") and a warning on its Characters row.
 - **Escalation:** the notice priority rises after 25 days; it disappears when that character logs in.
 - **Setting:** on by default, with the day threshold adjustable (off for players without auction alts).
-- **Limits:** the addon can't see the character's mailbox or know when each mail arrived, so the reminder is based on the last login, not on the actual mail.
+- **As built:** better than last login. At each mailbox visit the addon records the soonest expiry of mail carrying items or gold (`GetInboxHeaderInfo` daysLeft); an auction house visit after that adds a 30-day deadline for returns and sales. Warns 10 days before the earliest deadline (urgent in the last 3). Characters are marked by visiting an auction house (60 days) or by the "Auctions" checkbox; mail with items or gold warns on any character.
+- **Limits:** mail that arrives while the character is offline (other than auction returns) is unknown until its next mailbox visit.
 
 ## 12. Safety Guardrails to Preserve
 
