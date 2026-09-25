@@ -639,6 +639,12 @@ end
 function P.OpenTask(name)
     local task = P.FindTask(name)
     if not task then return false end
+    local available, needs = P.TaskRouteAvailable(task)
+    if not available then
+        -- Showing the review list now would use the wrong route.
+        Print(task.name .. ": " .. needs:lower() .. " to review these items.")
+        return false
+    end
     Core.CreateUI()
     local panel = UI.frame.panels.Transfer
     if task.open then

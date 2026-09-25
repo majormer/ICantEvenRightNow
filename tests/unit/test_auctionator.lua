@@ -226,3 +226,30 @@ T.test("opening the auction house shows a notice for Auction Candidates", functi
     g:closeAuctionHouse()
     T.no(notice:IsShown(), "hidden when the AH closes")
 end)
+T.test("at the AH the notice runs Check in Auctionator; bank-only tasks don't open a wrong route", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(6, 1, I.OLD_POTION, 5)
+    end, { prices = { [I.VALUABLE_ORE] = 90000, [I.OLD_POTION] = 400000 },
+           ages = { [I.VALUABLE_ORE] = 1, [I.OLD_POTION] = 1 } })
+    g:openBank()
+    g:closeBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openAuctionHouse()
+    local notice = g:UI().contextNoticeFrame
+    T.eq(notice.open:GetText(), "Check in Auctionator")
+    g:click(notice.open)
+    T.eq(#g.world.auctionator.searches, 1, "search started from the notice")
+    -- Opening the bank-route task away from a bank stays on Home with a hint.
+    local mark = g:logMark()
+    T.no(g:P().OpenTask("Auction Candidates"))
+    T.contains(g:printed(mark), "visit a bank to review these items")
+    g:slash("")
+    local widget
+    for _, w in ipairs(g:UI().frame.panels.Home.cards) do
+        if w:IsShown() and w.card and w.card.name == "Auction Candidates" then widget = w end
+    end
+    T.eq(widget.open:GetText(), "Visit a bank")
+    T.no(widget.open:IsEnabled())
+    T.ok(widget.secondary:IsShown() and widget.secondary:IsEnabled(), "Auctionator action still available")
+end)

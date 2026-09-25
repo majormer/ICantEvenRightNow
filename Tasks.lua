@@ -113,6 +113,20 @@ local function TaskRoute(task)
 end
 P.GetTaskRoute = TaskRoute
 
+-- Can this task's review list be shown here? Returns ok, whatToDo.
+function P.TaskRouteAvailable(task)
+    if not task or task.filterOnly or task.open then return true end
+    local source, dest = TaskRoute(task)
+    local context = ns.DB.context
+    if (P.NeedsBankStorage(source) or P.NeedsBankStorage(dest)) and not context.bankOpen then
+        return false, "Visit a bank"
+    end
+    if dest == "Vendor" and not context.vendorOpen then
+        return false, "Visit a vendor"
+    end
+    return true
+end
+
 -- Returns the matching plans for a task without touching the Transfer filters.
 local function TaskPlans(task)
     if task.count then return {} end

@@ -253,11 +253,17 @@ function P.RefreshHome()
             widget.description:SetText(card.description or "")
             local state = card.ready > 0 and "ready" or (card.waiting > 0 and "waiting" or "empty")
             StyleCard(widget, state)
-            widget.open:SetText(card.ready > 0 and "Review" or (card.waiting > 0 and "Preview" or "Open"))
-            kit.SetButtonStyle(widget.open, card.ready > 0 and "primary" or "secondary")
+            local routeOK, needs = P.TaskRouteAvailable(card.task)
+            if routeOK then
+                widget.open:SetText(card.ready > 0 and "Review" or "Open")
+            else
+                widget.open:SetText(needs)
+            end
+            widget.open:SetEnabled(routeOK and true or false)
+            kit.SetButtonStyle(widget.open, (routeOK and card.ready > 0) and "primary" or "secondary")
             local name = card.name
             widget.open:SetScript("OnClick", function() P.OpenTask(name) end)
-            widget:SetScript("OnClick", function() P.OpenTask(name) end)
+            widget:SetScript("OnClick", function() if routeOK then P.OpenTask(name) end end)
             local secondary = card.task and card.task.secondary
             local showSecondary = secondary and (not secondary.isAvailable or secondary.isAvailable())
             if showSecondary then
@@ -452,9 +458,14 @@ local function EnsureNoticeFrame()
     frame.open:SetPoint("RIGHT", frame, "RIGHT", -34, 0)
     frame.open:SetScript("OnClick", function()
         frame:Hide()
+        if frame.secondary then
+            frame.secondary.run()
+            return
+        end
         local name = frame.taskName
         Core.ShowHomeUI()
-        if name then P.OpenTask(name) end
+        local task = name and P.FindTask(name)
+        if task and P.TaskRouteAvailable(task) then P.OpenTask(name) end
     end)
     frame.close = kit.CreateButton(frame, "x", 22, 22)
     frame.close:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
@@ -482,6 +493,19 @@ function P.OnContextOpened()
     local frame = EnsureNoticeFrame()
     frame.taskName = card.name
     frame.text:SetText(card.name .. ": " .. P.CardSummary(card))
+    -- Prefer the card's direct action when it applies here (e.g. at the AH).
+    local secondary = card.task and card.task.secondary
+    if secondary and (not secondary.isAvailable or secondary.isAvailable()) then
+        frame.secondary = secondary
+        local label = type(secondary.label) == "function" and secondary.label() or secondary.label
+        frame.open:SetText(label or "Open")
+        frame.open:SetWidth(150)
+    else
+        frame.secondary = nil
+        frame.open:SetText("Open")
+        frame.open:SetWidth(60)
+    end
+    frame.text:SetWidth(420 - frame.open:GetWidth() - 60)
     frame:Show()
 end
 
