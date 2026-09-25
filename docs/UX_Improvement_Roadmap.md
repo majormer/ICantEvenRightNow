@@ -370,7 +370,51 @@ Every price is stored as `{price, source, timestamp}`. Commodity prices are regi
 
 Safety: prices are advisory. The addon never posts or buys, and no action happens without selection and confirmation.
 
-## 10. Safety Guardrails to Preserve
+## 10. Planned: "Why Is This Here?" (target 0.6.0)
+
+Status: Planned. Priority: P1. Goal: help players part with items by understanding why each item is kept, before suggesting anything. Pushing "sell" on items kept for real reasons (sentiment, active quests) costs trust.
+
+### Y1. Hoarding diagnostic (first step)
+
+- `/icanteven why`: a read-only report that sorts everything in bags, the character bank, and the Warband bank into the reasons below, with counts and vendor/auction value.
+- Changes nothing. Run on real accounts first so the reasons that actually fill banks get built first.
+
+### Y2. Reason taxonomy and signals
+
+| Reason | Detectable signal | Help offered |
+|---|---|---|
+| Kept for appearance | `C_TransmogCollection` collected status | "Appearance already collected; the item adds nothing" |
+| Unlearned collectible (toy, pet, mount) | Collection APIs | "Learn it" instead of storing; free to go once learned |
+| Quest starter, quest already completed | `C_Container.GetContainerItemQuestInfo` questID + `C_QuestLog.IsQuestFlaggedCompleted` | Likely leftover (verify per item; some quests repeat) |
+| Quest starter, quest active | `questInfo.isActive` | Keep; in progress |
+| Quest starter, not started | questID, not active, not completed | "Starts a quest from <expansion> you haven't done"; player's choice |
+| Quest objective item | `isQuestItem` (quest not identified by API) | No judgment; shown as quest item |
+| "Might need it someday" | Time held (Y3) | "Held 400 days, never moved, no active character uses it" |
+| "For an alt someday" | W0 roles | "No played character can use this" |
+| Unused profession materials | Roles, professions, reagent expansion | "No crafter on your account uses this" (+ value from section 9) |
+| Old consumable stockpile | Type, expansion, usability | Existing Sell Old Consumables task, now with a reason |
+| Speculation | Price data + time held | "Held 2 years; value unchanged" (needs price history) |
+| Seasonal/event items | Partial (type, description); unreliable | Player-assigned Event reason |
+| Sentimental keepsake | Weak hints only (legendary, removed content, no vendor price) | Never pushed; Keepsake reason silences it permanently |
+| Unknown purpose | Partial (type, expansion) | Plain explanation of what the item is, or that it is obsolete |
+
+Quest abandonment cost is quest-specific and not computable; the addon reports quest status, not cost.
+
+### Y3. Time held
+
+- Record the first date each item is seen in each location (per character for bags/bank, account-wide for Warband). Store compactly per item and location.
+- Rows show "In your bank since March 2025, never moved"; a Home card lists the longest-untouched items.
+- Dates begin at install, so early values read "at least 12 days".
+
+### Y4. Reasons in the UI
+
+- Every item carries its detected reason and the evidence behind it.
+- Reasons that resolve on their own (appearance collected, quest completed, alt marked Utility) mark items as free to go.
+- Player-assigned keep reasons (Keepsake, For an alt, Event, Investment) stop suggestions; Investment can optionally be re-asked after a chosen time. These extend the existing rules model without changing Protect/Ignore/Never Sell.
+- Bank review can group by reason ("Appearance already collected: 64 items"); each group is a task with the usual review and confirmation.
+- Show what letting go costs: "You keep the appearance. Worth 12g at a vendor. Nothing on your account uses it."
+
+## 11. Safety Guardrails to Preserve
 
 Do not remove:
 
@@ -381,7 +425,7 @@ Do not remove:
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
 
-## 11. Acceptance Criteria for AH Pull UX
+## 12. Acceptance Criteria for AH Pull UX
 
 A successful AH pull UX should satisfy all:
 
