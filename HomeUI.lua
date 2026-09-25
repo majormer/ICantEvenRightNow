@@ -531,7 +531,10 @@ function P.ShowHandoffPicker(item)
     if not frame then
         frame = CreateFrame("Frame", "ICantEvenRightNowHandoffPicker", UIParent, "BackdropTemplate")
         frame:SetSize(260, 60)
-        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        -- Above the main window: it is a top-level FULLSCREEN_DIALOG frame and
+        -- re-raises itself on every click, so in game a picker in the same
+        -- strata stayed hidden even at a higher frame level.
+        frame:SetFrameStrata("TOOLTIP")
         frame:SetBackdrop({ bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
             edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border", tile = true, tileSize = 16, edgeSize = 8,
             insets = { left = 2, right = 2, top = 2, bottom = 2 } })
@@ -578,17 +581,6 @@ function P.ShowHandoffPicker(item)
     frame:SetHeight(64 + rows * 22)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UI.frame or UIParent, "CENTER", 0, 0)
-    -- The main window shares this strata, and its children reach high frame
-    -- levels (609 in game), so the picker was drawn underneath (invisible).
-    -- Draw above the window's highest descendant.
-    local highest = 0
-    local function walk(f)
-        local level = f:GetFrameLevel() or 0
-        if level > highest then highest = level end
-        for _, child in ipairs({ f:GetChildren() }) do walk(child) end
-    end
-    if UI.frame then walk(UI.frame) end
-    frame:SetFrameLevel(math.min(highest + 10, 9000))
     frame:Show()
     frame:Raise()
 end
