@@ -664,8 +664,12 @@ function World:_buildEnv()
         end,
         RequestLoadItemDataByID = function(itemID)
             local def = world.items[itemID]
-            if def and not def.cached and not def.neverLoads then
-                world:after(0.5, function() def.cached = true end)
+            if def and not def.cached and not def.neverLoads and not def.loading then
+                def.loading = true
+                world:after(def.loadDelay or 0.5, function()
+                    def.cached, def.loading = true, nil
+                    world:fire("GET_ITEM_INFO_RECEIVED", itemID, true)
+                end)
             end
         end,
         IsBound = function(location)

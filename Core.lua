@@ -195,6 +195,24 @@ function Core.HandleSlashCommand(msg)
         Print("Debug mode: " .. (Debug.IsDebugEnabled() and "ON" or "OFF"))
     elseif cmd == "diag" then
         Debug.RunDiagnosticDump()
+    elseif cmd == "itemdata" then
+        -- Which scanned stacks lack item data, and what the client says now.
+        local bags = P.GetScanList(BAG_SCOPE) or {}
+        local missing = {}
+        for _, item in ipairs(bags) do
+            if item.expansionID == nil or item.classID == nil or (item.name or ""):match("^Item %d+$") then
+                table.insert(missing, item)
+            end
+        end
+        Print("Item data: " .. #missing .. " of " .. #bags .. " bag stacks are missing details.")
+        for i = 1, math.min(5, #missing) do
+            local item = missing[i]
+            local byLink = item.link and C_Item.GetItemInfo(item.link)
+            local byID = C_Item.GetItemInfo(item.itemID)
+            local cached = C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item.itemID)
+            Print(string.format("  %d %s: link=%s byLink=%s byID=%s cached=%s", item.itemID, tostring(item.name),
+                item.link and "yes" or "no", tostring(byLink), tostring(byID), tostring(cached)))
+        end
     elseif cmd == "errors" then
         local log = ns.DB and ns.DB.errorLog
         if not log or #log == 0 then

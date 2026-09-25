@@ -59,6 +59,37 @@ local function RequestItemDataIfMissing(itemID)
     return true
 end
 
+-- Static item details (name, class, expansion...) by item ID, from any lookup
+-- that succeeded this session or any earlier saved scan. Used when the client
+-- hasn't loaded an item's data yet, so a scan never loses what was known.
+local STATIC_FIELDS = {
+    "name", "quality", "itemLevel", "requiredLevel", "itemTypeName", "itemSubTypeName",
+    "maxStack", "equipLoc", "icon", "sellPrice", "classID", "subclassID", "bindType", "expansionID",
+}
+local knownItemInfo = nil
+
+local function HasFullData(item)
+    return item.classID ~= nil and item.expansionID ~= nil and type(item.name) == "string"
+        and item.name ~= "" and not item.name:match("^Item %d+$")
+end
+
+local function KnownItemInfo()
+    if knownItemInfo then return knownItemInfo end
+    knownItemInfo = {}
+    if P.AllSnapshots then
+        for _, snapshot in ipairs(P.AllSnapshots()) do
+            for _, item in ipairs(snapshot.items or {}) do
+                if item.itemID and not knownItemInfo[item.itemID] and HasFullData(item) then
+                    local info = {}
+                    for _, field in ipairs(STATIC_FIELDS) do info[field] = item[field] end
+                    knownItemInfo[item.itemID] = info
+                end
+            end
+        end
+    end
+    return knownItemInfo
+end
+
 -- Scans one container into output. Returns true if any item's data was missing.
 local function ScanContainerBag(bagID, scope, output, storageKind)
     storageKind = storageKind or GetStorageKindForBagID(bagID, scope)
@@ -73,7 +104,9 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             end
             -- Prefer the hyperlink from container info: it carries upgrade-level suffixes
             -- and is more likely to trigger a cache hit than a bare itemID.
-            local infoKey = info.hyperlink or itemID
+            local hyperlink = info.hyperlink
+                or (CContainer.GetContainerItemLink and CContainer.GetContainerItemLink(bagID, slot)) or nil
+            local infoKey = hyperlink or itemID
             local name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                 = C_Item.GetItemInfo(infoKey)
@@ -83,11 +116,23 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                     maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                     = C_Item.GetItemInfo(itemID)
-                link = info.hyperlink or link
+                link = hyperlink or link
             end
-            if not name then
+            local known = KnownItemInfo()
+            if name then
+                known[itemID] = known[itemID] or {}
+                local k = known[itemID]
+                k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName = name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName
+                k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID = maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
+            else
                 missingData = true
                 if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+                -- Keep what an earlier scan knew until the client loads the data.
+                local k = known[itemID]
+                if k then
+                    name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName = k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName
+                    maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID = k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID
+                end
             end
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
             -- Quest status belongs to the character that owns the item, so it is
@@ -99,8 +144,8 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
             table.insert(output, {
                 itemID        = itemID,
-                name          = P.ItemDisplayName(name or info.itemName, link or info.hyperlink, itemID),
-                link          = link,
+                name          = P.ItemDisplayName(name or info.itemName, link or hyperlink, itemID),
+                link          = link or hyperlink,
                 icon          = icon or info.iconFileID,
                 quality       = quality or info.quality,
                 count         = info.stackCount or 1,
@@ -148,6 +193,30 @@ local itemDataRetryPending = false
 local itemDataRetryAttempts = 0
 local itemDataRetryScope = nil
 
+-- The client reports each requested item as it arrives. While the last scan
+-- was missing data, rescan once per burst of arrivals (debounced), up to a cap
+-- per real scan so a never-loading item can't cause endless rescans.
+local ITEM_ARRIVAL_DEBOUNCE = 1.0
+local ITEM_ARRIVAL_MAX_RESCANS = 10
+local waitingForItemData = nil
+local arrivalRescans = 0
+local arrivalRescanPending = false
+
+local itemDataFrame = CreateFrame("Frame")
+itemDataFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+itemDataFrame:SetScript("OnEvent", function()
+    if not waitingForItemData or arrivalRescanPending or arrivalRescans >= ITEM_ARRIVAL_MAX_RESCANS then return end
+    arrivalRescanPending = true
+    arrivalRescans = arrivalRescans + 1
+    C_Timer.After(ITEM_ARRIVAL_DEBOUNCE, function()
+        arrivalRescanPending = false
+        local scope = waitingForItemData
+        if not scope then return end
+        if scope == "all" and not ns.DB.context.bankOpen then scope = BAG_SCOPE end
+        Core.ScanInventory(scope, true, true)
+    end)
+end)
+
 local function ScheduleItemDataRetry(scope)
     if itemDataRetryScope ~= "all" then
         itemDataRetryScope = scope
@@ -173,6 +242,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
     Core.UpdateContext()
     if not isItemDataRetry then
         itemDataRetryAttempts = 0
+        arrivalRescans = 0
     end
     local missingData = false
     scope = (scope and scope:lower()) or BAG_SCOPE
@@ -237,7 +307,10 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
     end
 
     if missingData then
+        waitingForItemData = (scanBank or waitingForItemData == "all") and "all" or BAG_SCOPE
         ScheduleItemDataRetry(scanBank and "all" or BAG_SCOPE)
+    else
+        waitingForItemData = nil
     end
 end
 
