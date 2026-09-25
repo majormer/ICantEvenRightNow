@@ -17,6 +17,7 @@
 Data.lua
 Debug.lua
 Shared.lua
+Migration.lua
 Evaluator.lua
 Filter.lua
 Scanner.lua

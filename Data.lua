@@ -100,48 +100,7 @@ ns.Data.DefaultDB = {
         bank = {},
     },
     ui = {
-        mode = "Dump to Bank",
-        expansionFilter = 0,
-        typeFilter = "All",
-        rarityFilter = "All",
-        locationFilter = "All",
-        recommendedOnly = true,
-        organizerShowAll = false,
-        vendorShowAll = false,
-        organizerSearch = "",
-        vendorSearch = "",
-        tabFilters = {
-            Move = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-            Organize = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-            Vendor = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-        },
+        tabFilters = {},
         showMinimapIcon = true,
         minimapIcon = {
             hide = false,
@@ -151,10 +110,10 @@ ns.Data.DefaultDB = {
         showBankButton = false,
         showVendorButton = false,
         transferSort = "Name",
-        search = "",
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once
     savedWorkflowSchemaVersion = 0,
+    -- schemaVersion, migrationBackup, migrationReports, legacy: managed by Migration.lua
 }

@@ -25,7 +25,6 @@ local WARBAND_BANK_IDS   = P.WARBAND_BANK_IDS
 
 local Print                      = P.Print
 local SafeCopyDefaults           = P.SafeCopyDefaults
-local MigrateLegacyTabFilters    = P.MigrateLegacyTabFilters
 local SeedDefaultSavedFilters    = P.SeedDefaultSavedFilters
 local MigrateSavedFiltersToWorkflows = P.MigrateSavedFiltersToWorkflows
 local NormalizeLegacyBankStorageKinds = P.NormalizeLegacyBankStorageKinds
@@ -212,8 +211,15 @@ function Core.HandleSlashCommand(msg)
     elseif cmd == "clearerrors" then
         if ns.DB then ns.DB.errorLog = {} end
         Print("Error log cleared.")
+    elseif cmd == "migration" then
+        local report = P.LatestMigrationReport()
+        if not report then
+            Print("No settings migration has run on this installation.")
+        else
+            for _, line in ipairs(P.MigrationReportLines(report)) do Print(line) end
+        end
     else
-        Print("Commands: /icanteven, scan [bags|bank|all], summary, transfer, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors")
+        Print("Commands: /icanteven, scan [bags|bank|all], summary, transfer, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
     end
 end
 
@@ -222,9 +228,18 @@ end
 -- ===========================================================================
 
 function Core.OnAddonLoaded()
-    ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, ICantEvenRightNowDB)
+    -- Migrate before defaults are applied, so older saves are recognized by
+    -- their own keys rather than by defaults filled in afterwards.
+    local migrated, report, migrationErr = P.RunMigrations(ICantEvenRightNowDB)
+    ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, migrated)
     ns.DB = ICantEvenRightNowDB
-    MigrateLegacyTabFilters()
+    if migrationErr then
+        Print("Your saved settings could not update automatically; they were left unchanged. Details: /icanteven errors")
+        Core.LogError("Migration failed: " .. tostring(migrationErr))
+    elseif report and P.MigrationNeedsAttention(report) then
+        Print("Updated your settings from " .. tostring(report.fromVersion)
+            .. ". Some items need attention: /icanteven migration")
+    end
     SeedDefaultSavedFilters()
     MigrateSavedFiltersToWorkflows()
     ns.DB.ui.showBankButton = false

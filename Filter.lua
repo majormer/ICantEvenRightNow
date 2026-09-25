@@ -216,29 +216,8 @@ local function EnsureTabFilters(tabName)
     return filters
 end
 
-local function MigrateLegacyTabFilters()
-    local moveFilters = EnsureTabFilters("Move")
-    if not moveFilters.migratedFromLegacy then
-        moveFilters.expansion.include = ns.DB.ui.expansionFilter or EXPANSION_FILTER_ALL
-        moveFilters.type.include      = ns.DB.ui.typeFilter      or "All"
-        moveFilters.location.include  = ns.DB.ui.locationFilter  or "All"
-        moveFilters.name.includeText  = ns.DB.ui.search          or ""
-        moveFilters.migratedFromLegacy = true
-    end
-    local organizeFilters = EnsureTabFilters("Organize")
-    if not organizeFilters.migratedFromLegacy then
-        organizeFilters.name.includeText = ns.DB.ui.organizerSearch or ""
-        organizeFilters.migratedFromLegacy = true
-    end
-    local vendorFilters = EnsureTabFilters("Vendor")
-    if not vendorFilters.migratedFromLegacy then
-        vendorFilters.name.includeText = ns.DB.ui.vendorSearch or ""
-        vendorFilters.migratedFromLegacy = true
-    end
-end
-
+-- Legacy Move/Organize/Vendor filters are converted by Migration.lua.
 P.EnsureTabFilters        = EnsureTabFilters
-P.MigrateLegacyTabFilters = MigrateLegacyTabFilters
 
 -- ===========================================================================
 -- Filter value sentinel
@@ -263,28 +242,11 @@ local FilterMatchesInclude
 local function SetFilterInclude(tabName, key, value)
     local filters = EnsureTabFilters(tabName)
     EnsureFilterBranch(filters, key).include = value
-    -- Keep legacy DB keys in sync for backward compat
-    if tabName == "Move" then
-        if key == "expansion" then
-            ns.DB.ui.expansionFilter = value
-        elseif key == "type" then
-            ns.DB.ui.typeFilter = value
-        elseif key == "location" then
-            ns.DB.ui.locationFilter = value
-        end
-    end
 end
 
 local function SetFilterSearch(tabName, value)
     local filters = EnsureTabFilters(tabName)
     filters.name.includeText = value or ""
-    if tabName == "Move" then
-        ns.DB.ui.search = filters.name.includeText
-    elseif tabName == "Organize" then
-        ns.DB.ui.organizerSearch = filters.name.includeText
-    elseif tabName == "Vendor" then
-        ns.DB.ui.vendorSearch = filters.name.includeText
-    end
 end
 
 local function SetFilterHideBlocked(tabName, value)
@@ -388,16 +350,6 @@ local function ResetTabFilters(tabName)
     end
     if filters.armorType then
         filters.armorType.include = ARMOR_FILTER_ALL
-    end
-    if tabName == "Move" then
-        ns.DB.ui.expansionFilter = EXPANSION_FILTER_ALL
-        ns.DB.ui.typeFilter      = "All"
-        ns.DB.ui.locationFilter  = "All"
-        ns.DB.ui.search          = ""
-    elseif tabName == "Organize" then
-        ns.DB.ui.organizerSearch = ""
-    elseif tabName == "Vendor" then
-        ns.DB.ui.vendorSearch = ""
     end
 end
 
