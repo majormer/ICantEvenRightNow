@@ -33,6 +33,27 @@ build/
 ICantEvenRightNowDB_backup.lua
 test_*.lua
 
-# Local Copilot agent customization file
+# AI assistant files (local only, never pushed)
+# Agent instructions
 /agents.md
 /AGENTS.md
+/CLAUDE.md
+/CLAUDE.local.md
+/GEMINI.md
+/.cursorrules
+/.windsurfrules
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+# Local AI context and lookups
+/.local/
+# Tool state and settings
+.claude/
+.cursor/
+.windsurf/
+.gemini/
+.codex/
+.continue/
+.aider*
+.copilot/
+.mcp.json

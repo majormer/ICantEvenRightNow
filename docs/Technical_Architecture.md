@@ -81,7 +81,8 @@ Primary responsibilities:
 Primary responsibilities:
 
 - Container scanning: `ScanContainerBag`, `ScanBags`, `ScanBank`
-- Cache-warm rescan scheduling (`ScheduleRescanAfterMove`)
+- Bounded item-data retry (`ScheduleItemDataRetry`: one timer, at most three retries, only while items are missing from the client cache)
+- Post-move fallback rescan (`ScheduleRescanAfterMove`)
 - Optimistic scan removal (`RemoveMovedItemsFromScan`)
 - Bank diagnostics slash helpers
 
@@ -91,7 +92,8 @@ Primary responsibilities:
 
 - Transfer candidate generation (`GetTransferCandidates`)
 - Block reason evaluation (`GetTransferBlockReason`)
-- Free slot finding (`FindFreeSlot`)
+- Free slot finding (`FindFreeSlot`, `FindFreeNormalBagSlot`): skips the item's own slot, locked stacks, and reserved target slots
+- Source slot verification (`VerifySourceSlot`) before every move or sale
 - Movement execution: `ExecuteTransferOne`, `ExecuteTransferSelected`
 - Vendor sell execution (via `C_Container.UseContainerItem` from hardware event context)
 - Source/Destination option builders: `GetTransferSourceOptions`, `GetTransferDestOptions`
@@ -186,7 +188,9 @@ High-level sequence:
 5. Build per-item records with metadata from `GetItemInfo`
 6. Enrich binding details via `GetBindingDetails`
 7. Save scan results to `ns.DB.scans`
-8. Schedule up to two cache-warm rescans when item info is incomplete
+8. If any item was missing from the client cache, request its data and schedule a bounded retry (`ScheduleItemDataRetry`)
+
+Rescans also run when the console opens, when a vendor opens, and (debounced) on bag and bank slot events.
 
 Scan record fields include:
 
@@ -215,7 +219,9 @@ Entry point: player selects Source, Destination, and filters in the Transfer tab
 5. Free slot availability
 6. Filter applicability
 
-Execution calls `C_Container.PickupContainerItem` for moves or `C_Container.UseContainerItem` for vendor sells (hardware event context required for vendor).
+Before execution, `VerifySourceSlot` confirms the scanned item is still in its slot, is unlocked, and the cursor is empty. A stale slot is skipped and triggers a rescan.
+
+Execution calls `C_Container.PickupContainerItem` for moves (confirming the pickup before dropping) or `C_Container.UseContainerItem` for vendor sells (hardware event context required for vendor). Target slots used by recent moves stay reserved for two seconds so quick successive moves do not collide.
 
 After execution: `ScheduleRescanAfterMove` + `Core.RefreshUI`.
 
