@@ -49,7 +49,7 @@ function Core.UpdateContext()
     context.bankOpen = UI.bankContextOpen or IsBankContextDetected()
     context.reagentBankOpen = IsGlobalFrameShown("ReagentBankFrame")
     context.vendorOpen = UI.vendorContextOpen or (IsGlobalFrameShown("MerchantFrame") and not UI.vendorContextClosed)
-    context.auctionHouseOpen = IsGlobalFrameShown("AuctionHouseFrame")
+    context.auctionHouseOpen = UI.auctionContextOpen or IsGlobalFrameShown("AuctionHouseFrame")
     context.mailboxOpen = IsGlobalFrameShown("MailFrame")
     context.inCombat = InCombatLockdown() and true or false
     if context.bankOpen then
@@ -321,6 +321,8 @@ eventFrame:RegisterEvent("MERCHANT_SHOW")
 eventFrame:RegisterEvent("MERCHANT_CLOSED")
 eventFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
 eventFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
+eventFrame:RegisterEvent("COMMODITY_SEARCH_RESULTS_UPDATED")
+eventFrame:RegisterEvent("ITEM_SEARCH_RESULTS_UPDATED")
 eventFrame:RegisterEvent("MAIL_SHOW")
 eventFrame:RegisterEvent("MAIL_CLOSED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -340,6 +342,18 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    -- Auction house context and paced price lookups (Value.lua).
+    if event == "AUCTION_HOUSE_SHOW" then
+        UI.auctionContextOpen = true
+    elseif event == "AUCTION_HOUSE_CLOSED" then
+        UI.auctionContextOpen = false
+    end
+    if event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED"
+        or event == "AUCTION_HOUSE_CLOSED" then
+        if P.OnAuctionEvent then pcall(P.OnAuctionEvent, event, ...) end
+        if event ~= "AUCTION_HOUSE_CLOSED" then return end
+    end
 
     -- Keep the roster's facts (level, professions) current for this character.
     if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED" then

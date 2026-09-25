@@ -529,6 +529,7 @@ end
 -- Items the "can go" tasks act on: free to go and sellable at a vendor.
 local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
+    if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then return false end
     local explanation = P.ExplainScanned(item)
     return explanation.disposition == "free"
 end

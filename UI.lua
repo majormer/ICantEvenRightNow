@@ -531,6 +531,10 @@ local function BuildTransferRowDetail(plan, source, dest)
     elseif dest == "Vendor" then
         local stackValue = (item.sellPrice or 0) * (item.count or 1)
         status = "Ready to sell" .. (stackValue > 0 and (" for " .. FormatMoney(stackValue)) or "")
+        if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then
+            local net = P.GetItemValue(item)
+            status = status .. "  -  worth ~" .. FormatMoney(net) .. " at auction"
+        end
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
     elseif dest == P.STORAGE_WARBAND_ROUTED then
@@ -2109,6 +2113,11 @@ function Core.RefreshTransfer()
                     end
                     local loss = P.LossText(item, explanation)
                     if loss then GameTooltip:AddLine("If it goes: " .. loss, 0.6, 0.9, 0.6) end
+                end
+                if P.ValueTooltipLines then
+                    for _, line in ipairs(P.ValueTooltipLines(item)) do
+                        GameTooltip:AddLine(line, 0.9, 0.8, 0.5)
+                    end
                 end
                 GameTooltip:Show()
             end)

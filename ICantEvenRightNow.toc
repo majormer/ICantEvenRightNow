@@ -28,4 +28,5 @@ Transfer.lua
 Tasks.lua
 UI.lua
 HomeUI.lua
+Value.lua
 Core.lua
