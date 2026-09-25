@@ -16,7 +16,6 @@ local P    = ns.Private
 -- Display / identity constants
 -- ---------------------------------------------------------------------------
 P.DISPLAY_NAME     = "I Can't Even Right Now (With My Bags and Bank)"
-P.ICON_TEXTURE     = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow.png"
 P.MINIMAP_LDB_NAME = "ICantEvenRightNow"
 
 -- ---------------------------------------------------------------------------
