@@ -116,6 +116,7 @@ Decisions (2026-09-25):
 
 - Roles are presented as a single dropdown, not raw toggles. Internally each role maps to two capabilities (`receivesGear`, `receivesMaterials`) so a Custom role can be added later without changing consumers.
 - Unassigned characters are ignored in all "who benefits" logic. Newly seen characters start Unassigned, so an unsorted roster never floods decisions.
+- Main / Active and Leveling stay separate roles: Leveling characters are offered only gear they can use at their current level.
 
 Behavior:
 
