@@ -77,6 +77,18 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             local name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                 = C_Item.GetItemInfo(infoKey)
+            if not name and infoKey ~= itemID then
+                -- The link lookup can come back empty even when the item is
+                -- cached by ID (seen in game); fall back to the item ID.
+                name, link, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName,
+                    maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
+                    = C_Item.GetItemInfo(itemID)
+                link = info.hyperlink or link
+            end
+            if not name then
+                missingData = true
+                if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
+            end
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
             -- Quest status belongs to the character that owns the item, so it is
             -- captured now (other characters' snapshots are read later).

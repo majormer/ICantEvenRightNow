@@ -374,17 +374,32 @@ local function CleanName(name)
     return (tostring(name or ""):gsub('[;^"]', ""):gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
+-- Resolve a searchable name: the scanned name, else the client's current name
+-- for the item ID. Returns nil when no real name is known yet.
+local function SearchName(item)
+    local name = item.name
+    if not name or name == "" or name:match("^Item %d+$") then
+        name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item.itemID)
+            or (GetItemInfo and GetItemInfo(item.itemID)) or nil
+    end
+    name = CleanName(name)
+    if name == "" then return nil end
+    return name
+end
+
 local function UniqueNames(items)
-    local seen, names = {}, {}
+    local seen, names, skipped = {}, {}, 0
     for _, item in ipairs(items) do
-        local name = CleanName(item.name)
-        if name ~= "" and not name:match("^Item %d+$") and not seen[name] then
+        local name = SearchName(item)
+        if not name then
+            skipped = skipped + 1
+        elseif not seen[name] then
             seen[name] = true
             table.insert(names, name)
         end
     end
     table.sort(names)
-    return names
+    return names, skipped
 end
 
 -- An auction candidate is worth noticeably more at auction AND has no reason
@@ -394,6 +409,8 @@ end
 -- items through for players who farm and sell current materials; every
 -- other reason to keep still excludes the item.
 function P.IsAuctionCandidate(item)
+    -- Without loaded item data the addon can't tell whether to keep it.
+    if item.expansionID == nil or not item.classID then return false end
     if (P.AuctionAdvice(item)) ~= "auction" then return false end
     if not P.ExplainScanned then return true end
     local explanation = P.ExplainScanned(item)
@@ -425,12 +442,14 @@ end
 local function SendToAuctionator(items, listName)
     local api = AuctionatorAPI()
     if not api then return false, "Auctionator is not installed." end
-    local names = UniqueNames(items)
-    if #names == 0 then return false, "Nothing to check." end
+    local names, skipped = UniqueNames(items)
+    local skippedNote = skipped > 0 and (" " .. skipped .. " item" .. (skipped == 1 and " was" or "s were")
+        .. " skipped because the game hasn't loaded their names yet; try again in a moment.") or ""
+    if #names == 0 then return false, "Nothing to check." .. skippedNote end
     if ns.DB.context.auctionHouseOpen and api.MultiSearchExact then
         local ok, err = pcall(api.MultiSearchExact, CALLER_ID, names)
         if not ok then return false, "Auctionator search failed: " .. tostring(err) end
-        return true, "Searching " .. #names .. " item" .. (#names == 1 and "" or "s") .. " in Auctionator's Shopping tab."
+        return true, "Searching " .. #names .. " item" .. (#names == 1 and "" or "s") .. " in Auctionator's Shopping tab." .. skippedNote
     end
     if not (api.CreateShoppingList and api.ConvertToSearchString) then
         return false, "This Auctionator version can't create shopping lists."

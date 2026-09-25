@@ -642,6 +642,8 @@ function World:_buildEnv()
         local itemID = parseItemID(value)
         local def = itemID and world.items[itemID]
         if not def or not def.cached then return nil end
+        -- Seen in game: link lookups can return nothing while ID lookups work.
+        if def.linkLookupFails and type(value) == "string" then return nil end
         return def.name, world:itemLink(itemID), def.quality, def.itemLevel, def.requiredLevel,
             def.itemType or "Miscellaneous", def.itemSubType or "Other", def.maxStack, def.equipLoc,
             def.icon, def.sellPrice, def.classID, def.subclassID, def.bindType, def.expansionID,
