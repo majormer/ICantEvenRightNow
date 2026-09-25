@@ -509,6 +509,15 @@ function P.OnContextOpened()
     frame:Show()
 end
 
+-- Recompute a shown notice (e.g. after auction prices change). Never shows
+-- a hidden one: the player may have dismissed it.
+function P.RefreshContextNotice()
+    local frame = UI.contextNoticeFrame
+    if not (frame and frame:IsShown()) then return end
+    frame:Hide()
+    P.OnContextOpened()
+end
+
 -- Cross-character hand-offs (Warband.lua) need both tasks and Home notices.
 if P.RegisterHandoffTasks then P.RegisterHandoffTasks() end
 if P.RegisterHandoffNotice then P.RegisterHandoffNotice() end

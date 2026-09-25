@@ -326,3 +326,15 @@ T.test("the auction house is not mistaken for a bank", function()
     T.eq(g.ns.DB.context.bankOpen, false)
     T.eq(g.ns.DB.context.auctionHouseOpen, true)
 end)
+T.test("the notice's value updates when auction prices change", function()
+    local prices = { [I.VALUABLE_ORE] = 900000 }
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, { prices = prices, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:openAuctionHouse()
+    local notice = g:UI().contextNoticeFrame
+    T.ok(notice and notice:IsShown(), "notice shown at the AH")
+    local before = notice.text:GetText()
+    prices[I.VALUABLE_ORE] = 100000
+    g.world:fire("COMMODITY_SEARCH_RESULTS_UPDATED", I.VALUABLE_ORE)
+    g.world:advance(3)
+    T.ok(notice.text:GetText() ~= before, "value text refreshed")
+end)

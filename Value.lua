@@ -362,6 +362,17 @@ function P.OnAuctionEvent(event, arg)
     elseif event == "AUCTION_HOUSE_CLOSED" then
         if lookup.active then FinishLookup() end
     end
+    -- Searches (ours or Auctionator's) update prices: refresh what shows a
+    -- value, once per burst of results.
+    if event ~= "AUCTION_HOUSE_CLOSED" and not P.priceRefreshPending then
+        P.priceRefreshPending = true
+        C_Timer.After(2, function()
+            P.priceRefreshPending = false
+            if not ns.DB.context.auctionHouseOpen then return end
+            if P.RefreshContextNotice then pcall(P.RefreshContextNotice) end
+            if P.UI.frame and P.UI.frame:IsShown() then Core.RefreshUI() end
+        end)
+    end
 end
 
 -- ---------------------------------------------------------------------------
