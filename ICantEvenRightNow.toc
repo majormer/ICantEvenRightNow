@@ -1,4 +1,4 @@
-## Interface: 120000, 120001, 120005
+## Interface: 120000, 120001, 120005, 120007, 120100
 ## Title: I Can't Even Right Now (With My Bags and Bank)
 ## Notes: Intelligent inventory cleanup - bank old content items, recall relevant items, and manage inventory clutter
 ## Author: majormer

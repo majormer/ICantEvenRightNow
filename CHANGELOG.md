@@ -11,6 +11,10 @@ Release note rules:
 
 ## [Unreleased]
 
+### Changed
+
+- Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
+
 ## [0.5.0] - 2026-05-11
 
 ### Added
