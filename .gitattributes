@@ -1,0 +1,12 @@
+# Store all text with LF in the repository, whatever tool or OS wrote it.
+# Working copies are LF too, except PowerShell scripts (CRLF for Windows tooling).
+* text=auto eol=lf
+
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.tga binary
+*.blp binary
+*.zip binary
