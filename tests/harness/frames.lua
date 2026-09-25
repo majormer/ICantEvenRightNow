@@ -140,7 +140,17 @@ function Frames.new(world)
     -- ---------------------------------------------------------------------
     -- Text
     -- ---------------------------------------------------------------------
-    function Widget:SetText(text) self._text = text ~= nil and tostring(text) or nil end
+    -- Like the real client, setting text from code fires OnTextChanged with
+    -- userInput = false (edit boxes only), deferred to a later frame.
+    function Widget:SetText(text)
+        local new = text ~= nil and tostring(text) or nil
+        local changed = new ~= self._text
+        self._text = new
+        -- Fired on a later frame, like the client (after any refresh guard).
+        if changed and self._type == "EditBox" then
+            world:after(0, function() self:_fire("OnTextChanged", false) end)
+        end
+    end
     function Widget:GetText() return self._text end
     function Widget:SetFormattedText(fmt, ...) self._text = string.format(fmt, ...) end
     function Widget:GetStringWidth() return #(self._text or "") * 6 end

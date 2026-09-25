@@ -405,3 +405,23 @@ T.test("gear below Auctionator's item-level threshold is priced as approximate",
     T.eq(price.exact, false)
     T.ok(not g:P().IsAuctionCandidate(scanned(g, 8904)))
 end)
+
+T.test("a level price far above the item's usual price is unconfirmed and not counted", function()
+    local g = game(function(w)
+        w:defineItem(8905, { name = "Pricey Gloves", classID = 4, subclassID = 4, equipLoc = "INVTYPE_HAND",
+            itemLevel = 192, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8905, 1)
+        w.equipped[10] = 305
+    end, { prices = { [8905] = 250000000 }, ages = { [8905] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    -- Level key 25,000g; base key (all levels) 500g.
+    local db = g.env.Auctionator.Database
+    local levelPrice = db.GetPrice
+    db.GetPrice = function(self, key) if key == "8905" then return 5000000 end return levelPrice(self, key) end
+    local gloves = scanned(g, 8905)
+    local price = g:P().GetAuctionPrice(gloves)
+    T.eq(price.unconfirmed, true)
+    T.ok(g:P().IsAuctionCandidate(gloves), "still a candidate")
+    T.eq((g:P().GetItemValue(gloves)), 100, "not counted as auction value")
+    T.contains(g:P().FormatPriceSource(price), "unconfirmed")
+end)

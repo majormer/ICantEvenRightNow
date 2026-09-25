@@ -1425,8 +1425,11 @@ local function BuildTransferTab(parent)
     parent.search:SetSize(300, ROW_HEIGHT)
     parent.search:SetAutoFocus(false)
     parent.search:SetPoint("TOPLEFT", parent, "TOPLEFT", 46, REFINE_Y)
-    parent.search:SetScript("OnTextChanged", function(self)
-        if UI.refreshingTransferControls then return end
+    -- Only typing counts: in game, text set by code (opening a task) also
+    -- fires OnTextChanged, sometimes after the refresh guard is cleared, and
+    -- marked every opened task "(modified)".
+    parent.search:SetScript("OnTextChanged", function(self, userInput)
+        if UI.refreshingTransferControls or not userInput then return end
         SetFilterSearch("Transfer", self:GetText())
         ClearActiveWorkflowState()
         Core.RefreshUI()
@@ -1587,8 +1590,8 @@ local function BuildTransferTab(parent)
     parent.ilvlMin:SetMaxLetters(5)
     parent.ilvlMin:SetNumeric(true)
     parent.ilvlMin:SetPoint("LEFT", parent.ilvlLabel, "RIGHT", 8, 0)
-    parent.ilvlMin:SetScript("OnTextChanged", function(self)
-        if UI.refreshingTransferControls then return end
+    parent.ilvlMin:SetScript("OnTextChanged", function(self, userInput)
+        if UI.refreshingTransferControls or not userInput then return end
         SetFilterItemLevel("Transfer", self:GetText(), parent.ilvlMax:GetText())
         ClearActiveWorkflowState()
         Core.RefreshUI()
@@ -1603,8 +1606,8 @@ local function BuildTransferTab(parent)
     parent.ilvlMax:SetMaxLetters(5)
     parent.ilvlMax:SetNumeric(true)
     parent.ilvlMax:SetPoint("LEFT", parent.ilvlSep, "RIGHT", 4, 0)
-    parent.ilvlMax:SetScript("OnTextChanged", function(self)
-        if UI.refreshingTransferControls then return end
+    parent.ilvlMax:SetScript("OnTextChanged", function(self, userInput)
+        if UI.refreshingTransferControls or not userInput then return end
         SetFilterItemLevel("Transfer", parent.ilvlMin:GetText(), self:GetText())
         ClearActiveWorkflowState()
         Core.RefreshUI()

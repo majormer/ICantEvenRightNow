@@ -65,6 +65,8 @@ end
 -- vs ~3,838g for the same bags. Reading the level key directly is stable.
 -- Returns a price record, false when this is gear with no usable level key
 -- (base price only: approximate), or nil to use the API path.
+local UNCONFIRMED_PRICE_RATIO = 10
+
 local function AuctionatorGearPrice(item)
     if not (item.classID == 2 or item.classID == 4) then return nil end
     local db = Auctionator and Auctionator.Database
@@ -85,7 +87,15 @@ local function AuctionatorGearPrice(item)
     end
     if type(level) == "number" and level >= threshold then
         local price, age = read("g:" .. tostring(item.itemID) .. ":" .. tostring(level))
-        if price then return { price = price, source = "Auctionator", ageDays = age, exact = true } end
+        if price then
+            -- Auctionator records the lowest listing it saw, not what sells. A
+            -- level price far above the item's price across all levels is
+            -- often one hopeful listing (in game: 25,000g for a piece listed
+            -- at 100-2,500g elsewhere), so it is flagged as unconfirmed.
+            local base = read(tostring(item.itemID))
+            local unconfirmed = base and price > base * UNCONFIRMED_PRICE_RATIO or nil
+            return { price = price, source = "Auctionator", ageDays = age, exact = true, unconfirmed = unconfirmed }
+        end
     end
     local price, age = read(tostring(item.itemID))
     if price then return { price = price, source = "Auctionator", ageDays = age, exact = false } end
@@ -182,6 +192,7 @@ function P.FormatPriceSource(price)
     if not price then return "" end
     local age = FormatAge(price.ageDays)
     return price.source .. (age and (", " .. age) or "") .. (price.exact == false and ", approximate" or "")
+        .. (price.unconfirmed and ", unconfirmed: far above this item's usual price" or "")
         .. (price.fresh and "" or ", stale")
 end
 
@@ -232,10 +243,11 @@ function P.IsValueFlagged(item, dest)
 end
 
 -- Best value of an item for reports: auction (net) when it beats vendor.
+-- Unconfirmed prices (see AuctionatorGearPrice) are not counted as value.
 function P.GetItemValue(item)
     local vendor = (item.sellPrice or 0) * (item.count or 1)
-    local net = AuctionNet(item)
-    if net and net > vendor then return net, "auction" end
+    local net, price = AuctionNet(item)
+    if net and net > vendor and not price.unconfirmed then return net, "auction" end
     return vendor, "vendor"
 end
 
@@ -632,17 +644,20 @@ function P.RegisterValueTasks()
         -- Counts candidates everywhere this character can post from: bags
         -- are ready to post; bank items need withdrawing first (the review list).
         count = function()
-            local inBags, inBank, value = 0, 0, 0
+            local inBags, inBank, value, unconfirmed = 0, 0, 0, 0
             for _, item in ipairs(P.AuctionCandidateItems()) do
                 if item.scope == P.BAG_SCOPE then inBags = inBags + 1 else inBank = inBank + 1 end
                 value = value + (P.GetItemValue(item) or 0)
+                local price = P.GetAuctionPrice(item)
+                if price and price.unconfirmed then unconfirmed = unconfirmed + 1 end
             end
             local total = inBags + inBank
             if total == 0 then return 0, nil, 0, "Nothing worth auctioning right now" end
             local parts = {}
             if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
             if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
-            return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction)"
+            return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction"
+                .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")"
         end,
         secondary = {
             label = function()
