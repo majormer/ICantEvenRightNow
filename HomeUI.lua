@@ -578,9 +578,17 @@ function P.ShowHandoffPicker(item)
     frame:SetHeight(64 + rows * 22)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UI.frame or UIParent, "CENTER", 0, 0)
-    -- The main window shares this strata at level 100; in game the picker was
-    -- shown underneath it (invisible). Always draw above the window.
-    frame:SetFrameLevel(((UI.frame and UI.frame:GetFrameLevel()) or 100) + 50)
+    -- The main window shares this strata, and its children reach high frame
+    -- levels (609 in game), so the picker was drawn underneath (invisible).
+    -- Draw above the window's highest descendant.
+    local highest = 0
+    local function walk(f)
+        local level = f:GetFrameLevel() or 0
+        if level > highest then highest = level end
+        for _, child in ipairs({ f:GetChildren() }) do walk(child) end
+    end
+    if UI.frame then walk(UI.frame) end
+    frame:SetFrameLevel(math.min(highest + 10, 9000))
     frame:Show()
     frame:Raise()
 end

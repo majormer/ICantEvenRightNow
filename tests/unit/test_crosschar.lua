@@ -156,7 +156,13 @@ T.test("row menu 'Send to an alt...' opens a picker that queues the hand-off", f
     g:click(send)
     local picker = UI.handoffPicker
     T.ok(picker:IsShown())
-    T.ok(picker:GetFrameLevel() > UI.frame:GetFrameLevel(), "drawn above the main window")
+    local highest = 0
+    local function walk(f)
+        if f ~= picker and f:GetFrameLevel() > highest then highest = f:GetFrameLevel() end
+        for _, c in ipairs({ f:GetChildren() }) do walk(c) end
+    end
+    walk(UI.frame)
+    T.ok(picker:GetFrameLevel() > highest, "drawn above everything in the main window")
     T.contains(picker.buttons[1]:GetText(), "Tailor")
     g:click(picker.buttons[1])
     T.eq(g:P().GetHandoffs()[1].to, "Tailor-R")
