@@ -583,11 +583,16 @@ function Core.ExecuteTransferOne(plan)
     local dest = UI.transferDest or STORAGE_PRIVATE_BANK
     local blocked = GetTransferBlockReason(item, source, dest)
     if blocked then
+        P.Log("transfer", "skip %s (%s) -> %s: %s (row button)", item.name, item.itemID, dest, blocked)
         Print("Cannot transfer " .. ItemLabel(item) .. ": " .. blocked)
         return
     end
     local moved, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
+    P.Log("transfer", "%s %s x%s (%s %s:%s) -> %s: %s (row button)", dest == "Vendor" and "sell" or "move",
+        item.name, item.count or 1, item.itemID, item.bagID, item.slot, dest,
+        moved and "ok" or ("failed: " .. tostring(err)))
     if moved then
+        MarkPendingFromSlot(item)
         if P.OnItemMoved then P.OnItemMoved(item, dest) end
         HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil

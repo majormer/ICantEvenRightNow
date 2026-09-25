@@ -194,3 +194,18 @@ T.test("a hand-off that can't move says why on its card", function()
     T.eq(card.blocked, 1)
     T.contains(P.CardSummary(card), "1 blocked: ")
 end)
+
+T.test("a bags-only rescan right after a row deposit keeps the hand-off", function()
+    local saved = roster({ { player = MAIN, role = "main" }, { player = TAILOR, role = "crafter" } })
+    local g = login(saved, MAIN, function(w) w:put(0, 1, I.LINEN, 20) end)
+    g:openBank()
+    local P, UI = g:P(), g:UI()
+    T.ok(P.QueueHandoff(P.GetScanList("bags")[1], "Tailor-R"))
+    P.OpenTask("Send to Alts")
+    -- Row button (single item), like the in-game click.
+    g:Core().ExecuteTransferOne(UI.transferVisible[1])
+    g:Core().ScanInventory("bags", true)   -- the quick bag-update rescan
+    T.eq(P.GetHandoffs()[1] and P.GetHandoffs()[1].state, "deposited")
+    g.world:advance(10)                      -- later full rescans see it in the Warband bank
+    T.eq(P.GetHandoffs()[1] and P.GetHandoffs()[1].state, "deposited")
+end)

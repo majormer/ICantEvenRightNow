@@ -220,6 +220,7 @@ function P.OnItemMoved(item, dest)
         if entry then
             entry.state = "deposited"
             entry.depositedAt = Now()
+            P.Log("handoff", "deposited %s (%s) for %s", item.name, item.itemID, entry.to)
         end
     elseif dest == "Bags" and item.storageKind == P.STORAGE_WARBAND_BANK then
         local entry = WaitingForMe(item.itemID)
@@ -235,16 +236,25 @@ function P.CleanupHandoffs()
     for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
         for _, item in ipairs(P.GetScanList(scope)) do mine[item.itemID] = true end
     end
-    local warbandScanned = (P.GetWarbandSnapshot().scannedAt or 0) > 0
+    local warbandScannedAt = P.GetWarbandSnapshot().scannedAt or 0
     local kept = {}
     for _, entry in ipairs(Queue().entries) do
         local keep = true
-        if entry.state == "deposited" and warbandScanned and not warbandIDs[entry.itemID] then
+        -- Only a Warband scan taken after the deposit can say the item left.
+        -- In game, a bags-only rescan right after the deposit compared against
+        -- the older Warband list and deleted the hand-off.
+        local scannedSinceDeposit = warbandScannedAt > (entry.depositedAt or entry.at or 0)
+        if entry.state == "deposited" and scannedSinceDeposit and not warbandIDs[entry.itemID] then
             keep = false            -- taken out of the Warband bank elsewhere
         elseif entry.state == "queued" and entry.from == P.currentCharacterKey and not mine[entry.itemID] then
             keep = false            -- sender no longer has it
         end
-        if keep then table.insert(kept, entry) end
+        if keep then
+            table.insert(kept, entry)
+        else
+            P.Log("handoff", "dropped %s (%s) for %s: %s", entry.name, entry.itemID, entry.to,
+                entry.state == "deposited" and "no longer in the Warband bank" or "sender no longer has it")
+        end
     end
     Queue().entries = kept
 end
