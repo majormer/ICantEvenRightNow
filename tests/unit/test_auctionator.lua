@@ -66,7 +66,20 @@ local function installAuctionator(w, opts)
             if def and def.cached then callback({ "g:" .. id .. ":" .. tostring(def.itemLevel), tostring(id) }) end
         end,
     }
-    rawset(w.env, "Auctionator", { API = { v1 = api }, Utilities = utilities })
+    -- Database mirrors v339 keys: "g:<id>:<level>" for gear at or above the
+    -- threshold (absent when opts.exact[id] == false), and "<id>" for the base item.
+    local database = {}
+    function database:GetPrice(key)
+        local id = tonumber(key:match("^g:(%d+):")) or tonumber(key)
+        if key:match("^g:") and (opts.exact or {})[id] == false then return nil end
+        return (opts.prices or {})[id]
+    end
+    function database:GetPriceAge(key)
+        local id = tonumber(key:match("^g:(%d+):")) or tonumber(key)
+        return (opts.ages or {})[id]
+    end
+    rawset(w.env, "Auctionator", { API = { v1 = api }, Utilities = utilities, Database = database,
+        Constants = { ITEM_LEVEL_THRESHOLD = 168 } })
     w.addonsLoaded.Auctionator = true
     w.auctionator = fake
     return fake
@@ -347,7 +360,7 @@ T.test("the notice's value updates when auction prices change", function()
     g.world:advance(3)
     T.ok(notice.text:GetText() ~= before, "value text refreshed")
 end)
-T.test("gear is not priced until its item data is loaded", function()
+T.test("gear is priced at its own level even before its data loads", function()
     local g = game(function(w)
         w:defineItem(8902, { name = "Slow Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
             itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
@@ -356,9 +369,9 @@ T.test("gear is not priced until its item data is loaded", function()
     end, { prices = { [8902] = 5000000 }, ages = { [8902] = 1 } })
     local blade = scanned(g, 8902)
     g.world.items[8902].cached = false
-    T.eq(g:P().GetAuctionPrice(blade), nil, "no price while data is loading")
-    g.world:advance(1)
-    T.ok(g:P().GetAuctionPrice(blade), "priced once loaded")
+    local price = g:P().GetAuctionPrice(blade)
+    T.ok(price, "priced from the scanned item level")
+    T.eq(price.exact, true)
 end)
 T.test("stale prices are not auction value, but still protect from vendoring", function()
     local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
@@ -380,4 +393,15 @@ T.test("the auction report explains gear it leaves out", function()
     g:Core().ScanInventory("bags", true)
     local text = table.concat(g:P().AuctionCandidateReport(), "\n")
     T.contains(text, "left out: Unpriced Blade [260]: no auction price")
+end)
+
+T.test("gear below Auctionator's item-level threshold is priced as approximate", function()
+    local g = game(function(w)
+        w:defineItem(8904, { name = "Low Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 165, requiredLevel = 70, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8904, 1)
+    end, { prices = { [8904] = 5000000 }, ages = { [8904] = 1 } })
+    local price = g:P().GetAuctionPrice(scanned(g, 8904))
+    T.eq(price.exact, false)
+    T.ok(not g:P().IsAuctionCandidate(scanned(g, 8904)))
 end)

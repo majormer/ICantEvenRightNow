@@ -56,32 +56,48 @@ end
 -- Sources
 -- ---------------------------------------------------------------------------
 
--- Auctionator prices gear by item level only when it can build the item's
--- level-specific key immediately (Utilities.DBKeyFromLink calls back at once);
--- otherwise it silently uses the base item's price (every item level mixed)
--- and still calls it exact. Seen in game right after /reload: ~14,002g vs
--- ~3,838g a minute later. Ask Auctionator the same question it asks itself.
--- (C_Item.IsItemDataCachedByID is not usable here: in game it stayed false
--- for these items even while their names and levels were readable.)
-local function GearDataReady(item)
-    if not (item.classID == 2 or item.classID == 4) then return true end
-    if not item.link then return false end
-    local utilities = Auctionator and Auctionator.Utilities
-    if utilities and utilities.DBKeyFromLink then
-        local keys
-        local ok = pcall(utilities.DBKeyFromLink, item.link, function(result) keys = result end)
-        if ok then
-            if keys == nil and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
-            return keys ~= nil
+-- Gear price for this piece's own item level, read from Auctionator's price
+-- database by the same keys its API uses ("g:<itemID>:<level>" at or above
+-- Constants.ITEM_LEVEL_THRESHOLD, 168 in v339). Auctionator's own link lookup
+-- only uses the level key when the game reports the item's data as loaded,
+-- and in game that flag flipped for readable items, so prices jumped between
+-- level-specific and base (every level mixed, still called exact): ~14,002g
+-- vs ~3,838g for the same bags. Reading the level key directly is stable.
+-- Returns a price record, false when this is gear with no usable level key
+-- (base price only: approximate), or nil to use the API path.
+local function AuctionatorGearPrice(item)
+    if not (item.classID == 2 or item.classID == 4) then return nil end
+    local db = Auctionator and Auctionator.Database
+    if not (db and db.GetPrice) then return nil end
+    local level = item.link and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link)
+    if type(level) ~= "number" or level <= 0 then level = item.itemLevel end
+    local constants = Auctionator.Constants
+    local threshold = constants and type(constants.ITEM_LEVEL_THRESHOLD) == "number" and constants.ITEM_LEVEL_THRESHOLD or 168
+    local function read(key)
+        local okPrice, price = pcall(db.GetPrice, db, key)
+        if not okPrice or type(price) ~= "number" or price <= 0 then return nil end
+        local age
+        if db.GetPriceAge then
+            local okAge, days = pcall(db.GetPriceAge, db, key)
+            if okAge then age = days end
         end
+        return price, age
     end
-    local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link)
-    return type(level) == "number" and level > 0
+    if type(level) == "number" and level >= threshold then
+        local price, age = read("g:" .. tostring(item.itemID) .. ":" .. tostring(level))
+        if price then return { price = price, source = "Auctionator", ageDays = age, exact = true } end
+    end
+    local price, age = read(tostring(item.itemID))
+    if price then return { price = price, source = "Auctionator", ageDays = age, exact = false } end
+    return false
 end
+
 local function AuctionatorPrice(item)
     local api = Auctionator and Auctionator.API and Auctionator.API.v1
     if not api then return nil end
-    if not GearDataReady(item) then return nil end
+    local gear = AuctionatorGearPrice(item)
+    if gear then return gear end
+    if gear == false then return nil end
     local price, age
     if item.link and api.GetAuctionPriceByItemLink then
         local ok, value = pcall(api.GetAuctionPriceByItemLink, CALLER_ID, item.link)
@@ -529,9 +545,7 @@ function P.AuctionCandidateReport()
             and not P.IsAuctionCandidate(item) then
             seen[key] = true
             local why
-            if not GearDataReady(item) then
-                why = "item data not loaded yet"
-            else
+            do
                 local price = GetAuctionPrice(item)
                 if not price then why = "no auction price"
                 elseif price.exact == false then why = "approximate price"
