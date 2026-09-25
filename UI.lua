@@ -1809,6 +1809,10 @@ function Core.RefreshTransferDropdowns()
 end
 
 function Core.RefreshTransfer()
+    return P.WithEvaluationCache(Core.RefreshTransferUncached)
+end
+
+function Core.RefreshTransferUncached()
     local panel = UI.frame.panels.Transfer
     local source = UI.transferSource or "Bags"
     local dest = UI.transferDest or STORAGE_PRIVATE_BANK

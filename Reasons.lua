@@ -508,6 +508,14 @@ end
 
 -- Explain a scanned record using the location it came from (for time held).
 function P.ExplainScanned(item)
+    local cache = P.evaluationCache and P.evaluationCache.explanations
+    if cache and cache[item] then return cache[item] end
+    local explanation = P.ExplainScannedUncached(item)
+    if cache then cache[item] = explanation end
+    return explanation
+end
+
+function P.ExplainScannedUncached(item)
     local locationKey
     if item.storageKind == P.STORAGE_WARBAND_BANK then
         locationKey = "warband"

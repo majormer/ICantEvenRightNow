@@ -91,6 +91,55 @@ local function FindFreeSlotInBags(bagIDs, takenSlots, item)
     return nil, nil, nil
 end
 
+-- Block-reason check only: is there room for this item in these bags?
+-- An empty slot anywhere answers yes for every item, so that part is cached
+-- per bag set for the current refresh; stacking is checked only when full.
+local function HasRoomIn(bagIDs, item)
+    local cache = P.evaluationCache
+    local key = table.concat(bagIDs, ",")
+    local hasEmpty = cache and cache.emptySlots and cache.emptySlots[key]
+    if hasEmpty == nil then
+        hasEmpty = false
+        for _, bagID in ipairs(bagIDs) do
+            local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+            for slot = 1, numSlots do
+                if not CContainer.GetContainerItemID(bagID, slot) then hasEmpty = true break end
+            end
+            if hasEmpty then break end
+        end
+        if cache then
+            cache.emptySlots = cache.emptySlots or {}
+            cache.emptySlots[key] = hasEmpty
+        end
+    end
+    if hasEmpty then return true end
+    if not item or (item.maxStack or 1) <= 1 then return false end
+    if not cache then return FindFreeSlotInBags(bagIDs, {}, item) ~= nil end
+    -- Full bags: one pass records which item IDs still have a partial,
+    -- unlocked stack to join, instead of searching every slot per item.
+    cache.partialStacks = cache.partialStacks or {}
+    local partial = cache.partialStacks[key]
+    if not partial then
+        partial = {}
+        for _, bagID in ipairs(bagIDs) do
+            local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
+            for slot = 1, numSlots do
+                local info = CContainer.GetContainerItemInfo(bagID, slot)
+                local itemID = info and CContainer.GetContainerItemID(bagID, slot)
+                if itemID and not info.isLocked then
+                    partial[itemID] = partial[itemID] or {}
+                    table.insert(partial[itemID], { bagID = bagID, slot = slot, count = info.stackCount or 0 })
+                end
+            end
+        end
+        cache.partialStacks[key] = partial
+    end
+    for _, stack in ipairs(partial[item.itemID] or {}) do
+        if stack.count < item.maxStack and not IsItemOwnSlot(item, stack.bagID, stack.slot) then return true end
+    end
+    return false
+end
+
 local function FindFreeSlot(storageKind, takenSlots, item)
     return FindFreeSlotInBags(GetStorageBagIDs(storageKind), takenSlots, item)
 end
@@ -307,8 +356,17 @@ local function GetTransferBlockReason(item, source, dest)
     if source == dest then return "Source and destination are the same" end
 
     local needsBank = NeedsBankStorage(source) or NeedsBankStorage(dest)
-    if needsBank and not IsBankContextDetected() then
-        return "Bank is not open"
+    if needsBank and not ns.DB.context.bankOpen then
+        -- Full detection walks every frame; do it at most once per refresh.
+        local cache = P.evaluationCache
+        local detected
+        if cache and cache.bankDetected ~= nil then
+            detected = cache.bankDetected
+        else
+            detected = IsBankContextDetected() and true or false
+            if cache then cache.bankDetected = detected end
+        end
+        if not detected then return "Bank is not open" end
     end
 
     if dest == "Vendor" then
@@ -345,12 +403,12 @@ local function GetTransferBlockReason(item, source, dest)
     end
 
     if dest == "Bags" then
-        if not FindFreeNormalBagSlot({}, item) then
+        if not HasRoomIn(NORMAL_BAG_IDS, item) then
             return "No empty bag slots"
         end
     elseif dest ~= "Vendor" then
         local bagIDs, route = GetTargetBagIDs(item, dest)
-        if not FindFreeSlotInBags(bagIDs, {}, item) then
+        if not HasRoomIn(bagIDs, item) then
             return "No empty slots in " .. (route and route.reason or GetStorageDisplayName(dest))
         end
     end

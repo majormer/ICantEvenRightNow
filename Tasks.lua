@@ -119,7 +119,19 @@ local function TaskPlans(task)
     P.ApplySavedFilter(preset, SCRATCH_TAB)
     ns.DB.ui.transferSort = savedSort
     local matched = {}
-    for _, plan in ipairs(P.GetTransferCandidates(source, dest)) do
+    local candidates
+    local cache = P.evaluationCache
+    if cache then
+        local routeKey = tostring(source) .. "->" .. tostring(dest)
+        candidates = cache.routes[routeKey]
+        if not candidates then
+            candidates = P.GetTransferCandidates(source, dest)
+            cache.routes[routeKey] = candidates
+        end
+    else
+        candidates = P.GetTransferCandidates(source, dest)
+    end
+    for _, plan in ipairs(candidates) do
         if P.PlanMatchesTabFilters(plan, SCRATCH_TAB) and (not task.predicate or task.predicate(plan.item)) then
             table.insert(matched, plan)
         end
@@ -160,12 +172,28 @@ P.EvaluateTask = EvaluateTask
 
 -- Cards for the Home screen, most useful first: ready now (largest first),
 -- then waiting on a context, then empty tasks.
+-- A cache shared by every card in one refresh: one candidate list per route
+-- and one explanation per item, instead of recomputing them for each card.
+local function WithEvaluationCache(fn)
+    local outer = P.evaluationCache
+    if not outer then
+        P.evaluationCache = { routes = {}, explanations = setmetatable({}, { __mode = "k" }) }
+    end
+    local ok, result = pcall(fn)
+    if not outer then P.evaluationCache = nil end
+    if not ok then error(result, 0) end
+    return result
+end
+P.WithEvaluationCache = WithEvaluationCache
+
 function P.GetTaskCards()
     local cards = {}
-    for _, task in ipairs(GetAllTasks()) do
-        local ok, card = pcall(EvaluateTask, task)
-        if ok then table.insert(cards, card) end
-    end
+    WithEvaluationCache(function()
+        for _, task in ipairs(GetAllTasks()) do
+            local ok, card = pcall(EvaluateTask, task)
+            if ok then table.insert(cards, card) end
+        end
+    end)
     local function rank(card)
         if card.ready > 0 then return 1 end
         if card.waiting > 0 then return 2 end
