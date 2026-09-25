@@ -837,6 +837,13 @@ local QUICK_WORKFLOWS = {
         hideBlocked = true, sort = "Vendor Value",
     },
     {
+        name = "Deposit to Warband",
+        source = "Bags", dest = P.STORAGE_WARBAND_ROUTED,
+        expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_ALL,
+        type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
+        hideBlocked = true, sort = "Name",
+    },
+    {
         name = "Consolidate Warbound Gear",
         source = STORAGE_PRIVATE_BANK, dest = STORAGE_WARBAND_BANK,
         expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_WARBAND,

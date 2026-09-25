@@ -288,12 +288,19 @@ P.GetVendorPlans = GetVendorPlans
 -- Transfer pipeline: block reason and candidates
 -- ===========================================================================
 
-local function NeedsBankStorage(s)
-    return s ~= "Bags" and s ~= "Vendor"
-        and (s == STORAGE_PRIVATE_BANK or s == STORAGE_REAGENT_BANK
-             or s == STORAGE_WARBAND_BANK or s == STORAGE_ALL_BANK_TABS
-             or (s and s:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX))
+local NeedsBankStorage = P.NeedsBankStorage
+local STORAGE_WARBAND_ROUTED = P.STORAGE_WARBAND_ROUTED
+
+-- The bags a move to `dest` may land in. For the routed Warband destination
+-- this is the single tab whose settings match the item.
+local function GetTargetBagIDs(item, dest)
+    if dest == STORAGE_WARBAND_ROUTED then
+        local route = P.RouteToWarbandTab(item)
+        return route and { route.bagID } or {}, route
+    end
+    return GetStorageBagIDs(dest), nil
 end
+P.GetTargetBagIDs = GetTargetBagIDs
 
 local function GetTransferBlockReason(item, source, dest)
     if ns.DB.context.inCombat then return "In combat" end
@@ -307,7 +314,7 @@ local function GetTransferBlockReason(item, source, dest)
     if dest == "Vendor" then
         if not ns.DB.context.vendorOpen then return "Vendor is not open" end
         if not IsVendorSellable(item) then return "Not vendor-sellable" end
-    elseif dest == STORAGE_WARBAND_BANK and item.accountBankAllowed == false then
+    elseif P.IsWarbandStorage(dest) and item.accountBankAllowed == false then
         return "Not eligible for Warband Bank"
     end
 
@@ -323,7 +330,13 @@ local function GetTransferBlockReason(item, source, dest)
         end
     end
 
-    if dest ~= "Bags" and dest ~= "Vendor" and item.scope ~= BAG_SCOPE then
+    if dest == STORAGE_WARBAND_ROUTED then
+        if item.scope ~= BAG_SCOPE and item.storageKind == STORAGE_WARBAND_BANK then
+            return "Already in the Warband Bank"
+        end
+        local route, why = P.RouteToWarbandTab(item)
+        if not route then return why end
+    elseif dest ~= "Bags" and dest ~= "Vendor" and item.scope ~= BAG_SCOPE then
         for _, bagID in ipairs(GetStorageBagIDs(dest)) do
             if bagID == item.bagID then
                 return "Already in " .. GetStorageDisplayName(dest)
@@ -336,9 +349,9 @@ local function GetTransferBlockReason(item, source, dest)
             return "No empty bag slots"
         end
     elseif dest ~= "Vendor" then
-        local slot1 = FindFreeSlot(dest, {}, item)
-        if not slot1 then
-            return "No empty slots in " .. dest
+        local bagIDs, route = GetTargetBagIDs(item, dest)
+        if not FindFreeSlotInBags(bagIDs, {}, item) then
+            return "No empty slots in " .. (route and route.reason or GetStorageDisplayName(dest))
         end
     end
 
@@ -362,7 +375,9 @@ local function GetTransferCandidates(source, dest)
         -- "Bank (All Tabs)" matches any character bank item regardless of tab.
         local isBankTabItem = itemSource == STORAGE_PRIVATE_BANK
             or itemSource:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX
-        local matches = (itemSource == source)
+        local warbandTabMatch = P.IsWarbandTabStorage(source) and item.storageKind == STORAGE_WARBAND_BANK
+            and P.WarbandTabStorageKey(item.bagID) == source
+        local matches = (itemSource == source) or warbandTabMatch
             or (source == STORAGE_PRIVATE_BANK and itemSource:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX)
             or (source == STORAGE_ALL_BANK_TABS and isBankTabItem)
         if matches then
@@ -458,7 +473,7 @@ local function ExecuteTransferMove(item, dest, takenSlots)
     if dest == "Bags" then
         toBag, toSlot, toKey = FindFreeNormalBagSlot(takenSlots, item)
     else
-        toBag, toSlot, toKey = FindFreeSlot(dest, takenSlots, item)
+        toBag, toSlot, toKey = FindFreeSlotInBags((GetTargetBagIDs(item, dest)), takenSlots, item)
     end
     if not toBag or not toSlot then
         return false, "No empty slots in " .. GetStorageDisplayName(dest)

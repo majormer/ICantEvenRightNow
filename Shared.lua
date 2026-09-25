@@ -27,6 +27,10 @@ P.STORAGE_REAGENT_BANK  = "Reagent Bank"
 P.STORAGE_WARBAND_BANK  = "Warband Bank"
 P.STORAGE_ALL_BANK_TABS = "Bank (All Tabs)"
 P.BANK_TAB_PREFIX       = "BankTab:"
+P.WARBAND_TAB_PREFIX    = "WarbandTab:"
+-- Destination that sends each item to the Warband tab whose own Blizzard
+-- "assign to" settings match it (Warband.lua).
+P.STORAGE_WARBAND_ROUTED = "Warband (by tab settings)"
 
 -- ---------------------------------------------------------------------------
 -- Scope constants (used in scanned item records)
@@ -151,6 +155,8 @@ local STORAGE_REAGENT_BANK  = P.STORAGE_REAGENT_BANK
 local STORAGE_WARBAND_BANK  = P.STORAGE_WARBAND_BANK
 local STORAGE_ALL_BANK_TABS = P.STORAGE_ALL_BANK_TABS
 local BANK_TAB_PREFIX       = P.BANK_TAB_PREFIX
+local WARBAND_TAB_PREFIX    = P.WARBAND_TAB_PREFIX
+local STORAGE_WARBAND_ROUTED = P.STORAGE_WARBAND_ROUTED
 local BAG_SCOPE             = P.BAG_SCOPE
 local BANK_SCOPE            = P.BANK_SCOPE
 local BANK_FRAME_NAMES      = P.BANK_FRAME_NAMES
@@ -313,6 +319,10 @@ P.PRIVATE_BANK_IDS = PRIVATE_BANK_IDS
 -- Shared mutable bank tab cache. Use wipe() to clear; never replace with a new table.
 P.BANK_TAB_DATA = {}
 local BANK_TAB_DATA = P.BANK_TAB_DATA
+-- Warband (account) tabs: { bagID, name, flags }. Live while at a banker;
+-- a copy is kept in the account snapshot (ns.DB.warband.tabs) for later display.
+P.WARBAND_TAB_DATA = {}
+local WARBAND_TAB_DATA = P.WARBAND_TAB_DATA
 
 -- Reagent Bank was removed in Patch 11.2.0 (TOC 110200, released August 5 2025).
 -- Source: https://warcraft.wiki.gg/wiki/Patch_11.2.0
@@ -336,8 +346,47 @@ local function GetBankTabLabel(tab)
     return "Bank Tab " .. tostring(tab.bagID)
 end
 
-P.BankTabStorageKey = BankTabStorageKey
-P.GetBankTabLabel   = GetBankTabLabel
+local function WarbandTabStorageKey(bagID)
+    return WARBAND_TAB_PREFIX .. tostring(bagID)
+end
+
+-- Known Warband tabs: live data at a banker, else the account snapshot copy.
+local function GetWarbandTabs()
+    if #WARBAND_TAB_DATA > 0 then return WARBAND_TAB_DATA end
+    return ns.DB and ns.DB.warband and ns.DB.warband.tabs or {}
+end
+
+local function GetWarbandTabLabel(tab)
+    if tab.name and tab.name ~= "" then return "Warband: " .. tab.name end
+    return "Warband Tab " .. tostring((tab.bagID or 0) - 11)
+end
+
+local function IsWarbandTabStorage(storageKind)
+    return type(storageKind) == "string" and storageKind:sub(1, #WARBAND_TAB_PREFIX) == WARBAND_TAB_PREFIX
+end
+
+-- True for every storage kind that needs the bank to be open.
+local function NeedsBankStorage(storage)
+    if storage == nil or storage == "Bags" or storage == "Vendor" then return false end
+    return storage == STORAGE_PRIVATE_BANK or storage == STORAGE_REAGENT_BANK
+        or storage == STORAGE_WARBAND_BANK or storage == STORAGE_ALL_BANK_TABS
+        or storage == STORAGE_WARBAND_ROUTED or IsWarbandTabStorage(storage)
+        or storage:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX
+end
+
+-- True for storage kinds that are part of the Warband bank.
+local function IsWarbandStorage(storage)
+    return storage == STORAGE_WARBAND_BANK or storage == STORAGE_WARBAND_ROUTED or IsWarbandTabStorage(storage)
+end
+
+P.BankTabStorageKey    = BankTabStorageKey
+P.GetBankTabLabel      = GetBankTabLabel
+P.WarbandTabStorageKey = WarbandTabStorageKey
+P.GetWarbandTabs       = GetWarbandTabs
+P.GetWarbandTabLabel   = GetWarbandTabLabel
+P.IsWarbandTabStorage  = IsWarbandTabStorage
+P.NeedsBankStorage     = NeedsBankStorage
+P.IsWarbandStorage     = IsWarbandStorage
 
 -- ===========================================================================
 -- Storage utilities
@@ -355,6 +404,14 @@ local function GetStorageDisplayName(storageKind)
     if storageKind == STORAGE_WARBAND_BANK  then return "Warband Bank" end
     if storageKind == STORAGE_ALL_BANK_TABS then return STORAGE_ALL_BANK_TABS end
     if storageKind == "Vendor"              then return "Vendor" end
+    if storageKind == STORAGE_WARBAND_ROUTED then return STORAGE_WARBAND_ROUTED end
+    if IsWarbandTabStorage(storageKind) then
+        local bagID = tonumber(storageKind:sub(#WARBAND_TAB_PREFIX + 1))
+        for _, tab in ipairs(GetWarbandTabs()) do
+            if tab.bagID == bagID then return GetWarbandTabLabel(tab) end
+        end
+        return "Warband Tab"
+    end
     if storageKind and storageKind:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX then
         local bagID = tonumber(storageKind:sub(#BANK_TAB_PREFIX + 1))
         if bagID then
@@ -370,7 +427,11 @@ end
 local function GetStorageBagIDs(storageKind)
     if storageKind == STORAGE_PRIVATE_BANK  then return PRIVATE_BANK_IDS end
     if storageKind == STORAGE_REAGENT_BANK  then return REAGENT_BANK_IDS end
-    if storageKind == STORAGE_WARBAND_BANK  then return WARBAND_BANK_IDS end
+    if storageKind == STORAGE_WARBAND_BANK or storageKind == STORAGE_WARBAND_ROUTED then return WARBAND_BANK_IDS end
+    if IsWarbandTabStorage(storageKind) then
+        local bagID = tonumber(storageKind:sub(#WARBAND_TAB_PREFIX + 1))
+        if bagID then return { bagID } end
+    end
     if storageKind == STORAGE_ALL_BANK_TABS then
         if #BANK_TAB_DATA > 0 then
             local ids = {}
@@ -402,11 +463,22 @@ local function RefreshBankTabData()
     if not (C_Bank and C_Bank.FetchPurchasedBankTabData) then return end
     if not (Enum and Enum.BankType) then return end
     local tabs = C_Bank.FetchPurchasedBankTabData(Enum.BankType.Character)
-    if not tabs then return end
-    for _, tab in ipairs(tabs) do
+    for _, tab in ipairs(tabs or {}) do
         local entry = { bagID = tab.ID, name = tab.name or "", flags = tab.depositFlags or 0 }
         table.insert(BANK_TAB_DATA, entry)
         STORAGE_BY_BAG_ID[tab.ID] = BankTabStorageKey(tab.ID)
+    end
+    -- Warband tabs (W2). Only readable at a banker; cached for later display.
+    wipe(WARBAND_TAB_DATA)
+    local accountTabs = Enum.BankType.Account ~= nil and C_Bank.FetchPurchasedBankTabData(Enum.BankType.Account) or nil
+    if accountTabs then
+        local cached = {}
+        for _, tab in ipairs(accountTabs) do
+            local entry = { bagID = tab.ID, name = tab.name or "", flags = tab.depositFlags or 0 }
+            table.insert(WARBAND_TAB_DATA, entry)
+            table.insert(cached, { bagID = entry.bagID, name = entry.name, flags = entry.flags })
+        end
+        if ns.DB and ns.DB.warband then ns.DB.warband.tabs = cached end
     end
     -- Notify UI to rebuild source/dest dropdowns (defined later in UI.lua).
     if Core.RefreshTransferDropdowns then
@@ -524,6 +596,9 @@ local function GetTransferSourceOptions()
             table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
         end
         table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+        for _, tab in ipairs(WARBAND_TAB_DATA) do
+            table.insert(opts, { text = GetWarbandTabLabel(tab), value = WarbandTabStorageKey(tab.bagID) })
+        end
     end
     return opts
 end
@@ -531,8 +606,8 @@ end
 local function GetTransferDestOptions()
     local opts = GetTransferSourceOptions()
     local bankOpen = ns.DB and ns.DB.context and ns.DB.context.bankOpen
-    if bankOpen then
-        -- bank options already included by GetTransferSourceOptions
+    if bankOpen and #WARBAND_TAB_DATA > 0 then
+        table.insert(opts, { text = STORAGE_WARBAND_ROUTED, value = STORAGE_WARBAND_ROUTED })
     end
     local vendorOpen = ns.DB and ns.DB.context and ns.DB.context.vendorOpen
     if vendorOpen then

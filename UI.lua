@@ -533,6 +533,9 @@ local function BuildTransferRowDetail(plan, source, dest)
         status = "Ready to sell" .. (stackValue > 0 and (" for " .. FormatMoney(stackValue)) or "")
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
+    elseif dest == P.STORAGE_WARBAND_ROUTED then
+        local route = P.RouteToWarbandTab(item)
+        status = "Ready to deposit to Warband: " .. (route and route.reason or "?")
     elseif source == "Bags" then
         status = "Ready to deposit to " .. GetStorageDisplayName(dest)
     else
@@ -548,12 +551,7 @@ local function BuildTransferRowDetail(plan, source, dest)
     return #meta > 0 and (status .. "  |  " .. table.concat(meta, "  |  ")) or status
 end
 
-local function NeedsBankStorage(storage)
-    return storage ~= "Bags" and storage ~= "Vendor"
-        and (storage == STORAGE_PRIVATE_BANK or storage == STORAGE_REAGENT_BANK
-            or storage == STORAGE_WARBAND_BANK or storage == STORAGE_ALL_BANK_TABS
-            or (storage and storage:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX))
-end
+local NeedsBankStorage = P.NeedsBankStorage
 
 local function ClearActiveWorkflowState()
     UI.activeQuickWorkflowName = nil
