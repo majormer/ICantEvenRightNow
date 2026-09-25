@@ -316,6 +316,7 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     if not ns.DB or not ns.DB.context then return end
 
+
     local interactionType = ...
     local bankInteraction = IsBankInteractionType(interactionType)
     local bankContextOpened = event == "BANKFRAME_OPENED" or (event == "PLAYER_INTERACTION_MANAGER_FRAME_SHOW" and bankInteraction)
@@ -359,6 +360,8 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RefreshBankTabData()
         Core.RefreshTransferDropdowns()
         pcall(Core.ScanInventory, "all", true)
+    elseif vendorContextOpened then
+        Core.ScanInventory(BAG_SCOPE, true)
     end
 
     if event == "BANK_TAB_SETTINGS_UPDATED" then

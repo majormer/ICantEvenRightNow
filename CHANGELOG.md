@@ -17,7 +17,7 @@ Release note rules:
 - Saved workflows now remember the complete setup: Source, Destination, filters, Actionable only, search, item-level range, and sort order. Existing custom filter-only presets remain supported.
 - Transfer results can be sorted by name, actionability, item level, vendor value, expansion, or binding.
 - A Swap button reverses non-vendor Source and Destination routes.
-- Live inventory changes now trigger a short, debounced refresh while the addon is open.
+- Live inventory changes now trigger a short, debounced refresh, and the item list also rescans when you open the console or a vendor.
 
 ### Improved
 
@@ -37,15 +37,19 @@ Release note rules:
 
 ### Fixed
 
+- Selling or moving an item now checks that the same item is still in its bag slot first. Previously, if your bags had changed since the last scan (sorting, looting, or a scan saved from an earlier session), the action could hit whatever item now occupied that slot, including a protected one. Items that have moved are skipped and the list refreshes.
+- Moves no longer report success when the item couldn't be picked up (for example, while an earlier move is still in progress), and are refused while you're holding an item on the cursor.
+- Several quick single-item transfers in a row no longer try to use the same empty target slot.
+- Bank-to-bank transfers no longer offer items that are already in the chosen destination, which previously did nothing but reported "moved".
 - Bank and vendor context detection now handles Midnight secret values without aborting UI refreshes.
 - Account-bank-compatible unbound items are no longer mislabeled as Warbound; binding detection now handles current `Enum.ItemBind` values explicitly.
 - Items known to be ineligible for Warband Bank are blocked before movement, and Bank (All Tabs) no longer displays a misleading alternate target.
-- Item cache warm-up retries are bounded so unresolved item data cannot schedule scans indefinitely.
+- Item cache warm-up retries are bounded, so item data that never loads can no longer cause background rescans to repeat indefinitely and stutter over a long session.
 - Upgrade checks exclude profession tools and other equippable item types that have no comparable character equipment slot.
 - Zero item-level values are normalized to an empty filter instead of appearing and counting as an active constraint.
 - Transfer classification text no longer masquerades as a destination-specific movement reason.
 - New item rules retain the item name, and legacy rules use their stored source text as a readable fallback when item data is unavailable.
-- Retail compatibility metadata now includes World of Warcraft 12.1.
+- Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
 - The manual release builder now includes every runtime module and icon required by the current addon layout.
 
 ## [0.5.0] - 2026-05-11

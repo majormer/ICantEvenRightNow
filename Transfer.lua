@@ -52,20 +52,26 @@ local MatchesTabFilters         = P.MatchesTabFilters
 local CContainer = C_Container
 
 -- ===========================================================================
--- FindFreeSlot
--- Finds a free slot in the given storageKind. Tries stacking first.
+-- FindFreeSlot / FindFreeNormalBagSlot
+-- Finds a target slot in the given bags. Tries stacking first. Never returns
+-- the item's own slot, a locked slot, or a slot already claimed in takenSlots.
 -- ===========================================================================
 
-local function FindFreeSlot(storageKind, takenSlots, item)
+local function IsItemOwnSlot(item, bagID, slot)
+    return item and item.bagID == bagID and item.slot == slot
+end
+
+local function FindFreeSlotInBags(bagIDs, takenSlots, item)
     if item and item.itemID and (item.maxStack or 1) > 1 then
-        for _, bagID in ipairs(GetStorageBagIDs(storageKind)) do
+        for _, bagID in ipairs(bagIDs) do
             local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
             for slot = 1, numSlots do
                 local key = SlotKey(bagID, slot)
-                if not takenSlots[key] and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
+                if not takenSlots[key] and not IsItemOwnSlot(item, bagID, slot)
+                    and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
                     local info = CContainer.GetContainerItemInfo(bagID, slot)
                     local stackCount = info and info.stackCount or 0
-                    if stackCount < item.maxStack then
+                    if info and not info.isLocked and stackCount < item.maxStack then
                         return bagID, slot, key
                     end
                 end
@@ -73,7 +79,7 @@ local function FindFreeSlot(storageKind, takenSlots, item)
         end
     end
 
-    for _, bagID in ipairs(GetStorageBagIDs(storageKind)) do
+    for _, bagID in ipairs(bagIDs) do
         local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
         for slot = 1, numSlots do
             local key = SlotKey(bagID, slot)
@@ -85,40 +91,14 @@ local function FindFreeSlot(storageKind, takenSlots, item)
     return nil, nil, nil
 end
 
+local function FindFreeSlot(storageKind, takenSlots, item)
+    return FindFreeSlotInBags(GetStorageBagIDs(storageKind), takenSlots, item)
+end
+
 P.FindFreeSlot = FindFreeSlot
 
--- ===========================================================================
--- FindFreeNormalBagSlot
--- Finds a free slot in NORMAL_BAG_IDS (regular bag slots only).
--- ===========================================================================
-
 local function FindFreeNormalBagSlot(takenSlots, item)
-    if item and item.itemID and (item.maxStack or 1) > 1 then
-        for _, bagID in ipairs(NORMAL_BAG_IDS) do
-            local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
-            for slot = 1, numSlots do
-                local key = SlotKey(bagID, slot)
-                if not takenSlots[key] and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
-                    local info = CContainer.GetContainerItemInfo(bagID, slot)
-                    local stackCount = info and info.stackCount or 0
-                    if stackCount < item.maxStack then
-                        return bagID, slot, key
-                    end
-                end
-            end
-        end
-    end
-
-    for _, bagID in ipairs(NORMAL_BAG_IDS) do
-        local numSlots = CContainer.GetContainerNumSlots(bagID) or 0
-        for slot = 1, numSlots do
-            local key = SlotKey(bagID, slot)
-            if not takenSlots[key] and not CContainer.GetContainerItemID(bagID, slot) then
-                return bagID, slot, key
-            end
-        end
-    end
-    return nil, nil, nil
+    return FindFreeSlotInBags(NORMAL_BAG_IDS, takenSlots, item)
 end
 
 P.FindFreeNormalBagSlot = FindFreeNormalBagSlot
@@ -486,6 +466,14 @@ local function GetTransferBlockReason(item, source, dest)
         end
     end
 
+    if dest ~= "Bags" and dest ~= "Vendor" and item.scope ~= BAG_SCOPE then
+        for _, bagID in ipairs(GetStorageBagIDs(dest)) do
+            if bagID == item.bagID then
+                return "Already in " .. GetStorageDisplayName(dest)
+            end
+        end
+    end
+
     if dest == "Bags" then
         if not FindFreeNormalBagSlot({}, item) then
             return "No empty bag slots"
@@ -542,35 +530,98 @@ end
 P.GetTransferCandidates = GetTransferCandidates
 
 -- ===========================================================================
+-- Target slot reservations
+-- A move leaves the target slot looking empty until the server confirms it, so
+-- slots used by recent moves stay reserved until the follow-up rescan has run.
+-- ===========================================================================
+
+local SLOT_RESERVATION_SECONDS = 2
+local reservedTargetSlots = {}
+local reservationGeneration = 0
+
+local function HoldReservedSlotsUntilSettled()
+    reservationGeneration = reservationGeneration + 1
+    local generation = reservationGeneration
+    C_Timer.After(SLOT_RESERVATION_SECONDS, function()
+        if generation == reservationGeneration then
+            wipe(reservedTargetSlots)
+        end
+    end)
+end
+
+-- ===========================================================================
+-- VerifySourceSlot
+-- Scan data can be stale (bags sorted, items looted, scans saved from an
+-- earlier session). Never act on a scanned bag/slot without confirming the
+-- same item is still there and can be picked up.
+-- ===========================================================================
+
+local STALE_SLOT_REASON = "Item has moved since the last scan"
+
+local function VerifySourceSlot(item)
+    if GetCursorInfo() then
+        return "Cursor is holding something"
+    end
+    if CContainer.GetContainerItemID(item.bagID, item.slot) ~= item.itemID then
+        return STALE_SLOT_REASON
+    end
+    local info = CContainer.GetContainerItemInfo(item.bagID, item.slot)
+    if not info then
+        return STALE_SLOT_REASON
+    end
+    if info.isLocked then
+        return "Item is locked"
+    end
+    return nil
+end
+
+-- ===========================================================================
 -- ExecuteTransferMove (internal)
 -- ===========================================================================
 
 local function ExecuteTransferMove(item, dest, takenSlots)
+    local slotProblem = VerifySourceSlot(item)
+    if slotProblem then
+        return false, slotProblem
+    end
+
     if dest == "Vendor" then
         if CContainer.UseContainerItem then
             CContainer.UseContainerItem(item.bagID, item.slot)
             return true, nil
         end
         return false, "UseContainerItem API unavailable"
-    elseif dest == "Bags" then
-        return MoveBankItemToNormalBag(item, takenSlots)
-    else
-        local toBag, toSlot, toKey = FindFreeSlot(dest, takenSlots or {}, item)
-        if toBag and toSlot and CContainer.PickupContainerItem then
-            CContainer.PickupContainerItem(item.bagID, item.slot)
-            CContainer.PickupContainerItem(toBag, toSlot)
-            if GetCursorInfo() == "item" then
-                ClearCursor()
-                return false, "Target slot rejected item"
-            end
-            if takenSlots and toKey then takenSlots[toKey] = true end
-            return true, nil
-        end
-        if not CContainer.PickupContainerItem then
-            return false, "Container pickup API unavailable"
-        end
-        return false, "No empty slots in " .. dest
     end
+
+    if not CContainer.PickupContainerItem then
+        return false, "Container pickup API unavailable"
+    end
+
+    local toBag, toSlot, toKey
+    if dest == "Bags" then
+        toBag, toSlot, toKey = FindFreeNormalBagSlot(takenSlots, item)
+    else
+        toBag, toSlot, toKey = FindFreeSlot(dest, takenSlots, item)
+    end
+    if not toBag or not toSlot then
+        return false, "No empty slots in " .. GetStorageDisplayName(dest)
+    end
+
+    CContainer.PickupContainerItem(item.bagID, item.slot)
+    if GetCursorInfo() ~= "item" then
+        return false, "Could not pick up item"
+    end
+    CContainer.PickupContainerItem(toBag, toSlot)
+    if GetCursorInfo() then
+        ClearCursor()
+        return false, "Target slot rejected item"
+    end
+    takenSlots[toKey] = true
+    return true, nil
+end
+
+local function ItemLabel(item)
+    return item.name or ("Item " .. item.itemID)
 end
 
 -- ===========================================================================
@@ -584,21 +635,25 @@ function Core.ExecuteTransferOne(plan)
     local dest = UI.transferDest or STORAGE_PRIVATE_BANK
     local blocked = GetTransferBlockReason(item, source, dest)
     if blocked then
-        Print("Cannot transfer " .. (item.name or ("Item " .. item.itemID)) .. ": " .. blocked)
+        Print("Cannot transfer " .. ItemLabel(item) .. ": " .. blocked)
         return
     end
-    local moved, err = ExecuteTransferMove(item, dest, {})
+    local moved, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
     if moved then
+        HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
         UI.inventoryStatus = dest == "Vendor" and "Sold 1 item" or "Moved 1 item"
         Core.RefreshUI()
-        Print((dest == "Vendor" and "Sold: " or "Transferred: ") .. (item.name or ("Item " .. item.itemID)))
+        Print((dest == "Vendor" and "Sold: " or "Transferred: ") .. ItemLabel(item))
         Core.ScheduleRescanAfterMove()
     else
         UI.inventoryStatus = "Failed: " .. (err or "unknown error")
         Core.RefreshUI()
-        Print("Transfer failed: " .. (err or "unknown error"))
+        Print("Transfer failed: " .. ItemLabel(item) .. ": " .. (err or "unknown error"))
+        if err == STALE_SLOT_REASON then
+            Core.ScanInventory("all", true)
+        end
     end
 end
 
@@ -612,33 +667,35 @@ function Core.ExecuteTransferSelected()
     local dest = UI.transferDest or STORAGE_PRIVATE_BANK
     local moved, blocked = 0, 0
     local movedKeys = {}
-    local takenSlots = {}
     local blockedDetails = {}
+    local foundStaleSlot = false
     for _, plan in ipairs(UI.transferVisible or {}) do
         if UI.transferSelected[plan.key] then
             local item = plan.item
             local blockReason = GetTransferBlockReason(item, source, dest)
-            if blockReason then
-                blocked = blocked + 1
-                if #blockedDetails < 3 then
-                    table.insert(blockedDetails, (item.name or ("Item " .. item.itemID)) .. ": " .. blockReason)
-                end
-            else
-                local didMove, err = ExecuteTransferMove(item, dest, takenSlots)
+            if not blockReason then
+                local didMove, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
                 if didMove then
                     movedKeys[item.key] = true
                     moved = moved + 1
                 else
-                    blocked = blocked + 1
-                    if #blockedDetails < 3 then
-                        table.insert(blockedDetails, (item.name or ("Item " .. item.itemID)) .. ": " .. (err or "failed"))
-                    end
+                    blockReason = err or "failed"
+                    if err == STALE_SLOT_REASON then foundStaleSlot = true end
+                end
+            end
+            if blockReason then
+                blocked = blocked + 1
+                if #blockedDetails < 3 then
+                    table.insert(blockedDetails, ItemLabel(item) .. ": " .. blockReason)
                 end
             end
         end
     end
     UI.transferSelected = {}
     RemoveMovedItemsFromScan(movedKeys)
+    if moved > 0 then
+        HoldReservedSlotsUntilSettled()
+    end
     if moved > 0 or blocked > 0 then
         local action = dest == "Vendor" and "sold" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
@@ -648,7 +705,10 @@ function Core.ExecuteTransferSelected()
     if #blockedDetails > 0 then
         Print("Blocked: " .. table.concat(blockedDetails, "; "))
     end
-    if moved > 0 then
+    if foundStaleSlot then
+        Print("Some items had moved since the last scan. The list has been refreshed; review it and try again.")
+        Core.ScanInventory("all", true)
+    elseif moved > 0 then
         Core.ScheduleRescanAfterMove()
     end
 end

@@ -2287,7 +2287,9 @@ local function ShowAndRefresh(tab)
     Core.CreateUI()
     UI.activeTab = tab
     UI.frame:Show()
-    Core.RefreshUI()
+    -- Rescan on open: saved scans can be from an earlier session, and bags
+    -- are not tracked while the console is hidden. The scan refreshes the UI.
+    Core.ScanInventory("all", true)
 end
 
 function Core.ShowSummaryUI()  ShowAndRefresh("Summary")  end
