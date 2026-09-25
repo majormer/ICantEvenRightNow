@@ -175,19 +175,21 @@ end
 P.CanBeAuctioned = CanBeAuctioned
 
 -- Net auction proceeds for the whole stack (after the 5% cut), or nil.
--- An approximate gear price (Auctionator only knows the base item, mixing
--- every item level) is ignored unless allowApproximate is set.
-local function AuctionNet(item, allowApproximate)
+-- Approximate gear prices (Auctionator only knows the base item, mixing every
+-- item level) and stale prices (in game: 71-day-old prices kept because a
+-- search found no current listings) are ignored unless allowUncertain is
+-- set. Items with stale prices are counted by the price-check card instead.
+local function AuctionNet(item, allowUncertain)
     if not CanBeAuctioned(item) then return nil end
     local price = GetAuctionPrice(item)
     if not price then return nil end
-    if price.exact == false and not allowApproximate then return nil end
+    if (price.exact == false or not price.fresh) and not allowUncertain then return nil end
     return math.floor(price.price * (item.count or 1) * (1 - AUCTION_CUT)), price
 end
 
 -- Returns "auction" | "vendor" | nil, reason text.
-function P.AuctionAdvice(item, allowApproximate)
-    local net, price = AuctionNet(item, allowApproximate)
+function P.AuctionAdvice(item, allowUncertain)
+    local net, price = AuctionNet(item, allowUncertain)
     if not net then return nil end
     local vendor = (item.sellPrice or 0) * (item.count or 1)
     local gain = net - vendor
