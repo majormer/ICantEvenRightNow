@@ -476,6 +476,21 @@ function P.RegisterValueTasks()
         predicate = function(item) return P.IsAuctionCandidate(item) end,
         valueMode = "auction",
         isAvailable = function() return P.HasPriceSource() end,
+        -- Counts candidates everywhere this character can post from: bags
+        -- are ready to post; bank items need withdrawing first (the review list).
+        count = function()
+            local inBags, inBank, value = 0, 0, 0
+            for _, item in ipairs(P.AuctionCandidateItems()) do
+                if item.scope == P.BAG_SCOPE then inBags = inBags + 1 else inBank = inBank + 1 end
+                value = value + (P.GetItemValue(item) or 0)
+            end
+            local total = inBags + inBank
+            if total == 0 then return 0, nil, 0, "Nothing worth auctioning right now" end
+            local parts = {}
+            if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
+            if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
+            return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction)"
+        end,
         secondary = {
             label = function()
                 return ns.DB.context.auctionHouseOpen and "Check in Auctionator" or "Save to Auctionator"

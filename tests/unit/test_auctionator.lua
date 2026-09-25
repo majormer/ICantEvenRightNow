@@ -166,7 +166,7 @@ T.test("Auction Candidates card shows the auction value, not the vendor value", 
     g:P().SetCharacterRole("Main-R", "main")
     local card
     for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
-    T.contains(g:P().CardSummary(card), "1 ready (~171g 0s at auction)")
+    T.eq(g:P().CardSummary(card), "1 in the bank (~171g 0s at auction)")
 end)
 
 T.test("items whose data hasn't loaded still get a readable name", function()
@@ -201,4 +201,17 @@ T.test("setting: include current-expansion items in Auction Candidates (off by d
     local ids = candidates()
     T.ok(ids[8501], "current ore included when enabled")
     T.no(ids[8502], "cloth your tailor uses is still kept")
+end)
+T.test("Auction Candidates counts candidates in bags and in the bank", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(6, 1, I.OLD_POTION, 5)
+    end, { prices = { [I.VALUABLE_ORE] = 90000, [I.OLD_POTION] = 400000 },
+           ages = { [I.VALUABLE_ORE] = 1, [I.OLD_POTION] = 1 } })
+    g:openBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.eq(card.ready, 2)
+    T.contains(g:P().CardSummary(card), "1 in bags, 1 in the bank")
 end)

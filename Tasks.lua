@@ -155,8 +155,8 @@ local function EvaluateTask(task)
     if task.filterOnly then
         -- no count: the route is chosen when the filters are applied
     elseif task.count then
-        local ready, needs, value = task.count()
-        card.ready, card.needs, card.value = ready or 0, needs, value or 0
+        local ready, needs, value, summary = task.count()
+        card.ready, card.needs, card.value, card.summaryText = ready or 0, needs, value or 0, summary
     else
         for _, plan in ipairs(TaskPlans(task)) do
             local item = plan.item
@@ -228,6 +228,7 @@ end
 -- One-line card summary: "23 ready (4g 12s)" / "12 waiting: Visit a bank".
 function P.CardSummary(card)
     if card.filterOnly then return "Filter preset (no route)" end
+    if card.summaryText then return card.summaryText end
     local money = card.value > 0
         and (" (" .. (card.valueMode == "auction" and "~" or "") .. P.FormatMoney(card.value)
             .. (card.valueMode == "auction" and " at auction" or "") .. ")") or ""
