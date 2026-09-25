@@ -12,7 +12,7 @@ local UI = P.UI
 local BAG_SCOPE  = P.BAG_SCOPE
 local BANK_SCOPE = P.BANK_SCOPE
 
-local CARD_WIDTH, CARD_HEIGHT = 398, 92
+local CARD_WIDTH, CARD_HEIGHT = 398, 100
 local CARD_GAP = 10
 local CARDS_PER_PAGE = 6
 local CARDS_TOP = -112
@@ -115,12 +115,14 @@ local function CreateCard(parent, index)
     card.summary:SetWidth(CARD_WIDTH - 24)
     card.summary:SetWordWrap(false)
 
+    -- One full-width line; the whole description is in the card's tooltip.
     card.description = kit.CreateLabel(card, "", "GameFontDisableSmall")
     card.description:SetPoint("TOPLEFT", card.summary, "BOTTOMLEFT", 0, -6)
-    card.description:SetWidth(CARD_WIDTH - 120)
+    card.description:SetWidth(CARD_WIDTH - 24)
+    card.description:SetWordWrap(false)
 
     card.open = kit.CreateButton(card, "Review", 84, 22)
-    card.open:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 10)
+    card.open:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 8)
 
     -- Optional second action (e.g. "Check in Auctionator").
     card.secondary = kit.CreateButton(card, "", 150, 22)
@@ -266,11 +268,16 @@ function P.RefreshHome()
                     Core.RefreshUI()
                 end)
                 widget.secondary:Show()
-                widget.description:SetWidth(CARD_WIDTH - 280)
             else
                 widget.secondary:Hide()
-                widget.description:SetWidth(CARD_WIDTH - 120)
             end
+            local fullDescription = card.description
+            widget:SetScript("OnEnter", function(self)
+                if fullDescription and fullDescription ~= "" then
+                    kit.ShowTooltip(self, { name, P.CardSummary(card), fullDescription })
+                end
+            end)
+            widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
             if card.kind == "saved" then
                 widget.remove:Show()
                 widget.remove:SetScript("OnClick", function()

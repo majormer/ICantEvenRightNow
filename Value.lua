@@ -469,7 +469,7 @@ function P.RegisterValueTasks()
     if not P.RegisterTask then return end
     P.RegisterTask({
         name = "Auction Candidates",
-        description = "Items worth noticeably more at auction than at a vendor, into your bags for posting.",
+        description = "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags.",
         preset = { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
