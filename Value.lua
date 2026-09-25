@@ -149,16 +149,19 @@ end
 P.CanBeAuctioned = CanBeAuctioned
 
 -- Net auction proceeds for the whole stack (after the 5% cut), or nil.
-local function AuctionNet(item)
+-- An approximate gear price (Auctionator only knows the base item, mixing
+-- every item level) is ignored unless allowApproximate is set.
+local function AuctionNet(item, allowApproximate)
     if not CanBeAuctioned(item) then return nil end
     local price = GetAuctionPrice(item)
     if not price then return nil end
+    if price.exact == false and not allowApproximate then return nil end
     return math.floor(price.price * (item.count or 1) * (1 - AUCTION_CUT)), price
 end
 
 -- Returns "auction" | "vendor" | nil, reason text.
-function P.AuctionAdvice(item)
-    local net, price = AuctionNet(item)
+function P.AuctionAdvice(item, allowApproximate)
+    local net, price = AuctionNet(item, allowApproximate)
     if not net then return nil end
     local vendor = (item.sellPrice or 0) * (item.count or 1)
     local gain = net - vendor
@@ -175,7 +178,7 @@ end
 -- meaningful auction price. Uses stale prices too: better to warn than lose value.
 function P.IsValueFlagged(item, dest)
     if dest ~= "Vendor" then return false end
-    return (P.AuctionAdvice(item)) == "auction"
+    return (P.AuctionAdvice(item, true)) == "auction"
 end
 
 -- Best value of an item for reports: auction (net) when it beats vendor.

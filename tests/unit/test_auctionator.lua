@@ -89,6 +89,10 @@ T.test("gear priced from the base item is labelled approximate", function()
     T.contains(g:P().FormatPriceSource(price), "approximate")
     -- Vendor protection still applies: better to warn than lose value.
     T.ok(g:P().IsValueFlagged(scanned(g, I.OLD_SWORD), "Vendor"))
+    -- ...but it mixes every item level, so it is not a value or a candidate.
+    local sword = scanned(g, I.OLD_SWORD)
+    T.eq((g:P().GetItemValue(sword)), (sword.sellPrice or 0) * (sword.count or 1))
+    T.ok(not g:P().IsAuctionCandidate(sword))
 end)
 
 T.test("exact prices and non-gear are not labelled approximate", function()
