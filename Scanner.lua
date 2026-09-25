@@ -214,6 +214,8 @@ itemDataFrame:SetScript("OnEvent", function()
         if not scope then return end
         if scope == "all" and not ns.DB.context.bankOpen then scope = BAG_SCOPE end
         Core.ScanInventory(scope, true, true)
+        -- Values depend on loaded item data (auction prices for gear).
+        if P.RefreshContextNotice then pcall(P.RefreshContextNotice) end
     end)
 end)
 

@@ -338,3 +338,16 @@ T.test("the notice's value updates when auction prices change", function()
     g.world:advance(3)
     T.ok(notice.text:GetText() ~= before, "value text refreshed")
 end)
+T.test("gear is not priced until its item data is loaded", function()
+    local g = game(function(w)
+        w:defineItem(8902, { name = "Slow Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8902, 1)
+        w.equipped[16] = 305
+    end, { prices = { [8902] = 5000000 }, ages = { [8902] = 1 } })
+    local blade = scanned(g, 8902)
+    g.world.items[8902].cached = false
+    T.eq(g:P().GetAuctionPrice(blade), nil, "no price while data is loading")
+    g.world:advance(1)
+    T.ok(g:P().GetAuctionPrice(blade), "priced once loaded")
+end)

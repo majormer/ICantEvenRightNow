@@ -56,9 +56,26 @@ end
 -- Sources
 -- ---------------------------------------------------------------------------
 
+-- Auctionator prices gear by item level only once the item's data is loaded;
+-- before that it silently uses the base item's price (every item level mixed)
+-- and still calls it exact. Seen in game right after /reload: ~14,002g vs
+-- ~3,838g a minute later. So gear waits until its data is loaded.
+local function GearDataReady(item)
+    if not (item.classID == 2 or item.classID == 4) then return true end
+    local cached
+    if item.link and Item and Item.CreateFromItemLink then
+        local ok, obj = pcall(Item.CreateFromItemLink, Item, item.link)
+        if ok and obj and obj.IsItemDataCached then cached = obj:IsItemDataCached() end
+    end
+    if cached == nil and C_Item.IsItemDataCachedByID then cached = C_Item.IsItemDataCachedByID(item.itemID) end
+    if cached == false and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
+    return cached ~= false
+end
+
 local function AuctionatorPrice(item)
     local api = Auctionator and Auctionator.API and Auctionator.API.v1
     if not api then return nil end
+    if not GearDataReady(item) then return nil end
     local price, age
     if item.link and api.GetAuctionPriceByItemLink then
         local ok, value = pcall(api.GetAuctionPriceByItemLink, CALLER_ID, item.link)
