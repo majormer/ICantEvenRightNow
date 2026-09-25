@@ -96,6 +96,40 @@ Items without a reason to be there: soulbound items (not allowed), items only th
 
 The current evaluator already leans this way (shared crafting materials, BoE, and Warbound items go to Warband storage). The roadmap below makes the "who benefits" question answerable.
 
+### W0. Character roles (defines "who benefits")
+
+Status: Planned. Priority: P1. Built together with W1; W3 to W6 depend on it.
+
+Problem: accounts often have dozens of alts, most of them never played. Counting every alt as a possible beneficiary would make almost any gear look like an upgrade for some low-level alt, and would offer leveling gear to characters that only exist for professions or gold farming.
+
+Each character gets exactly one role, set account-wide from any character:
+
+| Role | Receives gear | Receives crafting materials | Typical use |
+|---|---|---|---|
+| Main / Active | Yes | For its professions | Characters actually played |
+| Leveling | Yes, level-appropriate only | For its professions | Alts being leveled |
+| Crafter | Never | For its professions | Tradeskill-only alts |
+| Utility | Never | Never | Garrison gold farmers, bank or AH mules |
+| Unassigned (default) | Never | Never | Every character not yet sorted |
+
+Decisions (2026-09-25):
+
+- Roles are presented as a single dropdown, not raw toggles. Internally each role maps to two capabilities (`receivesGear`, `receivesMaterials`) so a Custom role can be added later without changing consumers.
+- Unassigned characters are ignored in all "who benefits" logic. Newly seen characters start Unassigned, so an unsorted roster never floods decisions.
+
+Behavior:
+
+- **Gear**: upgrade checks consider only characters that receive gear. When an item is an upgrade for none of them, the row says so and suggests selling (auction house for BoE, vendor otherwise).
+- **Materials**: reagents are worth sharing only if a character that receives materials has the matching profession; otherwise the row says no crafter uses it.
+- **On a Utility character**: its own "upgrade" results are empty; the natural tasks are sending items to Warband storage or selling them.
+- **Honest basis**: every roster-based hint states what it is based on, e.g. "Not an upgrade for your 4 active characters (19 unassigned)".
+- **Safety unchanged**: roles change row text, hints, and quick-task pre-filters only. Nothing moves or sells without selection and confirmation.
+
+Constraints:
+
+- A character is known only after it has logged in once with the addon enabled; the game does not expose unseen characters to addons. Class, level, and professions are recorded automatically at login; the role can then be set from any character.
+- UI: a Characters list (Settings tab or its own tab) showing name, realm, class, level, professions, last seen, and the role dropdown, with an option to hide Unassigned.
+
 ### W1. Per-character and account snapshots (foundation)
 
 Status: Planned. Priority: P1.
@@ -105,7 +139,7 @@ Problem: scans live in account-wide SavedVariables without a character key, so a
 Plan:
 
 - Store bags and character bank per character (`Name-Realm`), and the Warband bank once per account, each with a scan time.
-- Record lightweight character facts for routing: class, level, professions.
+- Record lightweight character facts for routing: class, armor type, level, professions, and the W0 role.
 - Label all non-live data with its age ("Warband bank, scanned 2 days ago"). Snapshots are display-only; actions keep verifying the live slot.
 - Migrate the existing single scan to the current character on first load.
 
@@ -127,9 +161,9 @@ Status: Planned. Priority: P1.
 
 ### W4. Alt hand-off queue
 
-Status: Planned. Priority: P2. Depends on W1.
+Status: Planned. Priority: P2. Depends on W0 and W1.
 
-- On character A, mark items "for Alt B"; they travel through the normal Warband deposit.
+- On character A, mark items "for Alt B" (the picker lists only characters whose role can receive that kind of item); they travel through the normal Warband deposit.
 - On character B at a bank, a "Waiting for you (N)" quick task appears, pre-filtered to those items. Nothing is withdrawn without confirmation.
 - The queue records intent only; stale entries (item gone, withdrawn elsewhere) clear themselves on the next Warband scan.
 
@@ -142,9 +176,9 @@ Status: Planned. Priority: P2. Depends on W1.
 
 ### W6. "Who benefits" routing hints
 
-Status: Idea. Priority: P3. Depends on W1.
+Status: Idea. Priority: P3. Depends on W0 and W1.
 
-- Use snapshot character facts to explain Warband routing: "Reagent for Tailoring (Alt C)", "Plate upgrade for Alt D", "No other character uses this; keep in character bank".
+- Use W0 roles and snapshot character facts to explain routing: "Reagent for Tailoring (Alt C, Crafter)", "Plate upgrade for Alt D (Leveling)", "No other character uses this; keep in character bank", "No active character can use this; sell it".
 - Hints only: they explain and pre-filter, and never move items on their own.
 
 ## 6. Safety Guardrails to Preserve
