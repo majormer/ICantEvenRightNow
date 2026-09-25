@@ -35,6 +35,8 @@ build/
 !.env.example
 ICantEvenRightNowDB_backup.lua
 test_*.lua
+# ...but the offline test suite is tracked
+!tests/**/test_*.lua
 
 # AI assistant files (local only, never pushed)
 # Agent instructions
