@@ -15,6 +15,9 @@ Thumbs.db
 scripts/*
 !scripts/
 !scripts/Build-Release.ps1
+!scripts/Get-AddonFiles.ps1
+!scripts/Test-Addon.ps1
+!scripts/Link-ToWoW.ps1
 
 # Git artifacts from other repos
 .gitlab-ci.yml

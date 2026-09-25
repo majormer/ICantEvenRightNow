@@ -9,6 +9,15 @@ This runbook describes the repeatable process to publish a new addon release thr
 - Packager: `BigWigsMods/packager@v2`
 - Changelog source: `.pkgmeta` -> `manual-changelog` -> `CHANGELOG.md`
 
+## Local development setup (once per clone)
+
+1. Copy `.env.example` to `.env` and set `LUAC` (Lua compiler, 5.1 preferred) and `WOW_ADDONS_PATH`.
+2. Enable the pre-commit checks: `git config core.hooksPath .githooks`
+3. Skip line-ending-only commits in blame: `git config blame.ignoreRevsFile .git-blame-ignore-revs`
+4. Link the addon into WoW: `.\scripts\Link-ToWoW.ps1` (add `-Replace` if a copied folder is already there). After that, edits and branch switches are live after `/reload`.
+
+Line endings are enforced by `.gitattributes`: the repository stores LF for all text files (PowerShell scripts check out as CRLF).
+
 ## Prerequisites (one-time)
 
 1. CurseForge project exists and `X-Curse-Project-ID` is set in `ICantEvenRightNow.toc`.
@@ -22,10 +31,10 @@ This runbook describes the repeatable process to publish a new addon release thr
 3. `## Version:` in `ICantEvenRightNow.toc` matches the release version (for example `0.3.0`).
 4. `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface value(s), so CurseForge does not classify the upload under outdated game versions only.
 5. `.pkgmeta` packaging rules are updated if new files were added (e.g., new Lua modules, documentation folders).
-6. Lua syntax passes:
+6. Static checks pass (Lua syntax, TOC files and assets present, no conflict markers, LF line endings, CHANGELOG section). Set `LUAC` in `.env` to your Lua compiler first (see `.env.example`):
 
 ```powershell
-luac -p Core.lua Data.lua Debug.lua Shared.lua Evaluator.lua Filter.lua Scanner.lua Transfer.lua UI.lua
+.\scripts\Test-Addon.ps1
 ```
 
 7. In-game smoke check completed (copy + `/reload`).

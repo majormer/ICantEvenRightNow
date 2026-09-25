@@ -1,20 +1,35 @@
 # Build-Release.ps1
-# Creates a release package of the ICantEvenRightNow addon with proper directory structure
+# Creates a local release zip of the addon. The file list comes from the TOC
+# (code files) plus any Interface\AddOns\ICantEvenRightNow\... asset paths the
+# TOC or Lua code reference, so new modules and icons are picked up automatically.
+# Official releases are built by the tag-triggered packager workflow instead.
 
 param(
     [Parameter(Mandatory=$false)]
-    [string]$Version = "0.6.0"
+    [string]$Version
 )
 
-$AddonName = "ICantEvenRightNow"
+$ErrorActionPreference = "Stop"
 $ScriptPath = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path -Parent $ScriptPath
+. (Join-Path $ScriptPath "Get-AddonFiles.ps1")
+$Manifest = Get-AddonManifest -RepoRoot $RepoRoot
+
+$AddonName = $Manifest.AddonName
+if (-not $Version) { $Version = $Manifest.Version }
 $BuildPath = Join-Path $RepoRoot "build"
 $ReleaseRoot = Join-Path $BuildPath "release"
 $ReleasePath = Join-Path $ReleaseRoot $AddonName
 $ZipPath = Join-Path $BuildPath "$AddonName-v$Version.zip"
 
 Write-Host "Building $AddonName v$Version..." -ForegroundColor Cyan
+
+# Validate before packaging
+& (Join-Path $ScriptPath "Test-Addon.ps1")
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Validation failed; not building." -ForegroundColor Red
+    exit 1
+}
 
 # Clean build directory
 if (Test-Path $BuildPath) {
@@ -25,32 +40,18 @@ if (Test-Path $BuildPath) {
 # Create build directories
 New-Item -Path $ReleasePath -ItemType Directory -Force | Out-Null
 
-# Copy addon files to release directory (matching Heirloom structure)
-$FilesToCopy = @(
-    "$AddonName.toc",
-    "$AddonName.png",
-    "ICantEvenRightNow_icon.png",
-    "ICantEvenRightNow_icon.tga",
-    "Core.lua",
-    "Data.lua",
-    "Debug.lua",
-    "Shared.lua",
-    "Evaluator.lua",
-    "Filter.lua",
-    "Scanner.lua",
-    "Transfer.lua",
-    "UI.lua",
-    "LICENSE",
-    "CHANGELOG.md"
-)
+$FilesToCopy = @($Manifest.Toc) + $Manifest.CodeFiles + $Manifest.Assets + $Manifest.Extras
 
 foreach ($File in $FilesToCopy) {
     $SourceFile = Join-Path $RepoRoot $File
     if (Test-Path $SourceFile) {
         Write-Host "Copying $File..." -ForegroundColor Green
-        Copy-Item -Path $SourceFile -Destination $ReleasePath -Recurse -Force
+        $DestFile = Join-Path $ReleasePath $File
+        New-Item -Path (Split-Path -Parent $DestFile) -ItemType Directory -Force | Out-Null
+        Copy-Item -Path $SourceFile -Destination $DestFile -Force
     } else {
-        Write-Host "Warning: $File not found" -ForegroundColor Yellow
+        Write-Host "Missing: $File" -ForegroundColor Red
+        exit 1
     }
 }
 

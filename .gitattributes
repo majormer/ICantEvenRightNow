@@ -1,8 +1,7 @@
 # Store all text with LF in the repository, whatever tool or OS wrote it.
-# Working copies are LF too, except PowerShell scripts (CRLF for Windows tooling).
+# Working copies are LF too. Batch files need CRLF to run correctly.
 * text=auto eol=lf
 
-*.ps1 text eol=crlf
 *.cmd text eol=crlf
 *.bat text eol=crlf
 

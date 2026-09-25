@@ -10,6 +10,11 @@ ignore:
   - .env.example
   - .github
   - .lua-ls
+  - .githooks
+  - .gitattributes
+  - .editorconfig
+  - .git-blame-ignore-revs
+  - .luarc.json
   - scripts
   - build
   - .release

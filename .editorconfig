@@ -13,10 +13,12 @@ indent_size = 4
 [*.md]
 trim_trailing_whitespace = false
 
-[*.{ps1,cmd,bat}]
-end_of_line = crlf
+[*.ps1]
 indent_style = space
 indent_size = 4
+
+[*.{cmd,bat}]
+end_of_line = crlf
 
 [*.{yml,yaml,json}]
 indent_style = space
