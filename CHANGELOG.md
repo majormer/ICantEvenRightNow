@@ -37,7 +37,7 @@ Release note rules:
 - Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
 - Each character now keeps its own bag and bank lists, and the Warband bank list is shared by all characters.
 - Upgrading keeps your item rules, saved presets, and settings. Old Move/Organize/Vendor tab filters become saved tasks named "Imported: ... filters", a removed "Never Move" rule becomes Protect, and anything that could not be carried over is listed (`/icanteven migration`).
-- Selling stops at 12 items per click so every sale stays in the vendor's buyback; the rest stay selected for the next click.
+- Selling stops at 12 items per click (not counting grey junk, which is sold first) so every uncommon or better sale stays in the vendor's buyback; the rest stay selected for the next click.
 
 ### Improved
 

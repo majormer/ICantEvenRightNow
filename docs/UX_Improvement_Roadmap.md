@@ -457,6 +457,16 @@ A Settings checkbox, off by default, that records what the addon does so a probl
 - **Cost:** off by default and cheap when off (one boolean check). When on, never log inside per-frame or per-item hot loops beyond summary lines.
 - **Privacy:** item and character names only; nothing sent anywhere.
 
+## 12b. Proposed: Idle Auction-Character Reminder
+
+Auctions expire after at most 48 hours and come back by mail, sale gold arrives by mail too, and unopened mail is deleted after 30 days. An auction or bank-alt character left alone for a month can lose everything it listed. The addon can't read other characters' mailboxes, but it knows when each character last logged in.
+
+- **Signal:** a character with a new "Auctions" flag (or any character that opened the auction house in the last 60 days, recorded at AUCTION_HOUSE_SHOW), whose last login is more than 20 days ago.
+- **Where:** a Home notice on any character ("Merchantalt hasn't logged in for 24 days. Auction returns and gold in its mail are deleted after 30 days.") and a warning on its Characters row.
+- **Escalation:** the notice priority rises after 25 days; it disappears when that character logs in.
+- **Setting:** on by default, with the day threshold adjustable (off for players without auction alts).
+- **Limits:** the addon can't see the character's mailbox or know when each mail arrived, so the reminder is based on the last login, not on the actual mail.
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:

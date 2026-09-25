@@ -616,6 +616,22 @@ end
 local VENDOR_BATCH_SIZE = 12
 P.VENDOR_BATCH_SIZE = VENDOR_BATCH_SIZE
 
+-- Grey (junk) items don't need buyback protection, so they don't count toward
+-- the 12 and are sold first; the buyback then still holds this click's
+-- better items (the player's rule: the cap matters for greens and blues).
+local function IsJunk(item) return item.quality == 0 end
+P.IsVendorJunk = IsJunk
+
+-- Selected plans in sale order: junk first, then everything else.
+local function VendorOrder(plans)
+    local junk, rest = {}, {}
+    for _, plan in ipairs(plans) do
+        table.insert(IsJunk(plan.item) and junk or rest, plan)
+    end
+    for _, plan in ipairs(rest) do table.insert(junk, plan) end
+    return junk
+end
+
 function Core.ExecuteTransferSelected()
     Core.UpdateContext()
     if ns.DB.context.inCombat then
@@ -630,8 +646,12 @@ function Core.ExecuteTransferSelected()
     local foundStaleSlot = false
     local processed = {}
     local remaining = 0
-    for _, plan in ipairs(UI.transferVisible or {}) do
-        if UI.transferSelected[plan.key] and dest == "Vendor" and moved >= VENDOR_BATCH_SIZE then
+    local protectedSold = 0
+    local plans = UI.transferVisible or {}
+    if dest == "Vendor" then plans = VendorOrder(plans) end
+    for _, plan in ipairs(plans) do
+        local capped = dest == "Vendor" and not IsJunk(plan.item) and protectedSold >= VENDOR_BATCH_SIZE
+        if UI.transferSelected[plan.key] and capped then
             remaining = remaining + 1
         elseif UI.transferSelected[plan.key] then
             processed[plan.key] = true
@@ -648,6 +668,7 @@ function Core.ExecuteTransferSelected()
                     if P.OnItemMoved then P.OnItemMoved(item, dest) end
                     movedKeys[item.key] = true
                     moved = moved + 1
+                    if not IsJunk(item) then protectedSold = protectedSold + 1 end
                 else
                     blockReason = err or "failed"
                     if err == STALE_SLOT_REASON then foundStaleSlot = true end

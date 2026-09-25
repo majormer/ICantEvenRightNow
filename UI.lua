@@ -2016,10 +2016,12 @@ function Core.RefreshTransferUncached()
     panel.emptyAction:SetShown(#visible == 0 and emptyActionMode ~= nil)
 
     local selectedCount = 0
+    local selectedNonJunk = 0
     local selectedVendorValue = 0
     for _, plan in ipairs(visible) do
         if UI.transferSelected[plan.key] then
             selectedCount = selectedCount + 1
+            if plan.item.quality ~= 0 then selectedNonJunk = selectedNonJunk + 1 end
             selectedVendorValue = selectedVendorValue
                 + ((plan.item.sellPrice or 0) * (plan.item.count or 1))
         end
@@ -2029,8 +2031,9 @@ function Core.RefreshTransferUncached()
     local batch = P.VENDOR_BATCH_SIZE or 12
     if selectedCount == 0 then
         actionLabel = "Select items first"
-    elseif dest == "Vendor" and selectedCount > batch then
-        actionLabel = "Sell " .. batch .. " of " .. selectedCount
+    elseif dest == "Vendor" and selectedNonJunk > batch then
+        -- Junk sells in full; better items stop at one buyback's worth.
+        actionLabel = "Sell " .. (selectedCount - selectedNonJunk + batch) .. " of " .. selectedCount
     elseif dest == "Vendor" then
         actionLabel = "Sell " .. selectedCount .. " (" .. FormatMoney(selectedVendorValue) .. ")"
     elseif dest == "Bags" then
@@ -2130,7 +2133,7 @@ function Core.RefreshTransferUncached()
             row.action:SetEnabled(plan.movable)
             row.action:SetScript("OnClick", function()
                 -- Acts on every stack in the row; vendor sales stop at one buyback batch.
-                local limit = dest == "Vendor" and (P.VENDOR_BATCH_SIZE or 12) or #members
+                local limit = (dest == "Vendor" and not P.IsVendorJunk(item)) and (P.VENDOR_BATCH_SIZE or 12) or #members
                 for index = 1, math.min(limit, #members) do
                     Core.ExecuteTransferOne(members[index])
                 end
