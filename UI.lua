@@ -1258,7 +1258,7 @@ local function BuildSettingsTab(parent)
         UI.transferTip = nil
         Print("Tips will show again.")
     end)
-    parent.noticeLabel = CreateLabel(parent, "At a bank or vendor:", "GameFontHighlightSmall")
+    parent.noticeLabel = CreateLabel(parent, "At a bank, vendor, or AH:", "GameFontHighlightSmall")
     parent.noticeLabel:SetPoint("TOPLEFT", tips, "BOTTOMLEFT", 4, -12)
     parent.noticeMode = CreateDropdown(parent, 170, {
         { text = "Show a small notice", value = "notice" },

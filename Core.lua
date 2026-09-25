@@ -359,8 +359,12 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     -- Auction house context and paced price lookups (Value.lua).
     if event == "AUCTION_HOUSE_SHOW" then
         UI.auctionContextOpen = true
+        Core.UpdateContext()
+        pcall(Core.ScanInventory, BAG_SCOPE, true)
+        pcall(P.OnContextOpened)
     elseif event == "AUCTION_HOUSE_CLOSED" then
         UI.auctionContextOpen = false
+        P.HideContextNotice()
     end
     if event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED"
         or event == "AUCTION_HOUSE_CLOSED" then

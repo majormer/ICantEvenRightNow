@@ -218,7 +218,19 @@ end
 
 -- The card to mention in the bank/vendor notice: the biggest ready card.
 function P.GetTopReadyCard()
-    for _, card in ipairs(P.GetTaskCards()) do
+    local cards = P.GetTaskCards()
+    -- At the auction house, the auction cards are the relevant ones.
+    if ns.DB.context.auctionHouseOpen then
+        for _, card in ipairs(cards) do
+            if card.ready > 0 and card.valueMode == "auction" then return card end
+        end
+        for _, card in ipairs(cards) do
+            local isPriceCheck = card.name == "Check Prices in Auctionator" or card.name == "Price My Items"
+            if isPriceCheck and card.ready > 0 then return card end
+        end
+        return nil
+    end
+    for _, card in ipairs(cards) do
         if card.ready > 0 then return card end
         break
     end
