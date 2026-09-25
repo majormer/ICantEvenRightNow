@@ -98,7 +98,7 @@ The current evaluator already leans this way (shared crafting materials, BoE, an
 
 ### W0. Character roles (defines "who benefits")
 
-Status: Planned. Priority: P1. Built together with W1; W3 to W6 depend on it.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. Built together with W1; W3 to W6 depend on it.
 
 Problem: accounts often have dozens of alts, most of them never played. Counting every alt as a possible beneficiary would make almost any gear look like an upgrade for some low-level alt, and would offer leveling gear to characters that only exist for professions or gold farming.
 
@@ -133,7 +133,7 @@ Constraints:
 
 ### W1. Per-character and account snapshots (foundation)
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 Problem: scans live in account-wide SavedVariables without a character key, so an alt can see another character's character-bank data until it opens a bank. Nothing is known about other characters.
 
@@ -146,14 +146,14 @@ Plan:
 
 ### W2. Warband tabs as first-class Source/Destination
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - Read Warband tab data with `C_Bank.FetchPurchasedBankTabData(Enum.BankType.Account)` (available only at a banker) and cache it with the account snapshot.
 - Offer each tab by its player-given name and icon, like character-bank tabs, alongside "Warband Bank (All Tabs)".
 
 ### W3. Tab-settings routing
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - Warband tabs carry the player's own "assign to" settings (`depositFlags`: Equipment, Consumables, Profession Goods, Reagents, Junk, Current/Legacy expansion).
 - A "Deposit to Warband" quick task routes each item to the matching tab, showing why per row (e.g. "→ Mats (tab accepts Reagents)").
@@ -162,7 +162,7 @@ Status: Planned. Priority: P1.
 
 ### W4. Alt hand-off queue
 
-Status: Planned. Priority: P2. Depends on W0 and W1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P2. Depends on W0 and W1.
 
 - On character A, mark items "for Alt B" (the picker lists only characters whose role can receive that kind of item); they travel through the normal Warband deposit.
 - On character B at a bank, a "Waiting for you (N)" quick task appears, pre-filtered to those items. Nothing is withdrawn without confirmation.
@@ -170,14 +170,14 @@ Status: Planned. Priority: P2. Depends on W0 and W1.
 
 ### W5. Cross-character "Where is it?"
 
-Status: Planned. Priority: P2. Depends on W1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P2. Depends on W1.
 
 - Search all snapshots: "Also on: Alt B (bags), Warband: Mats (2 days ago)".
 - Tooltip line on items that other characters also hold.
 
 ### W6. "Who benefits" routing hints
 
-Status: Idea. Priority: P3. Depends on W0 and W1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P3. Depends on W0 and W1.
 
 - Use W0 roles and snapshot character facts to explain routing: "Reagent for Tailoring (Alt C, Crafter)", "Plate upgrade for Alt D (Leveling)", "No other character uses this; keep in character bank", "No active character can use this; sell it".
 - Hints only: they explain and pre-filter, and never move items on their own.
@@ -188,7 +188,7 @@ Assessment basis (2026-09-25): code review of the 0.6.0 Transfer tab. The main j
 
 ### H1. Home screen of task cards (replaces Summary and the Task dropdown)
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - The console opens to a Home screen of task cards, one per quick task and saved workflow, each showing a live count and value, e.g. "Deposit Old Items: 23 ready", "Sell Old Consumables: 8 (12g), at a vendor", "Waiting for you: 3".
 - Cards are ordered by what the current context allows; unavailable cards say what they need ("Visit a bank") instead of failing after selection.
@@ -198,14 +198,14 @@ Status: Planned. Priority: P1.
 
 ### H2. Presence at the bank and vendor
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - When a bank or vendor opens, show a small non-blocking notice with the top card's count ("23 ready to deposit") that opens Home. A setting chooses Notice (default), Auto-open, or Off.
 - The earlier bank/vendor frame launchers were disabled intentionally; the notice must not attach to or depend on specific bag or bank frames (see Known Pitfalls).
 
 ### H3. Pre-selection for quick tasks
 
-Status: Planned. Priority: P1. Decided 2026-09-25: a setting, off by default.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. Decided 2026-09-25: a setting, off by default.
 
 - When enabled, loading a quick task (from a Home card or the task list) pre-selects its movable items; the action button still reads "Deposit 23" and still requires a click after the list is visible.
 - When disabled (default), tasks load with nothing selected, as today.
@@ -213,22 +213,22 @@ Status: Planned. Priority: P1. Decided 2026-09-25: a setting, off by default.
 
 ### H4. Faster review
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - Group identical items into one row ("Linen Cloth ×3 stacks").
-- Optional grouping by category with counts.
+- Optional grouping by category with counts. (Not built: identical-item grouping and sort modes cover most of the need; revisit after in-game use.)
 - Compact row density option; the list currently shows 6 rows of 42 px.
 
 ### H5. Vendor buyback safety
 
-Status: Planned. Priority: P1 (safety).
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1 (safety).
 
 - The vendor buyback list holds a limited number of items (believed 12; verify in game). Large sell batches make earlier items unrecoverable.
 - Sell in buyback-sized batches or warn before a larger sell ("30 items; only the last 12 can be bought back").
 
 ### H6. One place to save a task
 
-Status: Planned. Priority: P2.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P2.
 
 - "Save as task…" next to the current task name saves the full current state (route, filters, sort).
 - The Customize drawer shrinks to route editing only.
@@ -249,7 +249,7 @@ Goal: zero required setup, at most one question per character, and every answer 
 
 ### O1. Role suggestions
 
-Status: Planned. Priority: P1. Depends on W0/W1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. Depends on W0/W1.
 
 Suggested, never assumed; one click to accept or change:
 
@@ -263,7 +263,7 @@ Suggested, never assumed; one click to accept or change:
 
 ### O2. Roster setup in bulk
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 - The Characters list shows every known character with its suggested role, last seen, level, and professions.
 - "Accept all suggestions" and multi-select role assignment, so dozens of alts are sorted in one sitting from any character.
@@ -283,14 +283,14 @@ Status: Planned. Priority: P1.
 
 ### O4. In-context opt-ins
 
-Status: Planned. Priority: P2.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P2.
 
 - If BetterBags is loaded, a one-time Home card offers to enable the categories (section 8) instead of hiding the option in Settings.
 - Settings stays available for everything, but no feature requires visiting it.
 
 ### O5. First-time tips and "What's new" (instead of a tutorial)
 
-Status: Planned. Priority: P1.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1.
 
 A step-by-step tutorial is not planned: it contradicts "useful on first open, at most one question", it would run at login when the interesting actions (bank, vendor, Warband) are unavailable, and skipped tutorials leave nothing behind. Instead:
 
@@ -307,7 +307,7 @@ A step-by-step tutorial is not planned: it contradicts "useful on first open, at
 
 ## 8. Planned: BetterBags Categories (target 0.6.0)
 
-Status: Planned. Priority: P2. Optional; off until enabled.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P2. Optional; off until enabled.
 
 Verified 2026-09-25 against BetterBags `main` (v0.5.11, Interface 120100): external addons get the Categories module via `LibStub("AceAddon-3.0"):GetAddon("BetterBags")`, register `RegisterCategoryFunction(id, func)` (func returns a category name or nil per item), and refresh with `WipeCategory` then `ReprocessAllItems`. **Categories are assigned per item ID, not per slot**, so only decisions that hold for every copy of an item can be published.
 
@@ -328,7 +328,7 @@ Verified 2026-09-25 against BetterBags `main` (v0.5.11, Interface 120100): exter
 
 ## 9. Planned: Value Awareness and Auction Data (target 0.6.0)
 
-Status: Planned. Priority: P1 for vendor protection, P2 for the rest. APIs verified 2026-09-25 (see local API notes).
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1 for vendor protection, P2 for the rest. APIs verified 2026-09-25 (see local API notes).
 
 ### V1. Price sources, in order
 
@@ -366,13 +366,13 @@ Every price is stored as `{price, source, timestamp}`. Commodity prices are regi
 - **Disenchant value** from Auctionator or TSM ("Destroy"); no Blizzard API. With roles: "Disenchant (Alt C, Enchanter) ~40g vs vendor 3g".
 - **Crafting use**: show both "~80g at auction" and "used by Alt C (Tailoring)".
 - **Account quantity**: "You have 6 of these across the account."
-- **Recipe already known**: no API found; likely tooltip text. Unverified.
+- **Recipe already known**: no API found; likely tooltip text. Unverified. (Not built.)
 
 Safety: prices are advisory. The addon never posts or buys, and no action happens without selection and confirmation.
 
 ## 10. Planned: "Why Is This Here?" (target 0.6.0)
 
-Status: Planned. Priority: P1. Goal: help players part with items by understanding why each item is kept, before suggesting anything. Pushing "sell" on items kept for real reasons (sentiment, active quests) costs trust.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. Goal: help players part with items by understanding why each item is kept, before suggesting anything. Pushing "sell" on items kept for real reasons (sentiment, active quests) costs trust.
 
 ### Y1. Hoarding diagnostic (first step)
 
@@ -394,7 +394,7 @@ Status: Planned. Priority: P1. Goal: help players part with items by understandi
 | Unused profession materials | Roles, professions, reagent expansion | "No crafter on your account uses this" (+ value from section 9) |
 | Old consumable stockpile | Type, expansion, usability | Existing Sell Old Consumables task, now with a reason |
 | Speculation | Price data + time held | "Held 2 years; value unchanged" (needs price history) |
-| Seasonal/event items | Partial (type, description); unreliable | Player-assigned Event reason |
+| Seasonal/event items | Partial (type, description); unreliable | Player-assigned Event reason (built; no automatic detection) |
 | Sentimental keepsake | Weak hints only (legendary, removed content, no vendor price) | Never pushed; Keepsake reason silences it permanently |
 | Unknown purpose | Partial (type, expansion) | Plain explanation of what the item is, or that it is obsolete |
 
@@ -416,7 +416,7 @@ Quest abandonment cost is quest-specific and not computable; the addon reports q
 
 ## 11. Planned: Upgrade Path from Earlier Versions (target 0.6.0)
 
-Status: Planned. Priority: P1. Requirement: users of any previous release (0.1.0 to 0.5.0) upgrade to 0.6.0 without losing settings; anything that cannot be ported is reported, not silently dropped.
+Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. Requirement: users of any previous release (0.1.0 to 0.5.0) upgrade to 0.6.0 without losing settings; anything that cannot be ported is reported, not silently dropped.
 
 ### M1. Versioned, backed-up migration
 

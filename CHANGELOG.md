@@ -13,31 +13,38 @@ Release note rules:
 
 ### Added
 
-- Quick tasks for common transfers: deposit old items, pull bank upgrades, pull auctionable BoEs, sell old consumables, and consolidate Warbound gear.
-- Saved workflows now remember the complete setup: Source, Destination, filters, Actionable only, search, item-level range, and sort order. Existing custom filter-only presets remain supported.
-- Transfer results can be sorted by name, actionability, item level, vendor value, expansion, or binding.
-- A Swap button reverses non-vendor Source and Destination routes.
-- Live inventory changes now trigger a short, debounced refresh, and the item list also rescans when you open the console or a vendor.
+- **Home screen.** The console opens on Home, where every task is a card with a live count and value ("Deposit Old Items: 23 ready (4g 12s)"). Cards that need a bank or vendor say so, and clicking a card opens its review list. Home replaces the Summary tab and the task dropdown.
+- **Character roles.** A new Characters tab lists every character that has logged in with the addon. Give each one a role (Main / Active, Leveling, Crafter, Utility), and the addon uses the roles to decide which characters can use an item. Unassigned characters are ignored. Each character is asked once, with a suggested role (and "Same as" your last configured alt); you can also accept all suggestions at once.
+- **Warband tabs.** Each Warband bank tab is its own source and destination, and "Warband (by tab settings)" sends each item to the tab whose Blizzard "assign to" settings match it. The addon never changes your tab settings.
+- **Alt hand-offs.** Mark an item for another character from the row menu ("Send to an alt..."). The "Send to Alts" task deposits it, and that character sees "Waiting for You" to collect it.
+- **Why is this here?** Rows and tooltips explain why each item is being kept: appearance already collected, collectible not learned, quest status, a crafter who uses it, gear a played character can wear, time held, and more. `/icanteven why` prints a read-only summary (`/icanteven why all` covers every character).
+- Keep reasons on any item from the row menu: Keepsake, Keep for an alt, Keep for an event, or Investment with a 90-day reminder. They stop suggestions without blocking moves you make yourself.
+- New tasks: Deposit to Warband (items your other characters can use), Pull Items That Can Go and Sell Items That Can Go, Auction Candidates, Send to Alts, and Waiting for You.
+- **Auction values.** Prices come from Auctionator or TSM when installed, or from "Price My Items" at an auction house (looks up only items you own). Each price shows its source and age; old prices are marked.
+- Item tooltips anywhere in the game can show how many your account holds and where ("Your account: 25 - Tailor bags 20, ..."). `/icanteven where <name>` searches every character.
+- Optional BetterBags categories: Protected, Never Sell, Sell Candidates, For the Warband, Old Content, and Waiting for You (off until you enable them).
+- Quick tasks for common transfers, and saved tasks that remember the complete setup (route, filters, Actionable only, search, item-level range, sort).
+- Transfer results can be sorted by name, actionability, item level, vendor value, expansion, or binding, and a Swap button reverses non-vendor routes.
+- At a bank or vendor, a small notice names the top ready task (Settings: notice, open the console, or nothing).
+- First-time tips (once per account), a "What's new" card for players upgrading, and a welcome back for characters returning after a week or more. Leveling characters that reach max level are offered a switch to Main.
+- Optional pre-selection when opening a task (off by default); blocked items and items worth keeping are never pre-selected.
 
 ### Changed
 
 - Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
+- Each character now keeps its own bag and bank lists, and the Warband bank list is shared by all characters.
+- Upgrading keeps your item rules, saved presets, and settings. Old Move/Organize/Vendor tab filters become saved tasks named "Imported: ... filters", a removed "Never Move" rule becomes Protect, and anything that could not be carried over is listed (`/icanteven migration`).
+- Selling stops at 12 items per click so every sale stays in the vendor's buyback; the rest stay selected for the next click.
 
 ### Improved
 
-- The Transfer tab now opens in a task-first two-row layout: choose a task, review its route, search, and act without exposing route editing or workflow management.
-- Route editing and saved-workflow management live in a compact Customize drawer; sorting and advanced refinements live in a separate Filters drawer.
-- Active filters appear as concise removable chips, with task-specific empty states and direct recovery actions such as Clear filters or Show blocked items.
-- Results now show a concise source-to-selection funnel with source, matching, movable, and selected counts.
-- Empty states distinguish missing scan data, empty storage, filter exclusions, and rows hidden by Actionable only.
-- The primary action now uses the current context, including Deposit, Withdraw, Move, and Sell labels with selected counts and vendor value.
-- Transfer completion status is shown in the panel instead of relying only on chat output.
-- Quick tasks keep their active name visible until the route or filters are customized, and active filters remain visible as removable chips.
-- Transfer rows lead with the requested action and destination, support whole-row selection, and use clearer selected/blocked highlighting.
-- Workflow naming and selection controls now use explicit labels such as Name, Reset Filters, and Clear Selection.
-- Summary counts distinguish bags, the character bank, the Warband bank, and the total scanned inventory.
-- Summary metrics are grouped by Inventory, Cleanup, and Status; Rules size to their contents; Settings keeps the slash-command reference collapsed until requested.
-- Secondary controls use a quieter neutral treatment, with a single emphasized transfer action and red reserved for destructive Remove actions.
+- Identical stacks share one row, and an optional compact mode shows 9 rows per screen.
+- Items worth noticeably more at auction are flagged when selling to a vendor and are never pre-selected for vendor sales.
+- The Transfer view names the task you opened and shows "(modified)" after you change it; "Save as task" saves the current setup as a Home card.
+- Route editing lives in a compact Customize drawer; sorting and advanced refinements live in a separate Filters drawer, with removable filter chips.
+- Results show a source-to-selection funnel, empty states explain why nothing is listed, and the main button says what it will do (Deposit, Withdraw, Move, Sell with counts and value).
+- Live inventory changes refresh the list shortly after they happen, and it rescans when you open the console or a vendor.
+- The Home screen and Transfer list refresh quickly even with full bags and hundreds of items.
 - The addon download is over 90% smaller (about 3 MB down to about 0.2 MB) after resizing the addon-list icon to 256×256.
 
 ### Fixed
@@ -54,7 +61,7 @@ Release note rules:
 - Zero item-level values are normalized to an empty filter instead of appearing and counting as an active constraint.
 - Transfer classification text no longer masquerades as a destination-specific movement reason.
 - New item rules retain the item name, and legacy rules use their stored source text as a readable fallback when item data is unavailable.
-
+- Logging into a different character no longer shows the previous character's bank contents.
 ## [0.5.0] - 2026-05-11
 
 ### Added

@@ -31,7 +31,7 @@ Line endings are enforced by `.gitattributes`: the repository stores LF for all 
 3. `## Version:` in `ICantEvenRightNow.toc` matches the release version (for example `0.3.0`).
 4. `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface value(s), so CurseForge does not classify the upload under outdated game versions only.
 5. `.pkgmeta` packaging rules are updated if new files were added (e.g., new Lua modules, documentation folders).
-6. Static checks pass (Lua syntax, TOC files and assets present, no conflict markers, LF line endings, CHANGELOG section). Set `LUAC` in `.env` to your Lua compiler first (see `.env.example`):
+6. Static checks and the offline test suite pass (Lua syntax, TOC files and assets present, no conflict markers, LF line endings, CHANGELOG section, and `tests/`). Set `LUAC` in `.env` to your Lua compiler first (see `.env.example`):
 
 ```powershell
 .\scripts\Test-Addon.ps1

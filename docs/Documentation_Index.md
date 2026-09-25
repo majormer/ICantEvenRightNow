@@ -27,7 +27,7 @@ This folder contains implementation and product documentation for I Can't Even R
 
 ## Scope
 
-These docs reflect the current multi-module addon architecture (`Shared`, `Evaluator`, `Filter`, `Scanner`, `Transfer`, `UI`, `Core`) introduced in 0.4.0.
+These docs reflect the 0.6.0 architecture: the modules listed in `Technical_Architecture.md` (Home, roles, Warband routing, reasons, value, onboarding, integrations) and the offline test suite in `tests/`.
 They are intended to support both:
 
 - Engineering work (refactors, bug fixes, and feature additions)

@@ -2,281 +2,110 @@
 
 ## 1. Product Fit Summary
 
-The addon is strongest when users want to:
+The addon is strongest when players want to:
 
-- Classify a large mixed inventory with conservative safety defaults
-- Move filtered subsets across storage tiers in controlled batches
-- Use explicit selection instead of one-click automation
-- Build repeatable behavior with item-level rules over time
-- Use built-in quick tasks and save complete route/filter workflows for fast recall across sessions
+- Clear bags and banks quickly without risking items they care about
+- Understand why items are being kept before letting them go
+- Share items across many characters through the Warband bank, with roles deciding who benefits
+- Repeat common cleanup jobs as one-click tasks, with a review step every time
 
-It is not optimized for:
+It is not built for:
 
-- Fully automated cleanup without any review
-- Instant "do everything" actions
+- Fully automated cleanup without review
+- Posting or buying on the auction house (Auctionator or TSM do that; this addon only reads prices)
 
-## 2. User Personas
+## 2. Personas
 
-### A. Auction House Character Operator
+### A. Alt-heavy player
 
-Goal:
+Dozens of characters, few played. Some farm gold (garrisons), some only craft.
 
-- Pull auctionable BoE items from bank quickly
-- Avoid accidentally pulling WuE or soulbound items
+- Sets roles once: played characters Main / Active, the alt being leveled Leveling, profession alts Crafter, farmers and mules Utility. Unassigned alts are ignored.
+- Uses Deposit to Warband to share only what another character benefits from, and Send to Alts / Waiting for You for specific hand-offs.
+- Relies on "Upgrade for <alt>" and "Used by <alt> (<profession>)" hints; gear nobody played can wear is suggested for selling instead of hoarding.
 
-Primary flow:
+### B. Main character cleanup pass
 
-- Transfer tab, Source: Bank (All Tabs), Destination: Bags, Binding filter: BoE
+- Opens Home at a bank; clicks Deposit Old Items; reviews and deposits.
+- At a vendor, uses Sell Items That Can Go (junk, collected appearances, spent consumables); selling stops at 12 per click.
 
-Common friction:
+### C. Auction house operator
 
-- BoE vs WuE differentiation must be precise to avoid wasted pulls
-- Requires a fresh bank scan if the bank has not been scanned recently
+- Pull Auctionable BoEs and Auction Candidates gather items to post.
+- Prices come from Auctionator or TSM, or Price My Items at the auction house; vendor rows warn when something is worth more at auction.
 
-Quick task:
+### D. Gear upgrade scout
 
-- "Pull Auctionable BoEs" configures Bank (All Tabs) → Bags, Binding=BoE, Actionable only, and name sorting
+- Pull Bank Upgrades lists bank gear that beats what this character wears.
+- Tooltips name upgrades for other characters with gear-receiving roles.
 
-### B. Main Character Cleanup Pass
+### E. Collector and keepsake holder
 
-Goal:
+- "Why is this here?" separates "appearance already collected" from "appearance not collected yet" and unlearned toys, mounts, and pets.
+- Keepsake, Keep for an alt, Keep for an event, and Investment reasons silence suggestions for items that matter.
 
-- Bank old expansion clutter from bags
-- Keep active/current gear and consumables unblocked
+### F. Returning player
 
-Primary flow:
+- A "What's new" card after upgrading, with what was carried over.
+- A welcome back after a week away, with waiting hand-offs and stale bank lists.
 
-- Transfer tab, Source: Bags, Destination: Bank (All Tabs), Expansion filter: Not current
+## 3. End-to-End Flows
 
-Common friction:
+### Flow A: First login on a main (day 1)
 
-- Some expected items require a Protect rule to keep them out of the filtered list
-- Requires a fresh bag scan
+1. `/icanteven` opens Home. One question: "What is <name>? Suggested: Main / Active." One click.
+2. Cards show bag tasks ready and bank tasks waiting ("Visit a bank").
 
-Quick task:
+### Flow B: Bank visit
 
-- "Deposit Old Items" configures Bags → Bank (All Tabs), Expansion=Not current, and Actionable only
+1. At the bank, a notice names the top ready task ("Deposit Old Items: 23 ready"). Open.
+2. The review list shows each item with a reason and destination. Select Movable, Deposit.
+3. Warband tabs and their settings are recorded for routing and for other characters.
 
-### C. Warband Storage Consolidator
+### Flow C: Share with the Warband by tab settings
 
-Goal:
+1. Home card Deposit to Warband: Warbound items, BoE gear, and materials another character's crafting role uses.
+2. Each row says which tab it goes to and why ("Mats (accepts Reagents)", "For Stitcher").
+3. Deposit.
 
-- Move warband-eligible items (WuE, old BoE, old account-transferable) from private bank to Warband Bank
-- Make gear available to alts without bag juggling
+### Flow D: Hand an item to a specific alt
 
-Primary flow:
+1. Row menu: Send to an alt... Pick from characters whose role can use it.
+2. At a bank: Send to Alts, Deposit.
+3. On the alt: Waiting for You, Withdraw.
 
-- Transfer tab, Source: Bank (Private), Destination: Warband Bank, Binding filter: WuE or leave at All
+### Flow E: Let go of what isn't needed
 
-Common friction:
+1. `/icanteven why` or the row reasons show what can go.
+2. At a bank: Pull Items That Can Go. At a vendor: Sell Items That Can Go (12 per click).
+3. Items worth more at auction are left out and show up under Auction Candidates instead.
 
-- Requires bank to be open
-- Warband Bank must have free slots; private bank items that are soulbound will be blocked automatically
+### Flow F: Alt first login and day 30
 
-### D. Gear Upgrade Scout — Identify upgrades in bags
+1. First login: rules and saved tasks from other characters already apply; one role question with a suggestion or "Same as <last alt>"; Waiting for You if something was sent.
+2. After 30 days away: welcome back with waiting items and bank age; a Leveling alt that reached max level is offered Main / Active.
 
-Goal:
+### Flow G: Custom transfer
 
-- Find gear in bags that beats currently equipped items before deciding to bank, equip, or vendor it
-
-Primary flow:
-
-- Transfer tab, Source: Bags, Destination: Bank (or leave unset for review only), Upgrade filter: Upgrade
-- Optionally narrow by Slot
-
-Saved workflow opportunity:
-
-- Save a bags-specific upgrade review workflow when the built-in bank-withdrawal task is not the desired route
-
-### E. Gear Upgrade Scout — Pull potential upgrades from bank
-
-Goal:
-
-- Retrieve bank items that beat current equipped gear for testing
-
-Primary flow:
-
-- Transfer tab, Source: Bank (All Tabs), Destination: Bags, Upgrade filter: Upgrade
-- Optionally narrow by Slot and ilvl Min
-
-Common friction:
-
-- Requires a bank scan first
-- Only equippable gear with a higher item level than the current equipped slot will appear
-
-Quick task:
-
-- "Pull Bank Upgrades" configures Bank (All Tabs) → Bags, Upgrade=Upgrade, Actionable only, and item-level sorting
-
-### F. Bank Organizer
-
-Goal:
-
-- Recall specific bank items to bags for use, AH, or vendor prep
-- Does not involve cross-tier bank sorting (private ↔ Warband); see Warband Consolidator flow
-
-Primary flow:
-
-- Transfer tab, Source: Bank (All Tabs or a specific bank tab), Destination: Bags
-- Use search, type, or expansion filters to narrow
-
-Common friction:
-
-- Storage model can vary by patch/client API
-- Bank tab availability differs across characters
-- `/icanteven organize` is a preset that opens this same bank→bags recall view
-
-### G. Vendor Cleanup User
-
-Goal:
-
-- Sell old low-value items at a vendor without accidentally selling current or valuable gear
-
-Primary flow:
-
-- At vendor: Transfer tab, Source: Bags, Destination: Vendor
-- Apply Expansion: Not current and/or Type: Consumable filters to narrow safely
-- Enable Actionable only to see only items that can be sold right now
-
-Key behavior to understand:
-
-- The Transfer pipeline with Destination=Vendor allows any item with a sell price through, including gear. Users are responsible for applying appropriate filters.
-- The Never Sell rule is the durable long-term guard against repeat mistakes
-- Vendor context must be open; the addon detects the merchant window automatically
-
-## 3. End-to-End Flow Maps
-
-> **Scanning prerequisite**: The Transfer list works from cached scan data. Scan the relevant scope before using the Transfer tab. The Transfer tab has its own "Scan Bags" and "Scan Bank" buttons next to the Source/Destination dropdowns. You can also use `/icanteven scan [bags|bank|all]` or the buttons on the Summary tab.
-
-### Flow A: AH Pull (BoE recall from bank)
-
-Steps:
-
-1. Open bank
-2. Open Transfer tab → click "Scan Bank" (or scan bank from Summary tab first)
-3. Source: Bank (All Tabs), Destination: Bags
-4. Load the "Pull Auctionable BoEs" quick task
-5. Review the actionable results
-6. Select movable rows
-7. Transfer selected to bags
-8. Go to AH and list
-
-Friction points:
-
-- Bank must be open; loading the quick task outside bank context applies its filters but leaves the current route unchanged and explains why
-
-### Flow B: Legacy Bag Cleanup
-
-Steps:
-
-1. Open bank
-2. Open Transfer tab → click "Scan Bags" (bag scan is the critical one; bank scan is optional for Summary accuracy)
-3. Source: Bags, Destination: Bank (All Tabs)
-4. Load the "Deposit Old Items" quick task or a saved workflow
-5. Review the actionable results
-6. Review the list; add Protect rules for anything that should stay in bags
-7. Select rows and Transfer selected
-8. Bank must be open or items will appear blocked ("Bank is not open")
-
-Why this flow works well:
-
-- Expansion filter maps directly to "things I probably don't need in bags anymore"
-- Selection stays explicit; nothing moves without confirmation
-
-### Flow C: Upgrade Scouting — Review bags
-
-Steps:
-
-1. Scan bags (Transfer tab "Scan Bags" button or Summary tab)
-2. Transfer tab → Source: Bags, Destination: Bank (if banking non-upgrades)
-3. Load a saved bags-upgrade workflow or set Upgrade filter to Upgrade
-4. Optionally narrow by Slot for a specific slot comparison
-5. Inspect the filtered list — these items beat what you have equipped
-6. Transfer non-upgrades to bank, or simply equip upgrade candidates directly from bags
-
-Why this flow works well:
-
-- The upgrade filter uses the actual equipped item level as a baseline; two-slot types (rings, trinkets) use the weaker of the two equipped items
-- Slot filter lets you focus on a single comparison without noise from other slots
-
-### Flow D: Upgrade Scouting — Pull from bank
-
-Steps:
-
-1. Open bank → scan bank (Transfer tab "Scan Bank" or Summary tab)
-2. Transfer tab → Source: Bank (All Tabs), Destination: Bags
-3. Load the "Pull Bank Upgrades" quick task; optionally narrow by Slot or ilvl Min
-4. Select candidates and transfer to bags
-5. Try items on in bags; bank or vendor what doesn't fit the character
-
-Why this flow works well:
-
-- Brings only items that beat current gear into bags, keeping clutter minimal
-- The ilvl Min filter lets you set a floor (e.g. "only pull gear 600+")
-
-### Flow E: Warband Storage Consolidation
-
-Steps:
-
-1. Open bank → scan bank
-2. Load the "Consolidate Warbound Gear" quick task
-3. Optionally refine Binding or other filters
-4. Review the actionable results
-5. Select rows and transfer
-
-Why this flow works well:
-
-- Makes old BoE and WuE gear accessible to alts through Warband Bank without manual mailing
-- Block reasons explain exactly why specific items cannot move (soulbound, protect rule, no Warband slots)
-
-### Flow F: Vendor Liquidation
-
-Steps:
-
-1. At a vendor, open the Transfer tab
-2. Load the "Sell Old Consumables" quick task
-3. Optionally refine the filters
-4. Review the remaining list carefully — any item with a sell price can appear
-5. Select rows and Transfer (sell) selected
-6. Add Never Sell rules to any item that showed up unexpectedly
-
-Why this flow works well:
-
-- Explicit selection lowers accidental selling risk
-- Never Sell rule provides a durable safety net for future scans
-- Context is automatically detected when the vendor window is open
+1. Home: Custom transfer (or `/icanteven transfer`).
+2. Customize: choose From and To (including individual bank and Warband tabs); Filters for expansion, type, binding, slot, armor, upgrade, item level, search, and sort.
+3. Save as task to add it to Home.
 
 ## 4. Use Case Matrix
 
-| Use Case | Source | Destination | Core Filters | Built-in Quick Task |
-| --- | --- | --- | --- | --- |
-| AH BoE pull | Bank (All Tabs) | Bags | Binding=BoE | Pull Auctionable BoEs |
-| Legacy bag cleanup | Bags | Bank (All Tabs) | Expansion=Not current | Deposit Old Items |
-| Upgrade review (bags) | Bags | Bank or none | Upgrade=Upgrade | — (save a workflow) |
-| Upgrade pull (bank) | Bank (All Tabs) | Bags | Upgrade=Upgrade | Pull Bank Upgrades |
-| Warband consolidation | Bank (Private) | Warband Bank | Binding=Warband / WuE | Consolidate Warbound Gear |
-| Bank recall / organize | Bank (All Tabs) | Bags | Search, Type | — |
-| Vendor liquidation | Bags | Vendor | Expansion=Not current, Type=Consumable | Sell Old Consumables |
-| Exception control | — | — | Rules tab (item-ID based) | — |
+| Use case | Starting point | Route | Key safety |
+|---|---|---|---|
+| Bank old content | Deposit Old Items | Bags → Bank (All Tabs) | Current-content and ruled items blocked |
+| Share with alts | Deposit to Warband | Bags → Warband (by tab settings) | Soulbound blocked; only items someone else benefits from |
+| Specific hand-off | Send to Alts / Waiting for You | Bags → Warband → alt's bags | Recipient filtered by role and usability |
+| Sell | Sell Items That Can Go / Sell Old Consumables | Bags → Vendor | 12 per click; value-flagged items excluded |
+| Auction prep | Auction Candidates / Pull Auctionable BoEs | Bank → Bags | Bound items never candidates |
+| Upgrades | Pull Bank Upgrades | Bank → Bags | Class, level, and slot checks |
 
-## 5. Where the Addon is Most Valuable
+## 5. Behavioral Principles
 
-Most valuable scenarios:
-
-- Repeated inventory maintenance across many characters
-- Users who care about safety and visibility over speed
-- Users who want deterministic, teachable behavior with rules
-- Users who run the same cleanup pattern repeatedly (quick tasks and saved workflows eliminate repetitive setup)
-
-Less valuable scenarios:
-
-- Users wanting instant fully automatic sorting with no review
-- One-off users with very small inventories and no bank discipline
-
-## 6. Behavioral Principles for Future UX
-
-- Manual intent should never be silently blocked; block reasons must be visible per row
-- Filters should map to player vocabulary (BoE, WuE, current, old, bank, bags)
-- "No rows" states should explain whether the cause is a missing scan, active filters, or context gating
-- High-frequency flows should be accessible through quick tasks, saved workflows, or slash commands
-- The Transfer tab's conservative scope (manual selection, per-item block reasons) is a feature, not a limitation
+- The addon finds, explains, and routes; the player reviews and clicks.
+- One question per character at most, always with a suggested answer; skipping is safe.
+- Account-wide by default: rules, tasks, settings, and the Warband snapshot are shared.
+- Never call something "can go" when the addon cannot know who uses it.
+- Never weaken the safety model to save a click.
