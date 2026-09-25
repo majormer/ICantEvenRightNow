@@ -515,6 +515,31 @@ function P.AuctionCandidateReport()
             P.FormatMoney(value)))
     end
     table.insert(lines, 1, "Auction candidates: " .. (#lines) .. ", ~" .. P.FormatMoney(total) .. " after the auction cut.")
+    -- Why sellable gear in bags was left out (diagnostic).
+    local seen = {}
+    for _, item in ipairs(P.GetScanList(P.BAG_SCOPE)) do
+        local key = tostring(item.itemID) .. ":" .. tostring(GearItemLevel(item))
+        if P.IsGearItem and P.IsGearItem(item) and CanBeAuctioned(item) and not seen[key]
+            and not P.IsAuctionCandidate(item) then
+            seen[key] = true
+            local why
+            local cachedByID = C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item.itemID)
+            if not GearDataReady(item) then
+                why = "item data not loaded (by ID: " .. tostring(cachedByID) .. ")"
+            else
+                local price = GetAuctionPrice(item)
+                if not price then why = "no auction price"
+                elseif price.exact == false then why = "approximate price"
+                elseif not price.fresh then why = "stale price (" .. P.FormatPriceSource(price) .. ")"
+                else
+                    local advice, reason = P.AuctionAdvice(item)
+                    if advice ~= "auction" then why = "advice: " .. tostring(advice) .. " (" .. tostring(reason) .. ")"
+                    else why = "kept: " .. tostring(P.ExplainScanned and P.ExplainScanned(item).label) end
+                end
+            end
+            table.insert(lines, "  left out: " .. tostring(item.name) .. " [" .. tostring(GearItemLevel(item)) .. "]: " .. why)
+        end
+    end
     return lines
 end
 

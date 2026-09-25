@@ -360,3 +360,15 @@ T.test("stale prices are not auction value, but still protect from vendoring", f
     T.eq((g:P().GetItemValue(ore)), (ore.sellPrice or 0) * ore.count, "value falls back to vendor")
     T.ok(g:P().IsValueFlagged(ore, "Vendor"), "vendor protection still warns")
 end)
+T.test("the auction report explains gear it leaves out", function()
+    local g = game(function(w)
+        w:defineItem(8903, { name = "Unpriced Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8903, 1)
+        w.equipped[16] = 305
+    end, {})
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    local text = table.concat(g:P().AuctionCandidateReport(), "\n")
+    T.contains(text, "left out: Unpriced Blade [260]: no auction price")
+end)
