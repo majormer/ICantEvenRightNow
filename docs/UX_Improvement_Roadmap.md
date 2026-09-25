@@ -287,6 +287,22 @@ Status: Planned. Priority: P2.
 
 - If BetterBags is loaded, a one-time Home card offers to enable the categories (section 8) instead of hiding the option in Settings.
 - Settings stays available for everything, but no feature requires visiting it.
+
+### O5. First-time tips and "What's new" (instead of a tutorial)
+
+Status: Planned. Priority: P1.
+
+A step-by-step tutorial is not planned: it contradicts "useful on first open, at most one question", it would run at login when the interesting actions (bank, vendor, Warband) are unavailable, and skipped tutorials leave nothing behind. Instead:
+
+- **Just-in-time tips**, each shown the first time its moment happens:
+  - First bank visit, on the top card: "Tasks find items for you. Review the list, then click Deposit. Nothing moves without your click."
+  - First review list: row reasons and +Rule ("Blocked rows tell you why. Protect items so they're never touched.").
+  - First vendor visit: buyback-sized batches (H5).
+  - First Warband tab routing: items follow the matching Blizzard tab settings (W3).
+- Each tip shows once, **account-wide** (seen on the main means alts never see it), and is dismissible in one click.
+- Settings: "Show tips again" and "Turn off tips".
+- **"What's new in 0.6.0" card** for existing users on first open after upgrading: Summary is now Home, tasks are cards, plus Warband features and character roles, with where each thing moved. Shown once; new installs skip it.
+- **Empty states keep teaching**: Home cards follow the Transfer empty-state pattern of saying why and offering the fix ("No bank data yet: visit a bank").
 - If no Warband tab has "assign to" settings, a card explains that setting them in Blizzard's bank tab settings enables smart routing. The addon does not change tab settings itself.
 
 ## 8. Planned: BetterBags Categories (target 0.6.0)
