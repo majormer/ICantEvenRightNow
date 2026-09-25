@@ -659,6 +659,13 @@ function World:_buildEnv()
             if not def then return nil end
             return itemID, def.itemType, def.itemSubType, def.equipLoc, def.icon, def.classID, def.subclassID
         end,
+        -- Actual item level; nil until the item's data is loaded.
+        GetDetailedItemLevelInfo = function(value)
+            local itemID = parseItemID(value)
+            local def = itemID and world.items[itemID]
+            if not def or not def.cached then return nil end
+            return def.itemLevel, false, def.itemLevel
+        end,
         IsItemDataCachedByID = function(itemID)
             local def = world.items[itemID]
             return def and def.cached or false

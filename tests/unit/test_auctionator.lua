@@ -57,7 +57,16 @@ local function installAuctionator(w, opts)
             fake.lists[name] = strings
         end,
     }
-    rawset(w.env, "Auctionator", { API = { v1 = api } })
+    -- Utilities.DBKeyFromLink mirrors v339: the callback runs at once only
+    -- when the item's data is loaded (Item:ContinueOnItemLoad).
+    local utilities = {
+        DBKeyFromLink = function(link, callback)
+            local id = w.parseItemID(link)
+            local def = id and w.items[id]
+            if def and def.cached then callback({ "g:" .. id .. ":" .. tostring(def.itemLevel), tostring(id) }) end
+        end,
+    }
+    rawset(w.env, "Auctionator", { API = { v1 = api }, Utilities = utilities })
     w.addonsLoaded.Auctionator = true
     w.auctionator = fake
     return fake

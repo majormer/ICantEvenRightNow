@@ -56,22 +56,28 @@ end
 -- Sources
 -- ---------------------------------------------------------------------------
 
--- Auctionator prices gear by item level only once the item's data is loaded;
--- before that it silently uses the base item's price (every item level mixed)
+-- Auctionator prices gear by item level only when it can build the item's
+-- level-specific key immediately (Utilities.DBKeyFromLink calls back at once);
+-- otherwise it silently uses the base item's price (every item level mixed)
 -- and still calls it exact. Seen in game right after /reload: ~14,002g vs
--- ~3,838g a minute later. So gear waits until its data is loaded.
+-- ~3,838g a minute later. Ask Auctionator the same question it asks itself.
+-- (C_Item.IsItemDataCachedByID is not usable here: in game it stayed false
+-- for these items even while their names and levels were readable.)
 local function GearDataReady(item)
     if not (item.classID == 2 or item.classID == 4) then return true end
-    local cached
-    if item.link and Item and Item.CreateFromItemLink then
-        local ok, obj = pcall(Item.CreateFromItemLink, Item, item.link)
-        if ok and obj and obj.IsItemDataCached then cached = obj:IsItemDataCached() end
+    if not item.link then return false end
+    local utilities = Auctionator and Auctionator.Utilities
+    if utilities and utilities.DBKeyFromLink then
+        local keys
+        local ok = pcall(utilities.DBKeyFromLink, item.link, function(result) keys = result end)
+        if ok then
+            if keys == nil and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
+            return keys ~= nil
+        end
     end
-    if cached == nil and C_Item.IsItemDataCachedByID then cached = C_Item.IsItemDataCachedByID(item.itemID) end
-    if cached == false and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
-    return cached ~= false
+    local level = C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link)
+    return type(level) == "number" and level > 0
 end
-
 local function AuctionatorPrice(item)
     local api = Auctionator and Auctionator.API and Auctionator.API.v1
     if not api then return nil end
@@ -523,9 +529,8 @@ function P.AuctionCandidateReport()
             and not P.IsAuctionCandidate(item) then
             seen[key] = true
             local why
-            local cachedByID = C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item.itemID)
             if not GearDataReady(item) then
-                why = "item data not loaded (by ID: " .. tostring(cachedByID) .. ")"
+                why = "item data not loaded yet"
             else
                 local price = GetAuctionPrice(item)
                 if not price then why = "no auction price"
