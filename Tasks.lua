@@ -89,8 +89,12 @@ local function GetAllTasks()
         end
     end
     for _, preset in ipairs(P.GetSavedFilters()) do
-        table.insert(tasks, { name = preset.name, kind = "saved", preset = preset,
-            description = preset.imported and "Imported from an earlier version." or "Your saved task." })
+        -- Presets from 0.4/0.5 saved filters only (no route). They apply to
+        -- whatever route is chosen, so they get no count of their own.
+        local filterOnly = preset.source == nil and preset.dest == nil
+        table.insert(tasks, { name = preset.name, kind = "saved", preset = preset, filterOnly = filterOnly,
+            description = filterOnly and "Filters only: applies to the route you choose in Transfer."
+                or (preset.imported and "Imported from an earlier version." or "Your saved task.") })
     end
     return tasks
 end
@@ -146,9 +150,11 @@ P.GetTaskPlans = TaskPlans
 local function EvaluateTask(task)
     local card = {
         name = task.name, kind = task.kind, description = task.description, valueMode = task.valueMode,
-        ready = 0, waiting = 0, value = 0, needs = nil, task = task,
+        ready = 0, waiting = 0, value = 0, needs = nil, task = task, filterOnly = task.filterOnly,
     }
-    if task.count then
+    if task.filterOnly then
+        -- no count: the route is chosen when the filters are applied
+    elseif task.count then
         local ready, needs, value = task.count()
         card.ready, card.needs, card.value = ready or 0, needs, value or 0
     else
@@ -221,6 +227,7 @@ end
 
 -- One-line card summary: "23 ready (4g 12s)" / "12 waiting: Visit a bank".
 function P.CardSummary(card)
+    if card.filterOnly then return "Filter preset (no route)" end
     local money = card.value > 0
         and (" (" .. (card.valueMode == "auction" and "~" or "") .. P.FormatMoney(card.value)
             .. (card.valueMode == "auction" and " at auction" or "") .. ")") or ""

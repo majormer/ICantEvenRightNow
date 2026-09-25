@@ -653,7 +653,7 @@ function P.OpenTask(name)
         UI.activeQuickWorkflowName = task.name
     end
     UI.activeTaskPredicate = task.predicate
-    if P.IsPreselectEnabled() then P.PreselectTask(task) end
+    if P.IsPreselectEnabled() and not task.filterOnly then P.PreselectTask(task) end
     P.UIKit.SetTab("Transfer")
     return true
 end

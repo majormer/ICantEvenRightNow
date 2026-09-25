@@ -212,3 +212,22 @@ T.test("Characters tab lists the roster and accepts suggestions in bulk", functi
     T.eq(P.GetRole(P.GetCharacter("Alt-R")), "crafter")
     T.eq(P.GetRole(P.GetCharacter("Main-R")), "main")
 end)
+
+T.test("filter-only presets from 0.4/0.5 get no route-based count and keep the chosen route", function()
+    local game = bagGame(function(w) w:put(0, 1, I.OLD_SWORD, 1) end)
+    local db = game:db()
+    db.savedFilters[#db.savedFilters + 1] = { name = "Legacy Upgrades", expansion = 0, bind = "All",
+        type = "All", slot = "All", upgrade = "Upgrade" }
+    game:openBank()
+    local card
+    for _, c in ipairs(game:P().GetTaskCards()) do if c.name == "Legacy Upgrades" then card = c end end
+    T.eq(card.ready, 0, "not counted as a bags-to-bank deposit")
+    T.eq(game:P().CardSummary(card), "Filter preset (no route)")
+    local UI = game:UI()
+    game:slash("transfer")
+    UI.transferSource, UI.transferDest = "Bank (All Tabs)", "Bags"
+    game:P().OpenTask("Legacy Upgrades")
+    T.eq(UI.transferSource, "Bank (All Tabs)", "route unchanged")
+    T.eq(UI.transferDest, "Bags")
+    T.eq(game:db().ui.tabFilters.Transfer.upgrade.include, "Upgrade", "filters applied")
+end)
