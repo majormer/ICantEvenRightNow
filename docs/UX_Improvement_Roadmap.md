@@ -75,11 +75,79 @@ Priority: P3
 
 Status: Partial — inventory changes refresh automatically while context permits, but freshness is expressed as a timestamp/status rather than a confidence indicator.
 
-Potential next step: flag bank results as stale after changing characters or when the bank has not been opened in the current session.
+Potential next step: flag bank results as stale after changing characters or when the bank has not been opened in the current session. Addressed structurally by W1 below.
 
 Priority: P2
 
-## 5. Safety Guardrails to Preserve
+## 5. Planned: Warband Workflows (target 0.7.0)
+
+### Principle: the Warband bank is for sharing
+
+The Warband bank is the only storage every character on the account can reach, across realms and factions. An item belongs there when **another character benefits from it**, not merely because it is allowed there. Otherwise the character bank is the better home: it is per-character space, and it keeps shared space free for what actually needs sharing.
+
+Items with a real reason to be in Warband storage:
+
+- **Warbound and Warbound-until-equipped items**: the Warband bank is how they reach another character.
+- **Crafting reagents**: usable directly from the Warband bank for crafting and crafting orders, so any crafter on the account can use them without withdrawing.
+- **Unbound BoE gear and tradeable goods**: the account's designated seller or an alt who can use them can collect them.
+- **Consumables and materials shared by several alts.**
+
+Items without a reason to be there: soulbound items (not allowed), items only this character uses, and old gear whose appearance is already collected (transmog is account-wide, so the item itself is not needed to keep it).
+
+The current evaluator already leans this way (shared crafting materials, BoE, and Warbound items go to Warband storage). The roadmap below makes the "who benefits" question answerable.
+
+### W1. Per-character and account snapshots (foundation)
+
+Status: Planned. Priority: P1.
+
+Problem: scans live in account-wide SavedVariables without a character key, so an alt can see another character's character-bank data until it opens a bank. Nothing is known about other characters.
+
+Plan:
+
+- Store bags and character bank per character (`Name-Realm`), and the Warband bank once per account, each with a scan time.
+- Record lightweight character facts for routing: class, level, professions.
+- Label all non-live data with its age ("Warband bank, scanned 2 days ago"). Snapshots are display-only; actions keep verifying the live slot.
+- Migrate the existing single scan to the current character on first load.
+
+### W2. Warband tabs as first-class Source/Destination
+
+Status: Planned. Priority: P1.
+
+- Read Warband tab data with `C_Bank.FetchPurchasedBankTabData(Enum.BankType.Account)` (available only at a banker) and cache it with the account snapshot.
+- Offer each tab by its player-given name and icon, like character-bank tabs, alongside "Warband Bank (All Tabs)".
+
+### W3. Tab-settings routing
+
+Status: Planned. Priority: P1.
+
+- Warband tabs carry the player's own "assign to" settings (`depositFlags`: Equipment, Consumables, Profession Goods, Reagents, Junk, Current/Legacy expansion).
+- A "Deposit to Warband" quick task routes each item to the matching tab, showing why per row (e.g. "→ Mats (tab accepts Reagents)").
+- No new configuration: it follows choices already made in Blizzard's tab settings. Preview and confirmation are unchanged.
+- Do not use `C_Bank.AutoDepositItemsIntoBank`; it bypasses item rules and preview.
+
+### W4. Alt hand-off queue
+
+Status: Planned. Priority: P2. Depends on W1.
+
+- On character A, mark items "for Alt B"; they travel through the normal Warband deposit.
+- On character B at a bank, a "Waiting for you (N)" quick task appears, pre-filtered to those items. Nothing is withdrawn without confirmation.
+- The queue records intent only; stale entries (item gone, withdrawn elsewhere) clear themselves on the next Warband scan.
+
+### W5. Cross-character "Where is it?"
+
+Status: Planned. Priority: P2. Depends on W1.
+
+- Search all snapshots: "Also on: Alt B (bags), Warband: Mats (2 days ago)".
+- Tooltip line on items that other characters also hold.
+
+### W6. "Who benefits" routing hints
+
+Status: Idea. Priority: P3. Depends on W1.
+
+- Use snapshot character facts to explain Warband routing: "Reagent for Tailoring (Alt C)", "Plate upgrade for Alt D", "No other character uses this; keep in character bank".
+- Hints only: they explain and pre-filter, and never move items on their own.
+
+## 6. Safety Guardrails to Preserve
 
 Do not remove:
 
@@ -90,7 +158,7 @@ Do not remove:
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
 
-## 6. Acceptance Criteria for AH Pull UX
+## 7. Acceptance Criteria for AH Pull UX
 
 A successful AH pull UX should satisfy all:
 
