@@ -78,6 +78,13 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
                 = C_Item.GetItemInfo(infoKey)
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
+            -- Quest status belongs to the character that owns the item, so it is
+            -- captured now (other characters' snapshots are read later).
+            local questInfo = CContainer.GetContainerItemQuestInfo
+                and CContainer.GetContainerItemQuestInfo(bagID, slot) or nil
+            local questID = questInfo and questInfo.questID or nil
+            local questCompleted = questID and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted
+                and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
             table.insert(output, {
                 itemID        = itemID,
                 name          = name or info.itemName or ("Item " .. itemID),
@@ -106,6 +113,10 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 isWarbandBound     = bindingDetails.isWarbandBound,
                 accountBankAllowed = bindingDetails.accountBankAllowed,
                 bindingScope       = bindingDetails.bindingScope,
+                isQuestItem        = questInfo and questInfo.isQuestItem or false,
+                questID            = questID,
+                questActive        = questInfo and questInfo.isActive or false,
+                questCompleted     = questCompleted and true or false,
             })
         end
     end
@@ -171,6 +182,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
         end
         P.SetScanList(BAG_SCOPE, bagItems)
         P.MarkScanned(BAG_SCOPE)
+        if P.RecordTimeHeld then P.RecordTimeHeld(P.LocationKeyFor(BAG_SCOPE), bagItems) end
         if not quiet then
             Print("Scanned bags: " .. #bagItems .. " item stacks.")
         end
@@ -197,6 +209,10 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
         P.SetScanList(BANK_SCOPE, bankItems)
         P.MarkScanned(BANK_SCOPE)
         P.SetWarbandItems(warbandItems)
+        if P.RecordTimeHeld then
+            P.RecordTimeHeld(P.LocationKeyFor(BANK_SCOPE), bankItems)
+            P.RecordTimeHeld(P.LocationKeyFor("warband"), warbandItems)
+        end
         if not quiet then
             Print("Scanned bank: " .. (#bankItems + #warbandItems) .. " item stacks.")
         end

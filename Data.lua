@@ -95,6 +95,8 @@ ns.Data.DefaultDB = {
     characters = {},
     -- Account-wide Warband bank snapshot and tab data.
     warband = { items = {}, scannedAt = 0, tabs = {} },
+    -- First date each item was seen per location (Reasons.lua).
+    timeHeld = {},
     ui = {
         tabFilters = {},
         showMinimapIcon = true,

@@ -211,6 +211,11 @@ function Core.HandleSlashCommand(msg)
     elseif cmd == "clearerrors" then
         if ns.DB then ns.DB.errorLog = {} end
         Print("Error log cleared.")
+    elseif cmd == "why" then
+        -- Read-only: explains why items are being kept. "/icanteven why all" covers every known character.
+        local scope = (arg1 or ""):lower() == "all" and "all" or "current"
+        if scope == "current" then pcall(Core.ScanInventory, ns.DB.context.bankOpen and "all" or BAG_SCOPE, true) end
+        for _, line in ipairs(P.WhyReportLines(scope)) do Print(line) end
     elseif cmd == "migration" then
         local report = P.LatestMigrationReport()
         if not report then
