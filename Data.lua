@@ -116,7 +116,9 @@ ns.Data.DefaultDB = {
         tipsEnabled = true,          -- O5: first-time tips (seen flags in db.tipsSeen, account-wide)
         betterBagsCategories = false, -- Section 8: off until the player enables it
         auctionIncludeCurrent = false, -- Auction Candidates may include current-expansion items (farmers)
+        enhancedLogging = false,     -- Troubleshooting: record actions into debugLog (Log.lua)
     },
+    debugLog = { lines = {}, nextIndex = 1, count = 0 }, -- Enhanced logging ring buffer (Log.lua)
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once

@@ -24,6 +24,7 @@ Design intent:
 | `Data.lua` | Expansions, item types, curated items, profession-to-subclass map, `DefaultDB` |
 | `Debug.lua` | Debug toggle and diagnostic dump |
 | `Shared.lua` | Storage-kind constants (incl. `WarbandTab:<bagID>` and `Warband (by tab settings)`), bag ID resolution (`Enum.BagIndex`), character and Warband tab data (`RefreshBankTabData`), storage helpers, `NeedsBankStorage`, bank context detection, shared UI state |
+| `Log.lua` | Enhanced logging (off by default): `P.Log(category, fmt, ...)` into a 2,000-line ring buffer at `ICantEvenRightNowDB.debugLog`; `P.GetLogLines`, `P.ClearLog`, `P.SetLogging`. Keep calls out of hot loops. |
 | `Migration.lua` | `SCHEMA_VERSION`, source-version inference, copy-then-swap migration steps, `migrationBackup`, `legacy` parking, migration report |
 | `Characters.lua` | Roster keyed `Name-Realm`, character facts (class, armor type, level history, professions, equipped item levels), roles and capabilities, role suggestions, per-character and Warband snapshots (`GetScanList`, `AllSnapshots`) |
 | `Evaluator.lua` | Binding detection, item type classification, decisions (`BuildDecision`, `GetAllDecisions`) |

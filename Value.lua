@@ -537,7 +537,19 @@ function P.AuctionCandidateItems()
 end
 
 -- Diagnostic lines: each auction candidate with its price and value.
+-- Logged when the notice or report computes candidates (not on every refresh).
+local function LogCandidates(list)
+    if not P.IsLogging() then return end
+    for _, item in ipairs(list) do
+        local price = P.GetAuctionPrice(item)
+        P.Log("auction", "candidate %s (%s) x%s: %s each, %s", item.name, item.itemID, item.count or 1,
+            price and price.price or "?", price and P.FormatPriceSource(price) or "no price")
+    end
+end
+P.LogAuctionCandidates = LogCandidates
+
 function P.AuctionCandidateReport()
+    LogCandidates(P.AuctionCandidateItems())
     local lines, total = {}, 0
     for _, item in ipairs(P.AuctionCandidateItems()) do
         local value = P.GetItemValue(item) or 0
@@ -580,6 +592,8 @@ local function SendToAuctionator(items, listName)
     local api = AuctionatorAPI()
     if not api then return false, "Auctionator is not installed." end
     local terms, skipped = SearchTerms(items)
+    P.Log("auction", "send %d term(s) to Auctionator (%s), %d skipped without names", #terms,
+        ns.DB.context.auctionHouseOpen and "search" or "shopping list", skipped)
     local skippedNote = skipped > 0 and (" " .. skipped .. " item" .. (skipped == 1 and " was" or "s were")
         .. " skipped because the game hasn't loaded their names yet; try again in a moment.") or ""
     if #terms == 0 then return false, "Nothing to check." .. skippedNote end

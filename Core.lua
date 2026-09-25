@@ -52,6 +52,17 @@ function Core.UpdateContext()
     context.auctionHouseOpen = UI.auctionContextOpen or IsGlobalFrameShown("AuctionHouseFrame")
     context.mailboxOpen = IsGlobalFrameShown("MailFrame")
     context.inCombat = InCombatLockdown() and true or false
+    if P.IsLogging and P.IsLogging() then
+        local signature = table.concat({ tostring(context.bankOpen), tostring(context.vendorOpen),
+            tostring(context.auctionHouseOpen), tostring(context.mailboxOpen), tostring(context.inCombat) }, ",")
+        if signature ~= UI.lastLoggedContext then
+            UI.lastLoggedContext = signature
+            P.Log("context", "bank=%s (event=%s interaction=%s window=%s api=%s) vendor=%s ah=%s mail=%s combat=%s",
+                context.bankOpen, UI.bankContextOpen, P.IsPlayerBankInteractionActive(),
+                P.GetShownGlobalFrame(P.BANK_FRAME_NAMES) and P.GetShownGlobalFrame(P.BANK_FRAME_NAMES):GetName() or "none",
+                P.IsBankViewableByAPI(), context.vendorOpen, context.auctionHouseOpen, context.mailboxOpen, context.inCombat)
+        end
+    end
     if context.bankOpen then
         UI.hadBankContext = true
     end
@@ -71,6 +82,7 @@ function Core.LogError(msg)
     if not ns.DB.errorLog then ns.DB.errorLog = {} end
     local log = ns.DB.errorLog
     table.insert(log, { time = date("%Y-%m-%d %H:%M:%S"), msg = tostring(msg) })
+    if P.Log then P.Log("error", "%s", msg) end
     while #log > ERROR_LOG_MAX do table.remove(log, 1) end
 end
 
@@ -231,6 +243,21 @@ function Core.HandleSlashCommand(msg)
                 Print("(showing 10 most recent of " .. #log .. " total; /icanteven clearerrors to wipe)")
             end
         end
+    elseif cmd == "log" then
+        local sub = (arg1 or ""):lower()
+        if sub == "clear" then
+            P.ClearLog()
+            Print("Enhanced log cleared.")
+        elseif sub == "on" or sub == "off" then
+            P.SetLogging(sub == "on")
+            Print("Enhanced logging " .. sub .. ".")
+            Core.RefreshUI()
+        else
+            local lines = P.GetLogLines(tonumber(arg1) or 20)
+            Print("Enhanced logging is " .. (P.IsLogging() and "on" or "off") .. "; " .. #P.GetLogLines()
+                .. " line(s) saved (/icanteven log on|off|clear|<count>).")
+            for _, line in ipairs(lines) do Print(line) end
+        end
     elseif cmd == "clearerrors" then
         if ns.DB then ns.DB.errorLog = {} end
         Print("Error log cleared.")
@@ -270,6 +297,12 @@ function Core.OnAddonLoaded()
         Print("Updated your settings from " .. tostring(report.fromVersion)
             .. ". Some items need attention: /icanteven migration")
     end
+    if report then
+        P.Log("migration", "from %s to %s: %s", report.fromVersion, report.toVersion,
+            migrationErr and ("failed: " .. tostring(migrationErr)) or "ok")
+    end
+    P.Log("load", "%s %s loaded", ADDON_NAME, C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?")
     SeedDefaultSavedFilters()
     if P.IsBetterBagsLoaded and P.IsBetterBagsLoaded() then pcall(P.OnBetterBagsLoaded) end
     MigrateSavedFiltersToWorkflows()

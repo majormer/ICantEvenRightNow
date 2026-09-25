@@ -640,6 +640,8 @@ function P.OpenTask(name)
     local task = P.FindTask(name)
     if not task then return false end
     local available, needs = P.TaskRouteAvailable(task)
+    P.Log("task", "open %s (route %s -> %s)%s", task.name, P.GetTaskRoute(task),
+        select(2, P.GetTaskRoute(task)), available and "" or (": unavailable, " .. tostring(needs)))
     if not available then
         -- Showing the review list now would use the wrong route.
         Print(task.name .. ": " .. needs:lower() .. " to review these items.")
@@ -1264,8 +1266,16 @@ local function BuildSettingsTab(parent)
         UI.transferTip = nil
         Print("Tips will show again.")
     end)
+    local logging = AddCheck("enhancedLogging", "Enhanced logging (for troubleshooting)",
+        { "Enhanced logging", "Records scans, context changes, tasks, moves, sales, and errors",
+          "into your saved data (last " .. (P.LOG_MAX_LINES or 2000) .. " lines).",
+          "View with /icanteven log; clear with /icanteven log clear." }, tips)
+    logging:SetScript("OnClick", function(self)
+        P.SetLogging(self:GetChecked())
+        Core.RefreshUI()
+    end)
     parent.noticeLabel = CreateLabel(parent, "At a bank, vendor, or AH:", "GameFontHighlightSmall")
-    parent.noticeLabel:SetPoint("TOPLEFT", tips, "BOTTOMLEFT", 4, -12)
+    parent.noticeLabel:SetPoint("TOPLEFT", logging, "BOTTOMLEFT", 4, -12)
     parent.noticeMode = CreateDropdown(parent, 170, {
         { text = "Show a small notice", value = "notice" },
         { text = "Open the console", value = "open" },

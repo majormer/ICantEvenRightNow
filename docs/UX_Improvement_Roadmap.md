@@ -447,7 +447,7 @@ Status: Built in the 0.6.0 build (pending in-game verification). Priority: P1. R
 - Migration tests run offline against fixtures: a real 0.5.0 save (from the local backup, anonymized if committed) and synthetic saves built from each released version's `Data.lua` defaults.
 - Assert: rules preserved byte-for-byte, saved presets converted, nothing user-authored lost without a report entry, and running the migration twice changes nothing.
 
-## 12a. Proposed: Enhanced Logging Setting
+## 12a. Enhanced Logging Setting (built in 0.6.0)
 
 A Settings checkbox, off by default, that records what the addon does so a problem can be diagnosed after the fact. Motivated by 0.6.0 testing, where the in-game errors of a broken session were lost and every diagnosis needed a new command or screenshot.
 

@@ -17,6 +17,20 @@ To find this addon's recent errors:
 grep -n '"message"\] = "Interface/AddOns/ICantEvenRightNow' '!BugGrabber.lua' | tail
 ```
 
+## Enhanced logging
+
+Settings > "Enhanced logging (for troubleshooting)", or `/icanteven log on`. Off by default. It records, with timestamps:
+
+- `load`, `migration`: addon load and upgrade results
+- `context`: each change of bank / vendor / auction house / mailbox / combat, with the signal that detected the bank (event, interaction, window name, API)
+- `scan`: scope, stack counts, missing item data, item-data retries
+- `notice`, `task`: the notice shown at a bank or vendor, and tasks opened (with route and availability)
+- `transfer`: every move or sale (item, slot, destination, result or block reason) and a summary per click
+- `handoff`, `auction`: hand-offs queued, Auctionator searches, and auction candidates with their price sources
+- `error`: the addon's own errors
+
+The last 2,000 lines are kept in `ICantEvenRightNowDB.debugLog` (saved on reload or logout). `/icanteven log [count]` shows the newest lines, `/icanteven log clear` empties it, `/icanteven log off` stops it. Turn it on, reproduce the problem, `/reload`, then read the log or the saved file.
+
 ## Diagnostic commands
 
 | Command | Shows |
@@ -27,6 +41,7 @@ grep -n '"message"\] = "Interface/AddOns/ICantEvenRightNow' '!BugGrabber.lua' | 
 | `/icanteven auction` | Each auction candidate with its price and source, plus sellable gear left out and why |
 | `/icanteven why [all]` | Why items are held, grouped by reason |
 | `/icanteven diag` | Version and basic environment (with debug mode on) |
+| `/icanteven log [on\|off\|clear\|count]` | Enhanced log (see above) |
 
 ## Known failure patterns
 
@@ -64,4 +79,4 @@ Run `/icanteven auction`. Stale prices (older than the freshness limit), approxi
 
 ## Reporting a problem
 
-Include the output of `/icanteven errors`, the relevant diagnostic command, and, when the UI is broken, the addon's entries from `!BugGrabber.lua` after one `/reload`.
+Turn on enhanced logging, reproduce the problem, and include the newest `/icanteven log` lines, the output of `/icanteven errors`, the relevant diagnostic command, and, when the UI is broken, the addon's entries from `!BugGrabber.lua` after one `/reload`.

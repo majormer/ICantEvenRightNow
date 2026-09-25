@@ -632,8 +632,12 @@ function Core.ExecuteTransferSelected()
             processed[plan.key] = true
             local item = plan.item
             local blockReason = GetTransferBlockReason(item, source, dest)
+            local didMoveAttempted = not blockReason
             if not blockReason then
                 local didMove, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
+                P.Log("transfer", "%s %s x%s (%s %s:%s) -> %s: %s", dest == "Vendor" and "sell" or "move",
+                    item.name, item.count or 1, item.itemID, item.bagID, item.slot, dest,
+                    didMove and "ok" or ("blocked: " .. tostring(err)))
                 if didMove then
                     MarkPendingFromSlot(item)
                     if P.OnItemMoved then P.OnItemMoved(item, dest) end
@@ -645,6 +649,9 @@ function Core.ExecuteTransferSelected()
                 end
             end
             if blockReason then
+                if not didMoveAttempted then
+                    P.Log("transfer", "skip %s (%s): %s", item.name, item.itemID, blockReason)
+                end
                 blocked = blocked + 1
                 if #blockedDetails < 3 then
                     table.insert(blockedDetails, ItemLabel(item) .. ": " .. blockReason)
@@ -663,6 +670,8 @@ function Core.ExecuteTransferSelected()
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
             .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
+    P.Log("transfer", "done %s -> %s: %d %s, %d blocked, %d still selected", source, dest, moved,
+        dest == "Vendor" and "sold" or "moved", blocked, remaining)
     Core.RefreshUI()
     Print("Transfer complete: " .. moved .. " " .. (dest == "Vendor" and "sold" or "moved") .. ", " .. blocked .. " blocked.")
     if remaining > 0 then

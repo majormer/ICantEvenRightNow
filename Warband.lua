@@ -173,6 +173,8 @@ function P.QueueHandoff(item, toKey)
         from = P.currentCharacterKey, to = toKey, at = Now(), state = "queued",
     })
     queue.nextID = queue.nextID + 1
+    P.Log("handoff", "queued %s (%s) x%s from %s to %s", item.name, item.itemID, item.count or 1,
+        P.currentCharacterKey, toKey)
     if P.RequestBetterBagsRefresh then P.RequestBetterBagsRefresh() end
     return true
 end

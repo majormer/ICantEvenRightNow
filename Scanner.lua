@@ -310,6 +310,13 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
         Core.RefreshUI()
     end
 
+    if P.IsLogging() then
+        P.Log("scan", "%s%s: bags=%s bank=%s warband=%s missingData=%s", scope,
+            isItemDataRetry and " (item-data retry)" or "",
+            scanBags and #P.GetScanList(BAG_SCOPE) or "-",
+            scanBank and #(P.GetCurrentCharacter and P.GetCurrentCharacter().scans.bank or {}) or "-",
+            scanBank and #(P.GetWarbandSnapshot().items or {}) or "-", missingData)
+    end
     if missingData then
         waitingForItemData = (scanBank or waitingForItemData == "all") and "all" or BAG_SCOPE
         ScheduleItemDataRetry(scanBank and "all" or BAG_SCOPE)

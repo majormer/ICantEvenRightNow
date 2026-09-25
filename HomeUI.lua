@@ -485,6 +485,10 @@ function P.OnContextOpened()
     if mode == "off" or ns.DB.context.inCombat then return end
     if UI.frame and UI.frame:IsShown() then return end
     local card = P.GetTopReadyCard()
+    P.Log("notice", "context opened: %s", card and (card.name .. ": " .. P.CardSummary(card)) or "no ready card")
+    if card and card.valueMode == "auction" and P.LogAuctionCandidates then
+        P.LogAuctionCandidates(P.AuctionCandidateItems())
+    end
     if not card then return end
     if mode == "open" then
         Core.ShowHomeUI()
