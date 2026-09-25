@@ -414,7 +414,40 @@ Quest abandonment cost is quest-specific and not computable; the addon reports q
 - Bank review can group by reason ("Appearance already collected: 64 items"); each group is a task with the usual review and confirmation.
 - Show what letting go costs: "You keep the appearance. Worth 12g at a vendor. Nothing on your account uses it."
 
-## 11. Safety Guardrails to Preserve
+## 11. Planned: Upgrade Path from Earlier Versions (target 0.6.0)
+
+Status: Planned. Priority: P1. Requirement: users of any previous release (0.1.0 to 0.5.0) upgrade to 0.6.0 without losing settings; anything that cannot be ported is reported, not silently dropped.
+
+### M1. Versioned, backed-up migration
+
+- Add an explicit `schemaVersion` to `ICantEvenRightNowDB`. Infer the source version for older saves from their keys (e.g. `savedWorkflowSchemaVersion`, legacy `ui.tabFilters.Move/Organize/Vendor`, `ui.mode`, `ui.typeFilter`, removed rule flags).
+- Before migrating, copy the user-authored parts (rules, saved filters/workflows, UI settings, minimap settings) into `ICantEvenRightNowDB.migrationBackup[<fromVersion>]`. Scans are not backed up; they regenerate.
+- Migrations are idempotent, step by step (0.x → next → 0.6.0), and never delete old keys in 0.6.0; obsolete keys move under a `legacy` table instead.
+
+### M2. What is ported
+
+| Data | Handling |
+|---|---|
+| Item rules (Protect, Ignore, Never Sell, notes, name) | Ported unchanged. |
+| Removed rule flags (Never Move, Action Override) | Not portable. Listed in the report with the item names so the user can decide whether a Protect rule is wanted. |
+| Saved filters / workflows (filter-only and full) | Become saved tasks (Home cards). Legacy filter-only presets keep their query fields. |
+| Legacy per-tab filters (Move, Organize, Vendor) | Non-default ones become saved tasks named "Imported: <tab> filters"; default ones are dropped silently. |
+| Transfer filters, sort, minimap and launcher settings | Ported. |
+| Bag scan | Assigned to the character that first logs in after the upgrade (its bags are rescanned on open anyway). |
+| Bank scan | Owner unknown: kept as "unassigned, refresh at a bank" rather than attributed to the wrong character. |
+| Error log | Kept. |
+
+### M3. Report to the user
+
+- The first open after upgrading shows the migration result inside the "What's new in 0.6.0" card (O5): what was ported (counts), and what could not be ported with a one-line fix for each ("Recreate as a Protect rule: <item>").
+- The full report stays available in Settings and via `/icanteven migration`.
+
+### M4. Tests
+
+- Migration tests run offline against fixtures: a real 0.5.0 save (from the local backup, anonymized if committed) and synthetic saves built from each released version's `Data.lua` defaults.
+- Assert: rules preserved byte-for-byte, saved presets converted, nothing user-authored lost without a report entry, and running the migration twice changes nothing.
+
+## 12. Safety Guardrails to Preserve
 
 Do not remove:
 
@@ -425,7 +458,7 @@ Do not remove:
 
 The roadmap should improve speed and clarity without relaxing core safety principles.
 
-## 12. Acceptance Criteria for AH Pull UX
+## 13. Acceptance Criteria for AH Pull UX
 
 A successful AH pull UX should satisfy all:
 
