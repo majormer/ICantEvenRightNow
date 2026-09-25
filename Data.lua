@@ -115,6 +115,7 @@ ns.Data.DefaultDB = {
         whereTooltip = true,         -- W5: item tooltips show where the account holds the item
         tipsEnabled = true,          -- O5: first-time tips (seen flags in db.tipsSeen, account-wide)
         betterBagsCategories = false, -- Section 8: off until the player enables it
+        auctionIncludeCurrent = false, -- Auction Candidates may include current-expansion items (farmers)
     },
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.

@@ -390,9 +390,19 @@ end
 -- An auction candidate is worth noticeably more at auction AND has no reason
 -- to be kept (current-expansion content, used by a crafter or played
 -- character, uncollected appearance, protected, keepsake, active quest...).
+-- Setting "auctionIncludeCurrent" (off by default) lets current-expansion
+-- items through for players who farm and sell current materials; every
+-- other reason to keep still excludes the item.
 function P.IsAuctionCandidate(item)
     if (P.AuctionAdvice(item)) ~= "auction" then return false end
-    if P.ExplainScanned and P.ExplainScanned(item).disposition == "keep" then return false end
+    if not P.ExplainScanned then return true end
+    local explanation = P.ExplainScanned(item)
+    if explanation.disposition ~= "keep" then return true end
+    if not ns.DB.ui.auctionIncludeCurrent then return false end
+    for _, reason in ipairs(explanation.reasons) do
+        local def = P.REASONS[reason.id]
+        if def and def.disposition == "keep" and reason.id ~= "current_expansion" then return false end
+    end
     return true
 end
 

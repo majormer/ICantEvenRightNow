@@ -179,3 +179,26 @@ T.test("items whose data hasn't loaded still get a readable name", function()
     T.eq(g:P().ItemDisplayName("", nil, 42), "Item 42")
     T.eq(g:P().ItemDisplayName(nil, "|cff|Hitem:1|h[]|h|r", 7), "Item 7")
 end)
+T.test("setting: include current-expansion items in Auction Candidates (off by default)", function()
+    local g = game(function(w)
+        w:defineItem(8501, { name = "Fresh Ore", classID = 7, subclassID = 7, maxStack = 200, sellPrice = 10, expansionID = 11 })
+        w:defineItem(8502, { name = "Fresh Cloth", classID = 7, subclassID = 5, maxStack = 200, sellPrice = 10, expansionID = 11 })
+        w:put(0, 1, 8501, 100)
+        w:put(0, 2, 8502, 100)
+    end, { prices = { [8501] = 50000, [8502] = 50000 }, ages = { [8501] = 1, [8502] = 1 } })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:db().characters["Main-R"].professions = { { name = "Tailoring", skillLine = 197 } }
+    g:Core().ScanInventory("bags", true)
+    local function candidates()
+        local ids = {}
+        for _, item in ipairs(P.AuctionCandidateItems()) do ids[item.itemID] = true end
+        return ids
+    end
+    T.eq(g:db().ui.auctionIncludeCurrent, false, "off by default")
+    T.no(candidates()[8501], "current ore excluded by default")
+    g:db().ui.auctionIncludeCurrent = true
+    local ids = candidates()
+    T.ok(ids[8501], "current ore included when enabled")
+    T.no(ids[8502], "cloth your tailor uses is still kept")
+end)

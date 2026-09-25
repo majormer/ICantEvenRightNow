@@ -1238,9 +1238,13 @@ local function BuildSettingsTab(parent)
         { "Compact rows", "Shows 9 single-line rows instead of 6 detailed ones." }, grouping)
     local whereTip = AddCheck("whereTooltip", "Show where items are in item tooltips",
         { "Where is it?", "Item tooltips list how many your characters and Warband bank hold." }, compact)
+    local auctionCurrent = AddCheck("auctionIncludeCurrent", "Include current-expansion items in Auction Candidates",
+        { "Auction current-expansion items", "For players who farm and sell current materials.",
+          "Items a crafter or played character uses, protected items,",
+          "and keepsakes are still left out." }, whereTip)
     local betterBags = AddCheck("betterBagsCategories", "Show categories in BetterBags",
         { "BetterBags categories", "Protected, Never Sell, Sell Candidates, For the Warband, Old Content,",
-          "and Waiting for You appear as BetterBags categories. Display only." }, whereTip)
+          "and Waiting for You appear as BetterBags categories. Display only." }, auctionCurrent)
     betterBags:SetScript("OnClick", function(self)
         if P.SetBetterBagsCategories then P.SetBetterBagsCategories(self:GetChecked()) end
         Core.RefreshUI()
