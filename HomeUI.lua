@@ -578,7 +578,11 @@ function P.ShowHandoffPicker(item)
     frame:SetHeight(64 + rows * 22)
     frame:ClearAllPoints()
     frame:SetPoint("CENTER", UI.frame or UIParent, "CENTER", 0, 0)
+    -- The main window shares this strata at level 100; in game the picker was
+    -- shown underneath it (invisible). Always draw above the window.
+    frame:SetFrameLevel(((UI.frame and UI.frame:GetFrameLevel()) or 100) + 50)
     frame:Show()
+    frame:Raise()
 end
 
 -- ---------------------------------------------------------------------------

@@ -156,6 +156,7 @@ T.test("row menu 'Send to an alt...' opens a picker that queues the hand-off", f
     g:click(send)
     local picker = UI.handoffPicker
     T.ok(picker:IsShown())
+    T.ok(picker:GetFrameLevel() > UI.frame:GetFrameLevel(), "drawn above the main window")
     T.contains(picker.buttons[1]:GetText(), "Tailor")
     g:click(picker.buttons[1])
     T.eq(g:P().GetHandoffs()[1].to, "Tailor-R")
