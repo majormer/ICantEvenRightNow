@@ -9,6 +9,7 @@ This folder contains implementation and product documentation for I Can't Even R
 - UX roadmap and design recommendations: `UX_Improvement_Roadmap.md`
 - 0.3.0 filter-first scope plan (historical, 17KB): `0.3.0_Filter_First_Action_Model_Plan.md`
 - Release runbook: `Release_Process.md`
+- In-game troubleshooting and diagnostics: `Troubleshooting.md`
 - CurseForge docs: `CurseForge_Description.md`, `CurseForge_Onboarding.md`
 
 ## Project root docs
