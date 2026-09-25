@@ -773,9 +773,14 @@ end
 
 -- Bank storage "accessible" is not used: away from a bank, bank bags still
 -- answer GetContainerNumFreeSlots (0 each), which read as an open bank.
+-- No scan of every frame by name pattern: it ran on every refresh and, with
+-- protected calls per frame, hit WoW's "script ran too long" limit in game
+-- (the game stalled while loading). The banker interaction, the bank API and
+-- the named bank windows cover a real bank. /icanteven ctx still reports the
+-- pattern scan as a diagnostic.
 local function IsBankContextDetected()
     return IsPlayerBankInteractionActive()
-        or (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
+        or GetShownGlobalFrame(BANK_FRAME_NAMES) ~= nil
         or IsBankViewableByAPI()
 end
 

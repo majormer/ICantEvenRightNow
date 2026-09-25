@@ -444,3 +444,12 @@ T.test("forbidden frames don't break context detection", function()
     T.ok(ok, tostring(err))
     T.eq(g.ns.DB.context.bankOpen, false)
 end)
+T.test("context detection never walks every frame", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    local calls = 0
+    local real = g.env.EnumerateFrames
+    g.env.EnumerateFrames = function(...) calls = calls + 1 return real(...) end
+    g:Core().UpdateContext()
+    g:Core().RefreshUI()
+    T.eq(calls, 0, "EnumerateFrames is too slow to run on every refresh")
+end)
