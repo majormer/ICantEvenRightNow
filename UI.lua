@@ -650,6 +650,21 @@ local function PlanState(plan)
         tostring(item.bindingScope), tostring(pending or false), tostring(plan.blocked or "no"))
 end
 
+-- The counts from the last refresh plus the readiness and inventory status,
+-- without recomputing the list (Readiness.lua calls it for late data).
+function P.RefreshTransferFooter()
+    local panel = UI.frame and UI.frame.panels and UI.frame.panels.Transfer
+    if not (panel and panel.itemCount and panel.countText) then return end
+    local statusSuffix = UI.inventoryStatus and ("  |  " .. UI.inventoryStatus) or ""
+    local readiness = P.ReadinessText and P.ReadinessText()
+    if readiness then
+        local settling = P.IsSettling and P.IsSettling()
+        statusSuffix = "  |  |cffffd100" .. readiness .. (settling and "; actions available when done" or "") .. "|r"
+            .. statusSuffix
+    end
+    panel.itemCount:SetText(panel.countText .. statusSuffix)
+end
+
 function P.LogTaskMembership(allCandidates, matched)
     local task = UI.activeQuickWorkflowName or UI.activeSavedFilterName or "custom"
     local inList = {}
@@ -2186,16 +2201,9 @@ function Core.RefreshTransferUncached()
     local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
     local startIndex = offset + 1
 
-    local statusSuffix = UI.inventoryStatus and ("  |  " .. UI.inventoryStatus) or ""
-    -- Getting ready: no actions until the list is complete (stable results).
-    local settling = P.IsSettling and P.IsSettling()
-    local readiness = P.ReadinessText and P.ReadinessText()
-    if readiness then
-        statusSuffix = "  |  |cffffd100" .. readiness .. (settling and "; actions available when done" or "") .. "|r"
-            .. statusSuffix
-    end
-    panel.itemCount:SetText(#allCandidates .. " source  •  " .. #matched .. " matching  •  "
-        .. movableCount .. " movable  •  " .. selectedCount .. " selected" .. statusSuffix)
+    panel.countText = #allCandidates .. " source  •  " .. #matched .. " matching  •  "
+        .. movableCount .. " movable  •  " .. selectedCount .. " selected"
+    P.RefreshTransferFooter()
 
     for i, row in ipairs(panel.rows) do
         local display = i <= panel.VISIBLE_ROWS and displayRows[startIndex + i - 1] or nil

@@ -242,6 +242,20 @@ end
 -- Core.ScanInventory
 -- ===========================================================================
 
+-- Scanned items the client hadn't described yet (bags, bank, Warband bank).
+local function CountUnknownItems()
+    local n = 0
+    local lists = { P.GetScanList(BAG_SCOPE) or {}, P.GetWarbandSnapshot and P.GetWarbandSnapshot().items or {} }
+    local character = P.GetCurrentCharacter and P.GetCurrentCharacter()
+    if character and character.scans then lists[#lists + 1] = character.scans.bank or {} end
+    for _, list in ipairs(lists) do
+        for _, item in ipairs(list) do
+            if item.classID == nil then n = n + 1 end
+        end
+    end
+    return n
+end
+
 function Core.ScanInventory(scope, quiet, isItemDataRetry)
     Core.UpdateContext()
     if not isItemDataRetry then
@@ -250,6 +264,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
     end
     local missingData = false
     scope = (scope and scope:lower()) or BAG_SCOPE
+    local unknownBefore = isItemDataRetry and CountUnknownItems() or 0
 
     local scanBags = scope == "" or scope == BAG_SCOPE or scope == "all"
     local scanBank = scope == BANK_SCOPE or scope == "all"
@@ -306,7 +321,13 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
 
     if P.CleanupHandoffs then pcall(P.CleanupHandoffs) end
 
-    if UI.frame and UI.frame:IsShown() then
+    -- A background item-data retry after the addon settled must not change
+    -- what's on screen by itself: flag it instead (Readiness.lua).
+    local lateRetry = isItemDataRetry and P.IsSettling and not P.IsSettling()
+    if lateRetry and P.NoteLateData and CountUnknownItems() < unknownBefore then
+        P.NoteLateData()
+    end
+    if UI.frame and UI.frame:IsShown() and not lateRetry then
         Core.RefreshUI()
     end
 

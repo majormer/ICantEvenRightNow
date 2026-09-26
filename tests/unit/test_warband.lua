@@ -295,6 +295,26 @@ T.test("data arriving after settling doesn't change the screen until Rescan", fu
     T.notContains(header:GetText(), "Rescan to include")
 end)
 
+T.test("an item described after settling is flagged, not redrawn", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:defineItem(8602, { name = "Slow Rock", classID = 15, subclassID = 0, quality = 0, sellPrice = 5,
+            expansionID = 0, cached = false, loadDelay = 12 })
+        w:put(0, 1, 8602, 1)
+    end })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openBank()
+    g:Core().ShowHomeUI()
+    local header = g:UI().frame.panels.Home.scanInfo
+    g.world:advance(9)              -- settled without the rock
+    T.notContains(header:GetText(), "Getting ready")
+    local shownBefore = header:GetText()
+    g.world:advance(5)              -- the rock's data arrives
+    T.contains(header:GetText(), "Rescan to include them", "flagged")
+    T.ok(shownBefore ~= header:GetText(), "only the flag changed")
+end)
+
 T.test("Warbound-until-equipped items in the Warband bank are read from the tooltip", function()
     local g = T.game({ player = P_MAIN, setup = function(w)
         F.defineItems(w)

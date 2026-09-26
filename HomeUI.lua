@@ -218,6 +218,20 @@ local function StyleCard(card, state)
     end
 end
 
+-- Scan ages and the readiness line only, without recomputing the cards
+-- (Readiness.lua calls it when late data is flagged).
+function P.RefreshHomeHeader()
+    local panel = UI.frame and UI.frame.panels and UI.frame.panels.Home
+    if not panel then return end
+    local char = P.GetCurrentCharacter()
+    local warband = P.GetWarbandSnapshot()
+    local readiness = P.ReadinessText and P.ReadinessText()
+    panel.scanInfo:SetText("Bags scanned " .. FormatAge(char.lastScan.bags)
+        .. "  -  Bank " .. FormatAge(char.lastScan.bank)
+        .. "  -  Warband bank " .. FormatAge(warband.scannedAt)
+        .. (readiness and ("  -  |cffffd100" .. readiness .. "|r") or ""))
+end
+
 function P.RefreshHome()
     local panel = UI.frame and UI.frame.panels and UI.frame.panels.Home
     if not panel then return end
@@ -225,11 +239,7 @@ function P.RefreshHome()
     local char = P.GetCurrentCharacter()
     local warband = P.GetWarbandSnapshot()
     panel.headline:SetText(ContextHeadline())
-    local readiness = P.ReadinessText and P.ReadinessText()
-    panel.scanInfo:SetText("Bags scanned " .. FormatAge(char.lastScan.bags)
-        .. "  -  Bank " .. FormatAge(char.lastScan.bank)
-        .. "  -  Warband bank " .. FormatAge(warband.scannedAt)
-        .. (readiness and ("  -  |cffffd100" .. readiness .. "|r") or ""))
+    P.RefreshHomeHeader()
     panel.rescan:SetEnabled(not ns.DB.context.inCombat)
 
     -- Notice strip

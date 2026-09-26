@@ -27,15 +27,16 @@ local APPEARANCE_FREE_SLOTS = { INVTYPE_TRINKET = true, INVTYPE_FINGER = true, I
 -- True when an item's verdict could still change because data isn't loaded.
 function P.ItemDataPending(item)
     if not item or not item.itemID then return false end
-    if item.expansionID == nil or item.classID == nil then return true end
+    if item.classID == nil then return true, "item info" end
+    if item.expansionID == nil then return true, "expansion" end
     if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned() then
-        if P.GearDetailsPending and P.GearDetailsPending(item) then return true end
+        if P.GearDetailsPending and P.GearDetailsPending(item) then return true, "stats" end
         -- No appearance answer yet: only "pending" while the item itself isn't
         -- loaded; a loaded item with no answer simply has no appearance.
         if not APPEARANCE_FREE_SLOTS[item.equipLoc or ""] and P.IsAppearanceCollected
             and P.IsAppearanceCollected(item) == nil
             and C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(item.itemID) then
-            return true
+            return true, "appearance"
         end
     end
     return false
@@ -87,6 +88,14 @@ local function Finish()
     state.unresolved = state.pending
     P.Log("ready", "settled after %.1fs (%s): %d item(s) could not be checked",
         Now() - state.startedAt, tostring(state.reason), state.unresolved)
+    if state.unresolved > 0 then
+        for _, item in ipairs(RelevantItems()) do
+            local pending, why = P.ItemDataPending(item)
+            if pending then
+                P.Log("ready", "  not checked: %s (%s): waiting for %s", tostring(item.name), tostring(item.itemID), tostring(why))
+            end
+        end
+    end
     Refresh()
     if state.noticeWanted then
         state.noticeWanted = false
@@ -132,7 +141,11 @@ end
 
 -- Data arrived for an item after settling: flag it instead of changing the screen.
 function P.NoteLateData()
-    if not state.settling then state.lateData = true end
+    if state.settling or state.lateData then return end
+    state.lateData = true
+    P.Log("ready", "item details arrived after checking: flagged for Rescan")
+    if P.RefreshHomeHeader then pcall(P.RefreshHomeHeader) end
+    if P.RefreshTransferFooter then pcall(P.RefreshTransferFooter) end
 end
 
 -- The player asked to include late data (Rescan).
