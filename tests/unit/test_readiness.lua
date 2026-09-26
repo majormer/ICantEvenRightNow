@@ -132,3 +132,13 @@ T.test("item data: stats survive the link text changing when the game reloads an
     T.eq(state, "ready")
     T.eq(stats.ITEM_MOD_STRENGTH_SHORT, 10)
 end)
+
+T.test("item data: no stats wait for things that aren't gear", function()
+    local g = game({})
+    local P = g:P()
+    local ore = { itemID = 8702, name = "Some Ore", classID = 7, link = "item:8702" }
+    local stats, state = P.ItemStats(ore)
+    T.eq(stats, nil)
+    T.eq(state, "ready")
+    T.eq(#P.ItemDataWaits(), 0, "nothing to wait for")
+end)

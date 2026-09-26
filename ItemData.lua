@@ -107,6 +107,9 @@ end
 -- The item's stat table, and its state. nil stats with "ready" = no stats.
 function P.ItemStats(item)
     if not item or not item.itemID or not (C_Item and C_Item.GetItemStats) then return nil, "ready" end
+    -- Only weapons and armor have stats worth waiting for (in game, waiting on
+    -- ore and food flagged "details arrived late" for nothing).
+    if item.classID ~= nil and item.classID ~= 2 and item.classID ~= 4 then return nil, "ready" end
     local itemID = item.itemID
     local link = item.link or ("item:" .. itemID)
     local key = VariantKey(item)
