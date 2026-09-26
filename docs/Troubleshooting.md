@@ -76,6 +76,14 @@ Not this addon: its only text boxes (Transfer search and item level) never take 
 - Another window holds keyboard focus (a Windows notification did once). WoW still reads movement keys but typed characters go to the focused window. Dismiss notifications (Win+N) and click into the game.
 - Another addon: disable all addons, then re-enable in groups. In 2026-09 it was TomTom v4.3.11 (no errors were logged; the culprit took input silently).
 
+### Items join a list a few seconds late / "Checking details for N items"
+
+Gear is judged partly on its main stat, which the game loads on demand. Until it arrives, the item shows "Checking item details..." (no verdict), the Home header and Transfer footer say how many are still loading, and the list refreshes by itself when the data arrives (each item waits at most 10 seconds). Details are requested when a bank or vendor opens, so this is usually done before a task is opened.
+
+### An item reads "BoE" in the Warband bank but "Warbound until equipped" in bags
+
+In the Warband bank the game's binding functions report such items as unbound; the addon reads the tooltip there instead (`ITEM_ACCOUNTBOUND_UNTIL_EQUIP`).
+
 ### Items show without names, or as "Item 12345"
 
 The client hadn't loaded their data when they were scanned. `/icanteven itemdata` shows what's still missing. Scans retry when data arrives (`GET_ITEM_INFO_RECEIVED`).

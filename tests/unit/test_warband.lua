@@ -232,7 +232,7 @@ T.test("undo pre-selects the last batch's items for the reverse route", function
     T.eq(g.world:findItem(I.JUNK)[1].bagID, 12, "back in the Warband bank")
 end)
 
-T.test("REPRO: gear whose stats load late is misjudged until something refreshes", function()
+T.test("gear whose stats load late updates the lists by itself when the data arrives", function()
     local g = T.game({ player = P_MAIN, setup = function(w)
         F.defineItems(w)
         w:addBankTab(0, 6, "Main", 0, 20)
@@ -240,20 +240,40 @@ T.test("REPRO: gear whose stats load late is misjudged until something refreshes
         -- Agility axe, Warbound until equipped: a Strength warrior can't use it.
         w:defineItem(8601, { name = "Late Axe", classID = 2, subclassID = 0, equipLoc = "INVTYPE_WEAPON",
             itemLevel = 220, requiredLevel = 90, bindType = 2, quality = 3, sellPrice = 100, expansionID = 11,
-            stats = { ITEM_MOD_AGILITY_SHORT = 10 }, statsAt = 1790000000 + 30 })
+            stats = { ITEM_MOD_AGILITY_SHORT = 10 }, statsAt = 1790000000 + 2 })   -- name loaded, stats late (as in game)
         w:put(12, 1, 8601, 1, { warboundUntilEquipped = true })
     end })
     g:P().SetCharacterRole("Main-R", "main")
     g:openBank()
-    local function cardReady()
-        for _, c in ipairs(g:P().GetTaskCards()) do
-            if c.name == "Pull Warband Items That Can Go" then return c.ready end
+    g:Core().ShowHomeUI()
+    local function cardText()
+        for _, widget in ipairs(g:UI().frame.panels.Home.cards) do
+            if widget:IsShown() and widget.card and widget.card.name == "Pull Warband Items That Can Go" then
+                return widget.card.ready
+            end
         end
         return 0
     end
-    local before = cardReady()
-    g.world:advance(40)          -- stats now available, nothing else happens
-    g:Core().RefreshUI()
-    local after = cardReady()
-    print("REPRO before/after", before, after)
+    T.eq(cardText(), 0, "stats unknown: not judged Can go yet")
+    T.contains(g:UI().frame.panels.Home.scanInfo:GetText(), "Checking details for 1 item", "the wait is visible")
+    local axe
+    for _, it in ipairs(g:P().GetWarbandSnapshot().items) do if it.itemID == 8601 then axe = it end end
+    T.eq(g:P().ExplainScanned(axe).primary.id, "details_loading", "no verdict while loading")
+    g.world:advance(6)           -- stats arrive; nobody clicks anything
+    T.eq(cardText(), 1, "the card updated by itself")
+    T.notContains(g:UI().frame.panels.Home.scanInfo:GetText(), "Checking details", "indicator clears")
+end)
+
+T.test("Warbound-until-equipped items in the Warband bank are read from the tooltip", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(12, 1, I.OLD_SWORD, 1, { warboundUntilEquipped = true })
+    end })
+    g:openBank()
+    local item
+    for _, it in ipairs(g:P().GetWarbandSnapshot().items) do if it.itemID == I.OLD_SWORD then item = it end end
+    T.eq(item.bindingScope, "Warbound Until Equipped")
+    T.ok(not g:P().CanBeAuctioned(item), "can't be auctioned")
 end)

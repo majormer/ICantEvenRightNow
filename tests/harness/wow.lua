@@ -445,6 +445,17 @@ function World:_buildEnv()
     G.GetTime = function() return world.now end
     G.GetServerTime = function() return math.floor(world.now) end
     G.GetMoney = function() return world.money end
+    G.ITEM_ACCOUNTBOUND_UNTIL_EQUIP = "Warbound until equipped"
+    G.C_TooltipInfo = {
+        GetBagItem = function(bagID, slot)
+            local c = world.containers[bagID]
+            local stack = c and c.slots[slot]
+            if not stack then return nil end
+            local lines = { { leftText = (world.items[stack.itemID] or {}).name or "?" } }
+            if stack.wue then table.insert(lines, { leftText = "Warbound until equipped" }) end
+            return { lines = lines }
+        end,
+    }
     -- Equipped average; world.equippedAverage overrides (0 = not loaded yet).
     G.GetAverageItemLevel = function()
         if world.equippedAverage then return world.equippedAverage, world.equippedAverage, world.equippedAverage end
@@ -705,7 +716,8 @@ function World:_buildEnv()
             local def = itemID and world.items[itemID]
             -- def.statsAt: stats unavailable until then (like an unloaded tooltip).
             if def and def.statsAt and world.now < def.statsAt then return nil end
-            return def and def.stats or nil
+            if not def or not def.cached then return nil end
+            return def.stats or {}   -- loaded items return a table, empty when statless
         end,
         -- Actual item level; nil until the item's data is loaded.
         GetDetailedItemLevelInfo = function(value)
@@ -734,6 +746,9 @@ function World:_buildEnv()
         end,
         IsBoundToAccountUntilEquip = function(location)
             local stack = stackFor(location)
+            -- Like the client: false for items in the Warband bank (bags 12-16),
+            -- even when the tooltip says "Warbound until equipped".
+            if stack and location and location.bagID and location.bagID >= 12 and location.bagID <= 16 then return false end
             return stack and stack.wue or false
         end,
         GetCurrentItemLevel = function(location)

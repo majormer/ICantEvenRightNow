@@ -224,9 +224,12 @@ function P.RefreshHome()
     local char = P.GetCurrentCharacter()
     local warband = P.GetWarbandSnapshot()
     panel.headline:SetText(ContextHeadline())
+    local checking = P.PendingDetailCount and P.PendingDetailCount() or 0
     panel.scanInfo:SetText("Bags scanned " .. FormatAge(char.lastScan.bags)
         .. "  -  Bank " .. FormatAge(char.lastScan.bank)
-        .. "  -  Warband bank " .. FormatAge(warband.scannedAt))
+        .. "  -  Warband bank " .. FormatAge(warband.scannedAt)
+        .. (checking > 0 and ("  -  |cffffd100Checking details for " .. checking .. " item"
+            .. (checking == 1 and "" or "s") .. "; counts may change|r") or ""))
     panel.rescan:SetEnabled(not ns.DB.context.inCombat)
 
     -- Notice strip
@@ -527,6 +530,8 @@ end
 
 -- Called after a bank or vendor opens and the scan finished.
 function P.OnContextOpened()
+    -- Load gear details now so task lists are complete when opened.
+    if P.PrefetchGearDetails then pcall(P.PrefetchGearDetails) end
     local mode = ns.DB.ui.contextNotice or "notice"
     if mode == "off" or ns.DB.context.inCombat then return end
     if UI.frame and UI.frame:IsShown() then return end

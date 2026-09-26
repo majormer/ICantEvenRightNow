@@ -67,6 +67,7 @@ local REASONS = {
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
+    details_loading      = { disposition = "info",   label = "Checking item details..." },
 }
 P.REASONS = REASONS
 
@@ -258,16 +259,81 @@ local CLASS_STATS = {
 -- when unknown or it has none. Combined keys (ITEM_MOD_AGILITY_INTELLECT_SHORT)
 -- count for each stat they name. Cached per link.
 local primaryStatCache = {}
+
+-- While stats are missing, refresh what's on screen a few times (bounded:
+-- 3 tries, 1.5 s apart), whichever client event does or doesn't announce
+-- the data. Reset once a refresh finds nothing pending.
+local STATS_REFRESH_TRIES = 3
+local statsRefreshTries, statsRefreshScheduled = 0, false
+function P.ScheduleStatsRefresh()
+    if statsRefreshScheduled or statsRefreshTries >= STATS_REFRESH_TRIES or not C_Timer then return end
+    statsRefreshScheduled = true
+    statsRefreshTries = statsRefreshTries + 1
+    C_Timer.After(1.5, function()
+        statsRefreshScheduled = false
+        P.statsPending = false
+        if P.UI.frame and P.UI.frame:IsShown() and ns.Core.RefreshUI then ns.Core.RefreshUI() end
+        if not P.statsPending then statsRefreshTries = 0 end
+    end)
+end
+
+-- When stats that were missing arrive, refresh what's on screen (debounced).
+if CreateFrame then
+    local statsFrame = CreateFrame("Frame")
+    statsFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
+    local pending = false
+    statsFrame:SetScript("OnEvent", function()
+        if not P.statsPending or pending then return end
+        pending = true
+        C_Timer.After(0.5, function()
+            pending = false
+            P.statsPending = false
+            if P.UI.frame and P.UI.frame:IsShown() and ns.Core.RefreshUI then ns.Core.RefreshUI() end
+        end)
+    end)
+end
+-- Items whose details are still loading: { [itemID] = true }. Shown to the
+-- player as "Checking details for N items" (no invisible waiting).
+local detailsPending = {}
+local pendingSince = {}
+local PENDING_LIMIT = 10
+function P.PendingDetailCount()
+    local n = 0
+    for _ in pairs(detailsPending) do n = n + 1 end
+    return n
+end
+
+-- Returns the stat set, or nil and "pending" when the data isn't loaded yet.
 local function PrimaryStats(item)
     local link = item.link or (item.itemID and ("item:" .. item.itemID))
     if not link or not (C_Item and C_Item.GetItemStats) then return nil end
     local cached = primaryStatCache[link]
     if cached ~= nil then return cached or nil end
     local ok, stats = pcall(C_Item.GetItemStats, link)
-    if not ok or type(stats) ~= "table" then
-        P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
-        return nil
+    local loaded = not (C_Item.IsItemDataCachedByID and item.itemID) or C_Item.IsItemDataCachedByID(item.itemID)
+    local missing = not ok or type(stats) ~= "table" or (not loaded and not next(stats))
+    -- GetItemStats may return nothing for some items even when loaded: give
+    -- each item at most PENDING_LIMIT seconds, then judge without stats.
+    local now = GetTime and GetTime() or 0
+    if missing and item.itemID then
+        pendingSince[item.itemID] = pendingSince[item.itemID] or now
+        if now - pendingSince[item.itemID] >= PENDING_LIMIT then
+            detailsPending[item.itemID] = nil
+            primaryStatCache[link] = false
+            return nil
+        end
     end
+    if missing then
+        -- Not loaded yet: in game this made weapons count as usable, so they
+        -- showed up in "Can go" only after something else refreshed.
+        P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
+        if item.itemID and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
+        P.statsPending = true
+        if item.itemID then detailsPending[item.itemID] = true end
+        if P.ScheduleStatsRefresh then P.ScheduleStatsRefresh() end
+        return nil, "pending"
+    end
+    if item.itemID then detailsPending[item.itemID] = nil end
     local set, any = {}, false
     for key in pairs(stats) do
         if type(key) == "string" and key:find("^ITEM_MOD_") then
@@ -278,6 +344,24 @@ local function PrimaryStats(item)
     end
     primaryStatCache[link] = any and set or false
     return any and set or nil
+end
+
+-- True while a gear item's stats are still loading (no verdict yet).
+function P.GearDetailsPending(item)
+    local _, state = PrimaryStats(item)
+    return state == "pending"
+end
+
+-- Ask for the details of every piece of gear the addon knows about, so they
+-- are usually loaded before the player opens a task (called at a bank/vendor).
+function P.PrefetchGearDetails()
+    for _, snapshot in ipairs(P.AllSnapshots and P.AllSnapshots() or {}) do
+        for _, item in ipairs(snapshot.items or {}) do
+            if (item.classID == 2 or item.classID == 4) and item.equipLoc and item.equipLoc ~= "" then
+                PrimaryStats(item)
+            end
+        end
+    end
 end
 
 -- Can this character wear the item at all (armor type, shields, weapon type,
@@ -441,7 +525,13 @@ local function ExplainItem(item, ctx)
         end
     end
 
-    if IsGear(item) then
+    local gearPending = IsGear(item) and AnyRolesAssigned() and P.GearDetailsPending(item)
+    if gearPending then
+        -- No verdict until the stats are in; the list shows it as checking.
+        add("details_loading")
+    end
+
+    if IsGear(item) and not gearPending then
         local collected = AppearanceCollected(item)
         if collected == false then add("appearance_uncollected") end
         if AnyRolesAssigned() then
@@ -515,7 +605,7 @@ local function ExplainItem(item, ctx)
         if REASONS[r.id].disposition == "keep" then hasKeep = true break end
     end
     -- Gear is judged by who it upgrades once roles are set, not by expansion.
-    local judgedAsGear = IsGear(item) and AnyRolesAssigned()
+    local judgedAsGear = IsGear(item) and AnyRolesAssigned()   -- includes gear still loading
     if not hasKeep and not judgedAsGear and item.quality ~= 0 and item.expansionID
         and not P.IsOldExpansion(item.expansionID) then
         add("current_expansion")

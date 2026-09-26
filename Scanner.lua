@@ -99,7 +99,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
         local info = CContainer.GetContainerItemInfo(bagID, slot)
         local itemID = CContainer.GetContainerItemID(bagID, slot)
         local pending = info and itemID and P.IsPendingFromSlot
-            and P.IsPendingFromSlot({ scope = scope, bagID = bagID, slot = slot, itemID = itemID })
+            and P.IsPendingFromSlot({ scope = scope, bagID = bagID, slot = slot, itemID = itemID }, info.isLocked and true or false)
         if info and itemID and not pending then
             if RequestItemDataIfMissing(itemID) then
                 missingData = true

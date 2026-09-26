@@ -528,18 +528,25 @@ end
 -- Slots just sold or moved from. The server settles a few moments later, and
 -- a rescan in between (bag updates fire right away) would list the item again
 -- as ready; in game, 4 of 11 sold items reappeared for about 2 seconds.
-local PENDING_SECONDS = 5
+-- Hidden while the source slot is still locked by the move (big batches take
+-- several seconds: in game 9 of 22 reappeared after a fixed 5 s), up to 30 s.
+local PENDING_SECONDS = 30
 local pendingFromSlots = {}
 
 local function MarkPendingFromSlot(item)
     pendingFromSlots[P.LocationKey(item)] = GetTime() + PENDING_SECONDS
 end
 
-function P.IsPendingFromSlot(item)
+function P.IsPendingFromSlot(item, isLocked)
     local key = P.LocationKey(item)
     local expires = pendingFromSlots[key]
     if not expires then return false end
     if GetTime() >= expires then pendingFromSlots[key] = nil return false end
+    -- Unlocked and still there after the first moment: the move didn't happen.
+    if isLocked == false and GetTime() >= expires - PENDING_SECONDS + 3 then
+        pendingFromSlots[key] = nil
+        return false
+    end
     return true
 end
 
@@ -759,6 +766,6 @@ function Core.ExecuteTransferSelected()
         Core.ScheduleRescanAfterMove()
         -- If a sale or move didn't go through, the item shows again once its
         -- pending mark expires.
-        C_Timer.After(PENDING_SECONDS + 0.5, function() Core.ScanInventory("all", true) end)
+        C_Timer.After(3.5, function() Core.ScanInventory("all", true) end)
     end
 end

@@ -648,6 +648,7 @@ function P.PrepareUndo()
     UI.activeQuickWorkflowName, UI.activeSavedFilterName, UI.activeTaskModified = nil, nil, false
     UI.activeTaskPredicate = function(item) return batch.counts[item.itemID] ~= nil end
     UI.transferSelected = {}
+    UI.frame:Show()
     P.UIKit.SetTab("Transfer")
     local left = {}
     for itemID, n in pairs(batch.counts) do left[itemID] = n end
@@ -2138,6 +2139,18 @@ function Core.RefreshTransferUncached()
     local startIndex = offset + 1
 
     local statusSuffix = UI.inventoryStatus and ("  |  " .. UI.inventoryStatus) or ""
+    -- Items in this source still loading: they may still join this list.
+    local checking = 0
+    if P.GearDetailsPending then
+        for _, plan in ipairs(allCandidates) do
+            if P.GearDetailsPending(plan.item) then checking = checking + 1 end
+        end
+    end
+    if checking > 0 then
+        statusSuffix = "  |  |cffffd100Checking details for " .. checking .. " item" .. (checking == 1 and "" or "s") .. "...|r"
+            .. statusSuffix
+    end
+    UI.transferChecking = checking
     panel.itemCount:SetText(#allCandidates .. " source  •  " .. #matched .. " matching  •  "
         .. movableCount .. " movable  •  " .. selectedCount .. " selected" .. statusSuffix)
 
