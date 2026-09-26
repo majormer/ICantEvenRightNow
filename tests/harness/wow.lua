@@ -195,7 +195,7 @@ function World:put(bagID, slot, itemID, count, opts)
     assert(slot >= 1 and slot <= container.size, "slot out of range")
     container.slots[slot] = {
         itemID = itemID, count = count or 1, locked = opts.locked or false,
-        bound = opts.bound or false, wue = opts.warboundUntilEquipped or false,
+        bound = opts.bound or false, wue = opts.warboundUntilEquipped or false, apiHidesWue = opts.apiHidesWue,
         questActive = opts.questActive,
     }
     return container.slots[slot]
@@ -749,6 +749,7 @@ function World:_buildEnv()
             -- Like the client: false for items in the Warband bank (bags 12-16),
             -- even when the tooltip says "Warbound until equipped".
             if stack and location and location.bagID and location.bagID >= 12 and location.bagID <= 16 then return false end
+            if stack and stack.apiHidesWue then return false end   -- seen in bags too, intermittently
             return stack and stack.wue or false
         end,
         GetCurrentItemLevel = function(location)

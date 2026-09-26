@@ -125,10 +125,12 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         end
     end
 
-    -- In the Warband bank, C_Item.IsBoundToAccountUntilEquip returns false and
-    -- the link says BoE for items the tooltip shows as "Warbound until
-    -- equipped" (verified in game). Read the tooltip there.
-    if not details.isBound and not details.isWarbandBound and bagID and bagID >= 12 and bagID <= 16
+    -- C_Item.IsBoundToAccountUntilEquip can return false for items the
+    -- tooltip shows as "Warbound until equipped": always in the Warband bank,
+    -- and sometimes in bags (in game the same bag item flipped between BoE
+    -- and Warbound between refreshes). The link says BoE for them, so read
+    -- the tooltip for any unbound item the link calls BoE.
+    if not details.isBound and not details.isWarbandBound and bindType == ITEM_BIND_ON_EQUIP
         and C_TooltipInfo and C_TooltipInfo.GetBagItem then
         local wanted = ITEM_ACCOUNTBOUND_UNTIL_EQUIP or "Warbound until equipped"
         local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)

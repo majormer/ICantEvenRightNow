@@ -584,6 +584,7 @@ local function ApplyTransferWorkflow(workflow, panel, savedName)
     UI.transferSelected = {}
     UI.activeTaskPredicate = nil
     UI.warbandFallback = nil
+    UI.membershipTask = nil
     UI.activeSavedFilterName = savedName
     UI.activeQuickWorkflowName = savedName and nil or workflow.name
     UI.activeTaskModified = false
@@ -633,6 +634,50 @@ local function ApplyTransferTask(value, panel)
         local name = value:sub(#SAVED_TASK_PREFIX + 1)
         ApplyTransferWorkflow(FindSavedFilter(name), panel, name)
     end
+end
+
+-- Troubleshooting (enhanced logging): what a task list includes, what it
+-- leaves out and why, and anything that joins it later with its state
+-- before and after. In game, items joined "Sell Items That Can Go" midway
+-- through selling with no visible cause; this records the cause next time.
+local function PlanState(plan)
+    local item = plan.item
+    local e = P.ExplainScanned and P.ExplainScanned(item)
+    local pending = P.GearDetailsPending and P.GearDetailsPending(item)
+    return string.format("%s/%s value=%s bind=%s pending=%s blocked=%s",
+        e and e.disposition or "?", e and e.primary and e.primary.id or "?",
+        tostring(P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") or false),
+        tostring(item.bindingScope), tostring(pending or false), tostring(plan.blocked or "no"))
+end
+
+function P.LogTaskMembership(allCandidates, matched)
+    local task = UI.activeQuickWorkflowName or UI.activeSavedFilterName or "custom"
+    local inList = {}
+    for _, plan in ipairs(matched) do inList[plan.key] = true end
+    local states = {}
+    for _, plan in ipairs(allCandidates) do states[plan.key] = PlanState(plan) end
+    if UI.membershipTask ~= task then
+        UI.membershipTask = task
+        P.Log("list", "%s: %d of %d in the list", task, #matched, #allCandidates)
+        local shown = 0
+        for _, plan in ipairs(allCandidates) do
+            local item = plan.item
+            local isGear = item.classID == 2 or item.classID == 4
+            if not inList[plan.key] and isGear and shown < 60 then
+                shown = shown + 1
+                P.Log("list", "  left out: %s (%s): %s", tostring(item.name), tostring(item.itemID), states[plan.key])
+            end
+        end
+    else
+        for _, plan in ipairs(matched) do
+            if not (UI.membershipIn or {})[plan.key] then
+                P.Log("list", "%s: JOINED %s (%s): before %s; now %s", task, tostring(plan.item.name),
+                    tostring(plan.item.itemID), tostring((UI.membershipStates or {})[plan.key] or "not in source"),
+                    states[plan.key])
+            end
+        end
+    end
+    UI.membershipIn, UI.membershipStates = inList, states
 end
 
 -- /icanteven undo: open Transfer with the last batch's route reversed and
@@ -2007,6 +2052,7 @@ function Core.RefreshTransferUncached()
     end
     SortTransferPlans(visible, sortMode)
     UI.transferVisible = visible
+    if UI.activeTaskPredicate and P.IsLogging() then pcall(P.LogTaskMembership, allCandidates, matched) end
 
     -- Warband routing: space summary, and the choice to use general tabs for
     -- items whose assigned tab is full (never done silently).
