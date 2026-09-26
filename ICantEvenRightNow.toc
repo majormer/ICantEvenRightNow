@@ -22,6 +22,7 @@ Migration.lua
 Characters.lua
 Mail.lua
 Evaluator.lua
+ItemData.lua
 Reasons.lua
 Readiness.lua
 Warband.lua

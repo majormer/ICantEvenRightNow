@@ -662,7 +662,11 @@ function P.RefreshTransferFooter()
         statusSuffix = "  |  |cffffd100" .. readiness .. (settling and "; actions available when done" or "") .. "|r"
             .. statusSuffix
     end
+    if panel.countText == "" then statusSuffix = statusSuffix:gsub("^  |  ", "") end
     panel.itemCount:SetText(panel.countText .. statusSuffix)
+    if UI.transferSettling and panel.empty then
+        panel.empty:SetText(readiness or "Getting ready...")
+    end
 end
 
 function P.LogTaskMembership(allCandidates, matched)
@@ -2090,6 +2094,12 @@ function Core.RefreshTransferUncached()
     panel.warbandFallback:SetText("Use general tabs for " .. fullAssigned .. " item" .. (fullAssigned == 1 and "" or "s"))
     panel.warbandFallback:SetShown(fullAssigned > 0 and not UI.warbandFallback)
 
+    -- Getting ready: no rows until the list is complete, so it doesn't
+    -- change while the player watches (stable results, Readiness.lua).
+    local settlingNow = P.IsSettling and P.IsSettling()
+    UI.transferSettling = settlingNow
+    if settlingNow then matched, visible = {}, {} end
+
     -- Group identical items (same item, same status) into one row (H4).
     local displayRows = {}
     local groupIndex = {}
@@ -2118,7 +2128,9 @@ function Core.RefreshTransferUncached()
     local emptyActionMode
     local emptyActionText
     local emptyScanScope
-    if #allCandidates == 0 and (lastScan or 0) == 0 then
+    if settlingNow then
+        emptyMsg = P.ReadinessText() or "Getting ready..."
+    elseif #allCandidates == 0 and (lastScan or 0) == 0 then
         emptyMsg = "No scan data for " .. GetStorageDisplayName(source) .. "."
         emptyActionMode = "scan"
         emptyScanScope = source == "Bags" and BAG_SCOPE or BANK_SCOPE
@@ -2201,8 +2213,8 @@ function Core.RefreshTransferUncached()
     local offset = FauxScrollFrame_GetOffset(panel.scrollFrame)
     local startIndex = offset + 1
 
-    panel.countText = #allCandidates .. " source  •  " .. #matched .. " matching  •  "
-        .. movableCount .. " movable  •  " .. selectedCount .. " selected"
+    panel.countText = settlingNow and "" or (#allCandidates .. " source  •  " .. #matched .. " matching  •  "
+        .. movableCount .. " movable  •  " .. selectedCount .. " selected")
     P.RefreshTransferFooter()
 
     for i, row in ipairs(panel.rows) do

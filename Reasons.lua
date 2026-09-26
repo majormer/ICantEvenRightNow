@@ -68,6 +68,7 @@ local REASONS = {
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
     details_loading      = { disposition = "info",   label = "Checking item details..." },
+    details_unavailable  = { disposition = "info",   label = "Item details didn't load: Rescan to try again" },
 }
 P.REASONS = REASONS
 
@@ -154,12 +155,10 @@ local function SafeCall(fn, ...)
     return a, b, c, d, e, f, g, h, i, j, k, l, m
 end
 
--- Appearance collection: true/false, or nil when the item has no appearance.
+-- Appearance collection: true/false, or nil when the item has no appearance
+-- (or its details aren't in yet: see ItemData.lua).
 local function AppearanceCollected(item)
-    if not C_TransmogCollection then return nil end
-    local _, sourceID = SafeCall(C_TransmogCollection.GetItemInfo, item.link or item.itemID)
-    if not sourceID then return nil end
-    return SafeCall(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance, sourceID) and true or false
+    return (P.ItemAppearance(item))
 end
 P.IsAppearanceCollected = AppearanceCollected
 
@@ -256,102 +255,18 @@ local CLASS_STATS = {
 }
 
 -- The item's primary stats as a set (STRENGTH/AGILITY/INTELLECT), or nil
--- when unknown or it has none. Combined keys (ITEM_MOD_AGILITY_INTELLECT_SHORT)
--- count for each stat they name. Cached per link.
-local primaryStatCache = {}
+-- when unknown or it has none, plus "pending" while its details are loading
+-- or "failed" when they didn't load (ItemData.lua). Combined keys
+-- (ITEM_MOD_AGILITY_INTELLECT_SHORT) count for each stat they name.
+local primarySets = setmetatable({}, { __mode = "k" })   -- by stat table
 
--- While stats are missing, refresh what's on screen a few times (bounded:
--- 3 tries, 1.5 s apart), whichever client event does or doesn't announce
--- the data. Reset once a refresh finds nothing pending.
-local STATS_REFRESH_TRIES = 3
-local statsRefreshTries, statsRefreshScheduled = 0, false
-function P.ScheduleStatsRefresh()
-    -- While getting ready, Readiness.lua refreshes; afterwards nothing
-    -- changes on screen by itself (player's rule: stable results).
-    if P.IsSettling then return end
-    if statsRefreshScheduled or statsRefreshTries >= STATS_REFRESH_TRIES or not C_Timer then return end
-    statsRefreshScheduled = true
-    statsRefreshTries = statsRefreshTries + 1
-    C_Timer.After(1.5, function()
-        statsRefreshScheduled = false
-        P.statsPending = false
-        if P.UI.frame and P.UI.frame:IsShown() and ns.Core.RefreshUI then ns.Core.RefreshUI() end
-        if not P.statsPending then statsRefreshTries = 0 end
-    end)
-end
-
--- When stats that were missing arrive, refresh what's on screen (debounced).
-if CreateFrame then
-    local statsFrame = CreateFrame("Frame")
-    statsFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
-    local pending = false
-    statsFrame:SetScript("OnEvent", function()
-        if P.IsSettling then return end   -- Readiness.lua handles refreshing
-        if not P.statsPending or pending then return end
-        pending = true
-        C_Timer.After(0.5, function()
-            pending = false
-            P.statsPending = false
-            if P.UI.frame and P.UI.frame:IsShown() and ns.Core.RefreshUI then ns.Core.RefreshUI() end
-        end)
-    end)
-end
--- Items whose details are still loading: { [itemID] = true }. Shown to the
--- player as "Checking details for N items" (no invisible waiting).
-local detailsPending = {}
-local pendingSince = {}
-local loggedPending = {}
-local PENDING_LIMIT = 10
--- Rechecks each pending item, so the count goes down as data arrives even
--- when no list looks at the item (in game it stuck at 456).
-function P.PendingDetailCount()
-    local n = 0
-    for itemID, item in pairs(detailsPending) do
-        if P.GearDetailsPending(item) then n = n + 1 end
-    end
-    return n
-end
-
--- Returns the stat set, or nil and "pending" when the data isn't loaded yet.
 local function PrimaryStats(item)
-    local link = item.link or (item.itemID and ("item:" .. item.itemID))
-    if not link or not (C_Item and C_Item.GetItemStats) then return nil end
-    local cached = primaryStatCache[link]
+    if not item.itemID then return nil end
+    local stats, state = P.ItemStats(item)
+    if state == "loading" then return nil, "pending" end
+    if not stats then return nil, state == "failed" and "failed" or nil end
+    local cached = primarySets[stats]
     if cached ~= nil then return cached or nil end
-    local ok, stats = pcall(C_Item.GetItemStats, link)
-    local loaded = not (C_Item.IsItemDataCachedByID and item.itemID) or C_Item.IsItemDataCachedByID(item.itemID)
-    local missing = not ok or type(stats) ~= "table" or (not loaded and not next(stats))
-    -- GetItemStats may return nothing for some items even when loaded: give
-    -- each item at most PENDING_LIMIT seconds, then judge without stats.
-    local now = GetTime and GetTime() or 0
-    if missing and item.itemID then
-        pendingSince[item.itemID] = pendingSince[item.itemID] or now
-        if now - pendingSince[item.itemID] >= PENDING_LIMIT then
-            detailsPending[item.itemID] = nil
-            primaryStatCache[link] = false
-            return nil
-        end
-    end
-    if missing then
-        -- Not loaded yet: in game this made weapons count as usable, so they
-        -- showed up in "Can go" only after something else refreshed.
-        -- Once per item and session: in game, logging every lookup wrote
-        -- ~2,000 lines in 3 seconds and pushed everything else out of the log.
-        if item.itemID and not loggedPending[item.itemID] then
-            loggedPending[item.itemID] = true
-            P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
-        end
-        if item.itemID and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
-        P.statsPending = true
-        if item.itemID then detailsPending[item.itemID] = item end
-        if P.ScheduleStatsRefresh then P.ScheduleStatsRefresh() end
-        return nil, "pending"
-    end
-    if item.itemID and detailsPending[item.itemID] then
-        detailsPending[item.itemID] = nil
-        if P.NoteLateData then P.NoteLateData() end
-        P.Log("itemdata", "stats loaded for %s (%s)", tostring(item.name), tostring(item.itemID))
-    end
     local set, any = {}, false
     for key in pairs(stats) do
         if type(key) == "string" and key:find("^ITEM_MOD_") then
@@ -360,7 +275,7 @@ local function PrimaryStats(item)
             end
         end
     end
-    primaryStatCache[link] = any and set or false
+    primarySets[stats] = any and set or false
     return any and set or nil
 end
 
@@ -370,17 +285,24 @@ function P.GearDetailsPending(item)
     return state == "pending"
 end
 
--- Ask for the details of every piece of gear the addon knows about, so they
--- are usually loaded before the player opens a task (called at a bank/vendor).
+-- "pending", "failed", or nil when the gear's details are in.
+function P.GearDetailsState(item)
+    local _, state = PrimaryStats(item)
+    return state
+end
+
+-- Ask for the details of this character's items and the Warband bank's
+-- (not every character's snapshot: 456 items in game), so they are usually
+-- loaded before the player opens a task (called at a bank/vendor).
 function P.PrefetchGearDetails()
-    -- Only what this character can act on here: its bags and bank, and the
-    -- Warband bank (not every character's snapshot: 456 items in game).
     local currentKey = P.currentCharacterKey
     for _, snapshot in ipairs(P.AllSnapshots and P.AllSnapshots() or {}) do
         local relevant = snapshot.scope == "warband" or (snapshot.character and snapshot.character.key == currentKey)
         for _, item in ipairs(relevant and snapshot.items or {}) do
             if (item.classID == 2 or item.classID == 4) and item.equipLoc and item.equipLoc ~= "" then
                 PrimaryStats(item)
+            else
+                P.ItemDataState(item)
             end
         end
     end
@@ -548,10 +470,14 @@ local function ExplainItem(item, ctx)
         end
     end
 
-    local gearPending = IsGear(item) and AnyRolesAssigned() and P.GearDetailsPending(item)
-    if gearPending then
+    local detailsState = IsGear(item) and AnyRolesAssigned() and P.GearDetailsState(item) or nil
+    local gearPending = detailsState ~= nil
+    if detailsState == "pending" then
         -- No verdict until the stats are in; the list shows it as checking.
         add("details_loading")
+    elseif detailsState == "failed" then
+        -- Never judge gear without its stats (a guess made weapons look usable).
+        add("details_unavailable")
     end
 
     if IsGear(item) and not gearPending then

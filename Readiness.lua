@@ -22,24 +22,36 @@ P.ReadinessState = state
 
 local function Now() return GetTime and GetTime() or 0 end
 
-local APPEARANCE_FREE_SLOTS = { INVTYPE_TRINKET = true, INVTYPE_FINGER = true, INVTYPE_NECK = true }
-
--- True when an item's verdict could still change because data isn't loaded.
-function P.ItemDataPending(item)
-    if not item or not item.itemID then return false end
-    if item.classID == nil then return true, "item info" end
-    if item.expansionID == nil then return true, "expansion" end
-    if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned() then
-        if P.GearDetailsPending and P.GearDetailsPending(item) then return true, "stats" end
-        -- No appearance answer yet: only "pending" while the item itself isn't
-        -- loaded; a loaded item with no answer simply has no appearance.
-        if not APPEARANCE_FREE_SLOTS[item.equipLoc or ""] and P.IsAppearanceCollected
-            and P.IsAppearanceCollected(item) == nil
-            and C_Item and C_Item.IsItemDataCachedByID and not C_Item.IsItemDataCachedByID(item.itemID) then
-            return true, "appearance"
-        end
+-- Why an item's verdict could still change (nil when it can't): its details
+-- or stats are loading (ItemData.lua), or the scan hasn't described it yet.
+local function PendingReason(item)
+    if not item or not item.itemID then return nil end
+    local state = P.ItemDataState(item)
+    if state == "loading" then return "item details" end
+    if state ~= "ready" then return nil end
+    if item.classID == nil then return "the next scan" end
+    if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
+        and P.GearDetailsState and P.GearDetailsState(item) == "pending" then
+        return "stats"
     end
-    return false
+    return nil
+end
+
+function P.ItemDataPending(item)
+    local why = PendingReason(item)
+    return why ~= nil, why
+end
+
+-- Pending, or given up on: counted as "couldn't be checked".
+local function UnresolvedReason(item)
+    local why = PendingReason(item)
+    if why then return why end
+    if P.ItemDataState(item) == "failed" then return "item details (gave up)" end
+    if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
+        and P.GearDetailsState and P.GearDetailsState(item) == "failed" then
+        return "stats (gave up)"
+    end
+    return nil
 end
 
 -- Items this character can act on here: bags, bank, and the Warband bank.
@@ -84,18 +96,27 @@ local function Refresh()
     if P.UI.frame and P.UI.frame:IsShown() and ns.Core.RefreshUI then ns.Core.RefreshUI() end
 end
 
+-- Update only the lines that say how far along it is (no recount of cards
+-- or lists: those stay "Getting ready..." until Finish).
+local function UpdateTexts()
+    if P.RefreshHomeHeader then pcall(P.RefreshHomeHeader) end
+    if P.RefreshTransferFooter then pcall(P.RefreshTransferFooter) end
+    if state.noticeWanted and P.ShowGettingReadyNotice then pcall(P.ShowGettingReadyNotice, P.ReadinessText()) end
+end
+
 local function Finish()
     state.settling = false
-    state.unresolved = state.pending
+    local unresolved = {}
+    for _, item in ipairs(RelevantItems()) do
+        local why = UnresolvedReason(item)
+        if why then unresolved[#unresolved + 1] = { item = item, why = why } end
+    end
+    state.unresolved = #unresolved
     P.Log("ready", "settled after %.1fs (%s): %d item(s) could not be checked",
         Now() - state.startedAt, tostring(state.reason), state.unresolved)
-    if state.unresolved > 0 then
-        for _, item in ipairs(RelevantItems()) do
-            local pending, why = P.ItemDataPending(item)
-            if pending then
-                P.Log("ready", "  not checked: %s (%s): waiting for %s", tostring(item.name), tostring(item.itemID), tostring(why))
-            end
-        end
+    for _, entry in ipairs(unresolved) do
+        P.Log("ready", "  not checked: %s (%s): waiting for %s",
+            tostring(entry.item.name), tostring(entry.item.itemID), entry.why)
     end
     Refresh()
     if state.noticeWanted then
@@ -113,8 +134,7 @@ local function Tick()
         Finish()
         return
     end
-    Refresh()
-    if state.noticeWanted and P.ShowGettingReadyNotice then pcall(P.ShowGettingReadyNotice, P.ReadinessText()) end
+    UpdateTexts()
     C_Timer.After(TICK, Tick)
 end
 
@@ -129,13 +149,10 @@ function P.BeginSettling(reason, wantsNotice)
     if wantsNotice then state.noticeWanted = true end
     -- Ask for everything up front.
     if P.PrefetchGearDetails then pcall(P.PrefetchGearDetails) end
-    for _, item in ipairs(RelevantItems()) do
-        if P.IsGearItem and P.IsGearItem(item) and P.IsAppearanceCollected then pcall(P.IsAppearanceCollected, item) end
-    end
     state.pending = CountPending()
     P.Log("ready", "getting ready (%s): %d item(s) to check", tostring(reason), state.pending)
     Refresh()
-    if state.noticeWanted and P.ShowGettingReadyNotice then pcall(P.ShowGettingReadyNotice, P.ReadinessText()) end
+    UpdateTexts()
     if not ticking then
         ticking = true
         if C_Timer then C_Timer.After(0, Tick) else Tick() end
@@ -155,4 +172,5 @@ end
 function P.ClearLateData()
     state.lateData = false
     state.unresolved = 0
+    if P.RetryFailedItemData then P.RetryFailedItemData() end
 end
