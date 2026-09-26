@@ -745,6 +745,16 @@ function P.RegisterReasonTasks()
             hideBlocked = true, sort = "Vendor Value" },
         predicate = CanGoAndSellable,
     })
+    -- The same for the Warband bank: in game it held 32 "Can go" stacks while
+    -- the character-bank task (which doesn't read the Warband bank) showed 3.
+    P.RegisterTask({
+        name = "Pull Warband Items That Can Go",
+        description = "Warband bank items you can let go of, into your bags to sell.",
+        preset = { name = "Pull Warband Items That Can Go", source = P.STORAGE_WARBAND_BANK, dest = "Bags",
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = true, sort = "Vendor Value" },
+        predicate = CanGoAndSellable,
+    })
     P.RegisterTask({
         name = "Sell Items That Can Go",
         description = "Junk, collected appearances, learned collectibles, and spent consumables.",

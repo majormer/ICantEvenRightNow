@@ -191,3 +191,17 @@ T.test("no Warband tab bought: no Warband options, cards explain, picker explain
     P.ShowHandoffPicker(P.GetScanList("bags")[1])
     T.contains(g:UI().handoffPicker.title:GetText(), "Buy its first tab")
 end)
+
+T.test("Pull Warband Items That Can Go reads the Warband bank", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(12, 1, I.JUNK, 3)
+    end })
+    g:openBank()
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Pull Warband Items That Can Go" then card = c end end
+    T.ok(card, "task exists")
+    T.eq(card.ready, 1)
+end)
