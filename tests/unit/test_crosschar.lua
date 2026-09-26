@@ -307,3 +307,20 @@ T.test("equipment sets keep items; max-level trinkets and weapons are your call,
     T.contains(explain(8302).evidence, "Main's M+ set")
     T.eq(explain(8303).primary.id, "outgrown_gear", "leveling weapons below max level stay ordinary")
 end)
+
+T.test("soulbound gear only counts for the character who owns it", function()
+    local saved = roster({ { player = MAIN, role = "main" }, { player = TANKALT, role = "leveling" } },
+        { Tankalt = { [2] = 100 } })
+    local g = login(saved, MAIN, function(w)
+        w.equipped[2] = 400
+        w:defineItem(8401, { name = "Bound Pendant", classID = 4, subclassID = 0, equipLoc = "INVTYPE_NECK",
+            itemLevel = 300, requiredLevel = 50, bindType = 1, quality = 4, sellPrice = 100, expansionID = 11 })
+        w:put(0, 1, 8401, 1, { bound = true })
+    end)
+    g:Core().ScanInventory("bags", true)
+    local P = g:P()
+    local pendant = P.GetScanList("bags")[1]
+    T.eq(pendant.isSoulbound, true)
+    T.eq(#P.UpgradeUsersFor(pendant), 0, "Tankalt can't receive a soulbound item")
+    T.ok(P.ExplainScanned(pendant).primary.id ~= "usable_gear")
+end)

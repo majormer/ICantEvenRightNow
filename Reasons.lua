@@ -320,11 +320,26 @@ local function IsSituational(item)
     return maxLevel > 0 and (item.requiredLevel or 0) >= maxLevel
 end
 
-local function GearUsers(item)
+-- The only character who can ever use a Soulbound item (it can't be traded,
+-- mailed or put in the Warband bank): its owner. In game, Soulbound pieces
+-- in Finalomega's bags were kept as "Upgrade for Minormer". Nil when the item
+-- can move between characters.
+local function BoundOwnerKey(item, ownerKey)
+    if item.isSoulbound and not item.isWarbandBound then
+        return ownerKey or P.currentCharacterKey
+    end
+    return nil
+end
+P.BoundOwnerKey = BoundOwnerKey
+
+local function GearUsers(item, ownerKey)
     local users = {}
+    local only = BoundOwnerKey(item, ownerKey)
     for _, char in ipairs(P.CharactersWith("receivesGear")) do
         local levelLimited = P.GetRole(char) == "leveling"
-        if CanCharacterUse(char, item, levelLimited) then table.insert(users, char) end
+        if (not only or char.key == only) and CanCharacterUse(char, item, levelLimited) then
+            table.insert(users, char)
+        end
     end
     return users
 end
@@ -332,11 +347,11 @@ P.GearUsersFor = GearUsers
 
 -- Gear-receiving characters for whom this item beats what they wear
 -- (two-slot items compare against the weaker slot; empty slot = 0).
-local function UpgradeUsers(item)
+local function UpgradeUsers(item, ownerKey)
     local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
     if not slots or not item.itemLevel or item.itemLevel <= 0 then return {} end
     local users = {}
-    for _, char in ipairs(GearUsers(item)) do
+    for _, char in ipairs(GearUsers(item, ownerKey)) do
         -- Unknown equipment (never read, or read before the gear loaded) is
         -- not an upgrade target; fall back to the equipped average if known.
         -- Saves from before this fix hold 0 for every slot: also unknown.
@@ -427,8 +442,9 @@ local function ExplainItem(item, ctx)
         local collected = AppearanceCollected(item)
         if collected == false then add("appearance_uncollected") end
         if AnyRolesAssigned() then
-            local users = GearUsers(item)
-            local upgrades = UpgradeUsers(item)
+            local ownerKey = ctx.owner and ctx.owner.key or nil
+            local users = GearUsers(item, ownerKey)
+            local upgrades = UpgradeUsers(item, ownerKey)
             if #upgrades > 0 then
                 local labels = {}
                 for _, char in ipairs(upgrades) do
