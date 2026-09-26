@@ -476,6 +476,18 @@ Today a Leveling character only counts for gear it can equip now (required level
 - **Heirloom-aware slots:** heirlooms scale while leveling, so ordinary leveling gear for a slot the account covers with an heirloom is rarely worth keeping. For a Leveling character, a slot counts as covered when the account owns a suitable heirloom for it (`C_Heirloom.PlayerHasHeirloom`) whose upgrade tier still covers the character's level (tier caps: base 29 up to tier 6 at level 70, `C_Heirloom.GetHeirloomMaxUpgradeLevel`). Gear for covered slots would not count as an upgrade until the character outlevels the heirloom. Players without heirlooms are unaffected.
 - **Reference:** the author's Heirloom Upgrade Planner addon (`L:\Personal\Repos\Heirloom_Upgrade_Planner`) already maps heirlooms to slots by class, spec, primary stat, armor type and weapon style, handles mutually exclusive items and legacy tier caps, and knows the upgrade tiers and costs. Reuse its slot and eligibility rules rather than rebuilding them.
 
+## 12d. Future: ElvUI Datatext
+
+An optional ElvUI datatext, so ready work is visible on the player's info bars without opening the console.
+
+- **Text:** the most useful ready counts in the current context, for example "Sell: 11 (113g)  Deposit: 44" at a vendor or bank, or the top task and "Nothing ready" elsewhere.
+- **Tooltip:** every ready or waiting task card with its summary (`P.GetTaskCards`, `P.CardSummary`), plus any auction mail warning.
+- **Click:** left-click opens Home; right-click opens Transfer with the top task.
+- **Built in, not a separate addon:** optional code in `Integrations.lua` that registers with ElvUI's datatext module only when ElvUI is loaded (like the BetterBags categories); no effect without ElvUI. Add ElvUI to `OptionalDeps`.
+- **Cost control:** update on the addon's own refresh (context change, scan, transfer), throttled; never compute cards per frame.
+- **Risk:** ElvUI's datatext API and Midnight's protected-value rules change often; verify the registration API against the installed ElvUI before building.
+- **Later, separately:** ElvUI skinning of the console and notice, and settings inside `/ec`, as a setting for players who prefer consistent styling.
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:
