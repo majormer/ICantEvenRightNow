@@ -703,6 +703,8 @@ function World:_buildEnv()
         GetItemStats = function(value)
             local itemID = parseItemID(value)
             local def = itemID and world.items[itemID]
+            -- def.statsAt: stats unavailable until then (like an unloaded tooltip).
+            if def and def.statsAt and world.now < def.statsAt then return nil end
             return def and def.stats or nil
         end,
         -- Actual item level; nil until the item's data is loaded.

@@ -258,6 +258,8 @@ function Core.HandleSlashCommand(msg)
                 .. " line(s) saved (/icanteven log on|off|clear|<count>).")
             for _, line in ipairs(lines) do Print(line) end
         end
+    elseif cmd == "undo" then
+        Print(P.PrepareUndo())
     elseif cmd == "clearerrors" then
         if ns.DB then ns.DB.errorLog = {} end
         Print("Error log cleared.")

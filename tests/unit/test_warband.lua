@@ -205,3 +205,55 @@ T.test("Pull Warband Items That Can Go reads the Warband bank", function()
     T.ok(card, "task exists")
     T.eq(card.ready, 1)
 end)
+
+T.test("undo pre-selects the last batch's items for the reverse route", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(12, 1, I.JUNK, 3)
+        w:put(12, 2, I.LINEN, 20)
+    end })
+    g:openBank()
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = P.STORAGE_WARBAND_BANK, "Bags"
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    for _, plan in ipairs(UI.transferVisible) do UI.transferSelected[plan.key] = true end
+    g.world:withHardwareEvent(function() g:Core().ExecuteTransferSelected() end)
+    g:advance(8)
+    T.eq(#g.world:findItem(I.JUNK), 1)
+    T.ok(g.world:findItem(I.JUNK)[1].bagID < 6, "in bags now")
+    g:slash("undo")
+    T.contains(g:printed(), "Undo: 2 of 2 stack(s) selected to move back to Warband Bank")
+    g.world:withHardwareEvent(function() g:Core().ExecuteTransferSelected() end)
+    g:advance(8)
+    T.eq(g.world:findItem(I.JUNK)[1].bagID, 12, "back in the Warband bank")
+end)
+
+T.test("REPRO: gear whose stats load late is misjudged until something refreshes", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        -- Agility axe, Warbound until equipped: a Strength warrior can't use it.
+        w:defineItem(8601, { name = "Late Axe", classID = 2, subclassID = 0, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 220, requiredLevel = 90, bindType = 2, quality = 3, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 10 }, statsAt = 1790000000 + 30 })
+        w:put(12, 1, 8601, 1, { warboundUntilEquipped = true })
+    end })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openBank()
+    local function cardReady()
+        for _, c in ipairs(g:P().GetTaskCards()) do
+            if c.name == "Pull Warband Items That Can Go" then return c.ready end
+        end
+        return 0
+    end
+    local before = cardReady()
+    g.world:advance(40)          -- stats now available, nothing else happens
+    g:Core().RefreshUI()
+    local after = cardReady()
+    print("REPRO before/after", before, after)
+end)

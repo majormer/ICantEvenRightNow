@@ -264,7 +264,10 @@ local function PrimaryStats(item)
     local cached = primaryStatCache[link]
     if cached ~= nil then return cached or nil end
     local ok, stats = pcall(C_Item.GetItemStats, link)
-    if not ok or type(stats) ~= "table" then return nil end
+    if not ok or type(stats) ~= "table" then
+        P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
+        return nil
+    end
     local set, any = {}, false
     for key in pairs(stats) do
         if type(key) == "string" and key:find("^ITEM_MOD_") then

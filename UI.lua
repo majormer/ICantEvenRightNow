@@ -635,6 +635,37 @@ local function ApplyTransferTask(value, panel)
     end
 end
 
+-- /icanteven undo: open Transfer with the last batch's route reversed and
+-- the same items (by item and stack count) pre-selected. The player still
+-- clicks to move them. Returns a message.
+function P.PrepareUndo()
+    local batch = P.PopUndoBatch()
+    if not batch then return "Nothing to undo in this session." end
+    Core.CreateUI()
+    UI.transferSource, UI.transferDest = batch.dest, batch.source
+    ResetTabFilters("Transfer")
+    SetFilterHideBlocked("Transfer", false)
+    UI.activeQuickWorkflowName, UI.activeSavedFilterName, UI.activeTaskModified = nil, nil, false
+    UI.activeTaskPredicate = function(item) return batch.counts[item.itemID] ~= nil end
+    UI.transferSelected = {}
+    P.UIKit.SetTab("Transfer")
+    local left = {}
+    for itemID, n in pairs(batch.counts) do left[itemID] = n end
+    local selected = 0
+    for _, plan in ipairs(UI.transferVisible or {}) do
+        local id = plan.item.itemID
+        if plan.movable and (left[id] or 0) > 0 then
+            UI.transferSelected[plan.key] = true
+            left[id] = left[id] - 1
+            selected = selected + 1
+        end
+    end
+    Core.RefreshUI()
+    P.Log("transfer", "undo prepared: %d of %d stack(s) selected to move back to %s", selected, batch.stacks, batch.source)
+    return "Undo: " .. selected .. " of " .. batch.stacks .. " stack(s) selected to move back to "
+        .. GetStorageDisplayName(batch.source) .. ". Review and click to move them."
+end
+
 -- Open a task from Home: apply its route and filters, optionally pre-select
 -- its safe movable items (setting, off by default), and show the review list.
 function P.OpenTask(name)

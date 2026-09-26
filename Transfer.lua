@@ -592,6 +592,31 @@ end
 -- Core.ExecuteTransferOne / Core.ExecuteTransferSelected
 -- ===========================================================================
 
+-- Recent batches of moves (not sales), newest last, for /icanteven undo.
+-- Kept in saved data so a reload doesn't lose them; undo only pre-selects
+-- matching items (by item and stack count) and the player still clicks.
+local UNDO_LIMIT = 10
+local function UndoStack()
+    ns.DB.undoStack = ns.DB.undoStack or {}
+    return ns.DB.undoStack
+end
+
+local function RecordUndo(source, dest, movedItems)
+    if dest == "Vendor" or #movedItems == 0 then return end
+    local counts, order = {}, {}
+    for _, item in ipairs(movedItems) do
+        if not counts[item.itemID] then table.insert(order, item.itemID) end
+        counts[item.itemID] = (counts[item.itemID] or 0) + 1
+    end
+    local stack = UndoStack()
+    table.insert(stack, { source = source, dest = dest, counts = counts, order = order, stacks = #movedItems,
+        at = time and time() or 0 })
+    while #stack > UNDO_LIMIT do table.remove(stack, 1) end
+end
+
+function P.PopUndoBatch() return table.remove(UndoStack()) end
+function P.PeekUndoBatch() local stack = UndoStack() return stack[#stack] end
+
 function Core.ExecuteTransferOne(plan)
     Core.UpdateContext()
     local item = plan.item
@@ -609,6 +634,7 @@ function Core.ExecuteTransferOne(plan)
         moved and "ok" or ("failed: " .. tostring(err)))
     if moved then
         MarkPendingFromSlot(item)
+        RecordUndo(source, dest, { item })
         if P.OnItemMoved then P.OnItemMoved(item, dest) end
         HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil
@@ -663,6 +689,7 @@ function Core.ExecuteTransferSelected()
     local processed = {}
     local remaining = 0
     local protectedSold = 0
+    local movedItems = {}
     local plans = UI.transferVisible or {}
     if dest == "Vendor" then plans = VendorOrder(plans) end
     for _, plan in ipairs(plans) do
@@ -683,6 +710,7 @@ function Core.ExecuteTransferSelected()
                     MarkPendingFromSlot(item)
                     if P.OnItemMoved then P.OnItemMoved(item, dest) end
                     movedKeys[item.key] = true
+                    table.insert(movedItems, item)
                     moved = moved + 1
                     if not IsJunk(item) then protectedSold = protectedSold + 1 end
                 else
@@ -703,6 +731,7 @@ function Core.ExecuteTransferSelected()
     end
     -- Items not reached (vendor batch limit) stay selected for the next click.
     for key in pairs(processed) do UI.transferSelected[key] = nil end
+    RecordUndo(source, dest, movedItems)
     RemoveMovedItemsFromScan(movedKeys)
     if moved > 0 then
         HoldReservedSlotsUntilSettled()
