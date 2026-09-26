@@ -34,6 +34,15 @@ local known = {}
 
 local function Now() return GetTime and GetTime() or 0 end
 
+-- Cache key for one item variant: the "item:..." part of its link (bonus IDs
+-- included). The full link's display text changes when the client drops and
+-- reloads the item (seen in game), which made every cache lookup miss.
+local function VariantKey(item)
+    local link = item.link
+    local itemString = type(link) == "string" and link:match("item:[%-%d:]+")
+    return itemString or ("item:" .. item.itemID)
+end
+
 local function IsCached(itemID)
     if not (C_Item and C_Item.IsItemDataCachedByID) then return true end
     return C_Item.IsItemDataCachedByID(itemID) and true or false
@@ -64,6 +73,11 @@ local function Wait(item, what)
     if not rec or rec.what ~= what then
         rec = { since = Now(), state = "loading", what = what, name = item.name }
         records[itemID] = rec
+        if known[itemID] then
+            -- Read before, now waiting again: worth knowing why (link shape).
+            P.Log("itemdata", "waiting again for the %s of %s (%s), link %s",
+                what, tostring(item.name), tostring(itemID), tostring(item.link and item.link:gsub("|", "||")))
+        end
         if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
     end
     if rec.state == "loading" and Now() - rec.since >= LOAD_LIMIT then
@@ -95,15 +109,16 @@ function P.ItemStats(item)
     if not item or not item.itemID or not (C_Item and C_Item.GetItemStats) then return nil, "ready" end
     local itemID = item.itemID
     local link = item.link or ("item:" .. itemID)
+    local key = VariantKey(item)
     local byLink = statsCache[itemID]
-    if byLink and byLink[link] then return byLink[link], "ready" end
+    if byLink and byLink[key] then return byLink[key], "ready" end
     local state = P.ItemDataState(item)
     if state == "loading" or state == "missing" then return nil, state end
     local ok, stats = pcall(C_Item.GetItemStats, link)
     if ok and type(stats) == "table" then
         known[itemID] = true
         statsCache[itemID] = byLink or {}
-        statsCache[itemID][link] = stats
+        statsCache[itemID][key] = stats
         if records[itemID] and records[itemID].what == "stats" then Resolved(itemID) end
         return stats, "ready"
     end
@@ -115,14 +130,14 @@ end
 function P.ItemAppearance(item)
     if not item or not item.itemID or not C_TransmogCollection then return nil, "ready" end
     local itemID = item.itemID
-    local key = item.link or itemID
+    local key = VariantKey(item)
     local byLink = appearanceCache[itemID]
     local sourceID = byLink and byLink[key]
     local state = "ready"
     if sourceID == nil then
         state = P.ItemDataState(item)
         if state == "loading" or state == "missing" then return nil, state end
-        local ok, _, source = pcall(C_TransmogCollection.GetItemInfo, key)
+        local ok, _, source = pcall(C_TransmogCollection.GetItemInfo, item.link or itemID)
         sourceID = ok and source or false
         if state == "ready" then
             appearanceCache[itemID] = byLink or {}

@@ -116,3 +116,19 @@ T.test("item data: a read item stays ready when the cached flag flickers", funct
     T.eq(stats.ITEM_MOD_STRENGTH_SHORT, 10)
     T.ok(not P.GearDetailsPending(item), "no 'checking details' again")
 end)
+
+T.test("item data: stats survive the link text changing when the game reloads an item", function()
+    local g = game({})
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    local item = helm(g)
+    T.eq(select(2, P.ItemStats(item)), "ready")
+    -- The game dropped the item: its link reads differently and stats aren't answered.
+    local reloaded = {}
+    for k, v in pairs(item) do reloaded[k] = v end
+    reloaded.link = item.link:gsub("%[.-%]", "[]")
+    g.world.items[8701].statsAt = g.world.now + 60
+    local stats, state = P.ItemStats(reloaded)
+    T.eq(state, "ready")
+    T.eq(stats.ITEM_MOD_STRENGTH_SHORT, 10)
+end)
