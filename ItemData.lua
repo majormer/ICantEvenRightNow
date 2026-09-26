@@ -34,13 +34,22 @@ local known = {}
 
 local function Now() return GetTime and GetTime() or 0 end
 
--- Cache key for one item variant: the "item:..." part of its link (bonus IDs
--- included). The full link's display text changes when the client drops and
--- reloads the item (seen in game), which made every cache lookup miss.
+-- Cache key for one item variant: item ID plus bonus IDs (what decides its
+-- stats and appearance). Other link fields change on their own: the name text
+-- goes blank when the client drops the item, and modifier values differed
+-- between two reads of the same item in game, so whole-link keys kept missing.
+-- Item string: item:ID:enchant:gem1:gem2:gem3:gem4:suffix:unique:level:spec:
+-- upgradeType:difficulty:numBonusIDs:bonus1:...
 local function VariantKey(item)
     local link = item.link
     local itemString = type(link) == "string" and link:match("item:[%-%d:]+")
-    return itemString or ("item:" .. item.itemID)
+    if not itemString then return tostring(item.itemID) end
+    local fields = {}
+    for field in (itemString .. ":"):gmatch("([^:]*):") do fields[#fields + 1] = field end
+    local key = { tostring(item.itemID) }
+    local numBonus = tonumber(fields[14]) or 0
+    for i = 1, numBonus do key[#key + 1] = fields[14 + i] or "" end
+    return table.concat(key, ":")
 end
 
 local function IsCached(itemID)
@@ -75,8 +84,8 @@ local function Wait(item, what)
         records[itemID] = rec
         if known[itemID] then
             -- Read before, now waiting again: worth knowing why (link shape).
-            P.Log("itemdata", "waiting again for the %s of %s (%s), link %s",
-                what, tostring(item.name), tostring(itemID), tostring(item.link and item.link:gsub("|", "||")))
+            P.Log("itemdata", "waiting again for the %s of %s (%s), key %s",
+                what, tostring(item.name), tostring(itemID), VariantKey(item))
         end
         if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, itemID) end
     end
