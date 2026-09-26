@@ -324,3 +324,19 @@ T.test("soulbound gear only counts for the character who owns it", function()
     T.eq(#P.UpgradeUsersFor(pendant), 0, "Tankalt can't receive a soulbound item")
     T.ok(P.ExplainScanned(pendant).primary.id ~= "usable_gear")
 end)
+
+T.test("Deposit to Warband leaves out gear that can go", function()
+    local saved = roster({ { player = MAIN, role = "main" } }, { Main = { [10] = 300 } })
+    local g = T.game({ savedVariables = saved, player = MAIN, setup = function(w)
+        F.defineItems(w) F.addBank(w)
+        w.equipped[10] = 300
+        -- Warbound-until-equipped cloth gloves: a warrior can't wear them.
+        w:defineItem(8501, { name = "Silk Gloves", classID = 4, subclassID = 1, equipLoc = "INVTYPE_HAND",
+            itemLevel = 250, requiredLevel = 80, bindType = 2, quality = 3, sellPrice = 100, expansionID = 11 })
+        w:put(0, 1, 8501, 1, { warboundUntilEquipped = true })
+    end })
+    g:openBank()
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
+    T.eq(card.total, 0, "nobody can wear it: sell it, don't store it")
+end)

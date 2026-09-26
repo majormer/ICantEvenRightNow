@@ -54,7 +54,14 @@ local TASK_EXTRAS = {
     ["Sell Old Consumables"] = { description = "Potions, food, and flasks from past expansions." },
     ["Deposit to Warband"] = {
         description = "Items your other characters can use, sorted into Warband tabs by their settings.",
-        predicate = IsShareable,
+        -- Only items worth keeping: in game this also offered appearance-
+        -- collected gear nobody can use, which moves clutter instead of
+        -- clearing it. "Can go" and "Your call" items stay out.
+        predicate = function(item)
+            if not IsShareable(item) then return false end
+            if not P.ExplainScanned then return true end
+            return P.ExplainScanned(item).disposition == "keep"
+        end,
     },
     ["Consolidate Warbound Gear"] = { description = "Warbound gear from the character bank into the Warband bank." },
 }
