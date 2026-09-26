@@ -76,3 +76,14 @@ T.test("greens and better stop at 12 per click; junk sells in full, first", func
     for _, lost in ipairs(g.world.lostToBuyback) do T.eq(lost.itemID, I.JUNK) end
     T.contains(g:printed(), "2 more selected")
 end)
+
+T.test("at a vendor the notice suggests selling, not auction candidates", function()
+    local g = T.game({ player = PLAYER, setup = F.setup(function(w)
+        for slot = 1, 3 do w:put(0, slot, I.JUNK, 1) end
+    end) })
+    g:openVendor()
+    local card = g:P().GetTopReadyCard()
+    T.ok(card, "a card")
+    local _, dest = g:P().GetTaskRoute(card.task)
+    T.eq(dest, "Vendor")
+end)

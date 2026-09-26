@@ -298,9 +298,13 @@ local detailsPending = {}
 local pendingSince = {}
 local loggedPending = {}
 local PENDING_LIMIT = 10
+-- Rechecks each pending item, so the count goes down as data arrives even
+-- when no list looks at the item (in game it stuck at 456).
 function P.PendingDetailCount()
     local n = 0
-    for _ in pairs(detailsPending) do n = n + 1 end
+    for itemID, item in pairs(detailsPending) do
+        if P.GearDetailsPending(item) then n = n + 1 end
+    end
     return n
 end
 
@@ -335,7 +339,7 @@ local function PrimaryStats(item)
         end
         if item.itemID and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
         P.statsPending = true
-        if item.itemID then detailsPending[item.itemID] = true end
+        if item.itemID then detailsPending[item.itemID] = item end
         if P.ScheduleStatsRefresh then P.ScheduleStatsRefresh() end
         return nil, "pending"
     end
@@ -364,8 +368,12 @@ end
 -- Ask for the details of every piece of gear the addon knows about, so they
 -- are usually loaded before the player opens a task (called at a bank/vendor).
 function P.PrefetchGearDetails()
+    -- Only what this character can act on here: its bags and bank, and the
+    -- Warband bank (not every character's snapshot: 456 items in game).
+    local currentKey = P.currentCharacterKey
     for _, snapshot in ipairs(P.AllSnapshots and P.AllSnapshots() or {}) do
-        for _, item in ipairs(snapshot.items or {}) do
+        local relevant = snapshot.scope == "warband" or (snapshot.character and snapshot.character.key == currentKey)
+        for _, item in ipairs(relevant and snapshot.items or {}) do
             if (item.classID == 2 or item.classID == 4) and item.equipLoc and item.equipLoc ~= "" then
                 PrimaryStats(item)
             end

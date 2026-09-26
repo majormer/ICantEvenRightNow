@@ -260,6 +260,14 @@ function P.GetTopReadyCard()
         end
         return nil
     end
+    -- At a vendor, a ready task that sells comes first (in game the notice
+    -- showed Auction Candidates at a vendor).
+    if ns.DB.context.vendorOpen then
+        for _, card in ipairs(cards) do
+            local _, dest = TaskRoute(card.task or {})
+            if card.ready > 0 and not card.task.count and dest == "Vendor" then return card end
+        end
+    end
     for _, card in ipairs(cards) do
         if card.ready > 0 then return card end
         break
