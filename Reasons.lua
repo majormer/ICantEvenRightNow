@@ -296,6 +296,7 @@ end
 -- player as "Checking details for N items" (no invisible waiting).
 local detailsPending = {}
 local pendingSince = {}
+local loggedPending = {}
 local PENDING_LIMIT = 10
 function P.PendingDetailCount()
     local n = 0
@@ -326,14 +327,22 @@ local function PrimaryStats(item)
     if missing then
         -- Not loaded yet: in game this made weapons count as usable, so they
         -- showed up in "Can go" only after something else refreshed.
-        P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
+        -- Once per item and session: in game, logging every lookup wrote
+        -- ~2,000 lines in 3 seconds and pushed everything else out of the log.
+        if item.itemID and not loggedPending[item.itemID] then
+            loggedPending[item.itemID] = true
+            P.Log("itemdata", "stats not available yet for %s (%s)", tostring(item.name), tostring(item.itemID))
+        end
         if item.itemID and C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(item.itemID) end
         P.statsPending = true
         if item.itemID then detailsPending[item.itemID] = true end
         if P.ScheduleStatsRefresh then P.ScheduleStatsRefresh() end
         return nil, "pending"
     end
-    if item.itemID then detailsPending[item.itemID] = nil end
+    if item.itemID and detailsPending[item.itemID] then
+        detailsPending[item.itemID] = nil
+        P.Log("itemdata", "stats loaded for %s (%s)", tostring(item.name), tostring(item.itemID))
+    end
     local set, any = {}, false
     for key in pairs(stats) do
         if type(key) == "string" and key:find("^ITEM_MOD_") then

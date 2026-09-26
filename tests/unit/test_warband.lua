@@ -244,6 +244,7 @@ T.test("gear whose stats load late updates the lists by itself when the data arr
         w:put(12, 1, 8601, 1, { warboundUntilEquipped = true })
     end })
     g:P().SetCharacterRole("Main-R", "main")
+    g:P().SetLogging(true)
     g:openBank()
     g:Core().ShowHomeUI()
     local function cardText()
@@ -262,6 +263,9 @@ T.test("gear whose stats load late updates the lists by itself when the data arr
     g.world:advance(6)           -- stats arrive; nobody clicks anything
     T.eq(cardText(), 1, "the card updated by itself")
     T.notContains(g:UI().frame.panels.Home.scanInfo:GetText(), "Checking details", "indicator clears")
+    local lines, pendingLines = g:P().GetLogLines(), 0
+    for _, line in ipairs(lines) do if line:find("stats not available yet for Late Axe", 1, true) then pendingLines = pendingLines + 1 end end
+    T.ok(pendingLines <= 1, "logged once, not per lookup (" .. pendingLines .. ")")
 end)
 
 T.test("Warbound-until-equipped items in the Warband bank are read from the tooltip", function()
