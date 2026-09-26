@@ -102,3 +102,17 @@ T.test("getting ready: items that never load are named in the log", function()
     end
     T.ok(found, "the log names the item")
 end)
+
+T.test("item data: a read item stays ready when the cached flag flickers", function()
+    local g = game({})
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    local item = helm(g)
+    T.eq(select(2, P.ItemStats(item)), "ready")
+    g.world.items[8701].cached = false   -- the game briefly says "not cached"
+    T.eq(P.ItemDataState(item), "ready")
+    local stats, state = P.ItemStats(item)
+    T.eq(state, "ready")
+    T.eq(stats.ITEM_MOD_STRENGTH_SHORT, 10)
+    T.ok(not P.GearDetailsPending(item), "no 'checking details' again")
+end)

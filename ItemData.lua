@@ -27,6 +27,10 @@ local records = {}
 local statsCache = {}
 -- [itemID] = { [link] = sourceID or false (no appearance) }
 local appearanceCache = {}
+-- Items read successfully this session. Details never go stale, and in game
+-- C_Item.IsItemDataCachedByID flipped back to false for ~70 gear items a few
+-- seconds after they were read (2026-09-26), which made them "loading" again.
+local known = {}
 
 local function Now() return GetTime and GetTime() or 0 end
 
@@ -76,8 +80,10 @@ function P.ItemDataState(item)
     local itemID = item.itemID
     local rec = records[itemID]
     if rec and rec.state == "missing" then return "missing" end
+    if known[itemID] and not rec then return "ready" end
     if IsCached(itemID) then
         if rec and rec.what == "item" then Resolved(itemID) rec = nil end
+        known[itemID] = true
         if not rec then return "ready" end
         return rec.state == "loading" and "ready" or rec.state
     end
@@ -88,13 +94,14 @@ end
 function P.ItemStats(item)
     if not item or not item.itemID or not (C_Item and C_Item.GetItemStats) then return nil, "ready" end
     local itemID = item.itemID
-    local state = P.ItemDataState(item)
-    if state == "loading" or state == "missing" then return nil, state end
     local link = item.link or ("item:" .. itemID)
     local byLink = statsCache[itemID]
     if byLink and byLink[link] then return byLink[link], "ready" end
+    local state = P.ItemDataState(item)
+    if state == "loading" or state == "missing" then return nil, state end
     local ok, stats = pcall(C_Item.GetItemStats, link)
     if ok and type(stats) == "table" then
+        known[itemID] = true
         statsCache[itemID] = byLink or {}
         statsCache[itemID][link] = stats
         if records[itemID] and records[itemID].what == "stats" then Resolved(itemID) end
@@ -106,15 +113,15 @@ end
 
 -- Appearance collected: true/false, or nil when the item has none; and the state.
 function P.ItemAppearance(item)
-    if not item or not item.itemID then return nil, "ready" end
-    local state = P.ItemDataState(item)
-    if state == "loading" or state == "missing" then return nil, state end
-    if not C_TransmogCollection then return nil, state end
+    if not item or not item.itemID or not C_TransmogCollection then return nil, "ready" end
     local itemID = item.itemID
     local key = item.link or itemID
     local byLink = appearanceCache[itemID]
     local sourceID = byLink and byLink[key]
+    local state = "ready"
     if sourceID == nil then
+        state = P.ItemDataState(item)
+        if state == "loading" or state == "missing" then return nil, state end
         local ok, _, source = pcall(C_TransmogCollection.GetItemInfo, key)
         sourceID = ok and source or false
         if state == "ready" then

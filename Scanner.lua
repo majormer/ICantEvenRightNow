@@ -101,9 +101,10 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
         local pending = info and itemID and P.IsPendingFromSlot
             and P.IsPendingFromSlot({ scope = scope, bagID = bagID, slot = slot, itemID = itemID }, info.isLocked and true or false)
         if info and itemID and not pending then
-            if RequestItemDataIfMissing(itemID) then
-                missingData = true
-            end
+            -- Ask for the data, but only count the item as missing when the
+            -- lookup below comes back empty: the "cached" flag alone flickers
+            -- (in game it read false for items GetItemInfo still answered).
+            RequestItemDataIfMissing(itemID)
             -- Prefer the hyperlink from container info: it carries upgrade-level suffixes
             -- and is more likely to trigger a cache hit than a bare itemID.
             local hyperlink = info.hyperlink
