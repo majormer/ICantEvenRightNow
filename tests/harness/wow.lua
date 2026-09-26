@@ -683,6 +683,12 @@ function World:_buildEnv()
             if not def then return nil end
             return itemID, def.itemType, def.itemSubType, def.equipLoc, def.icon, def.classID, def.subclassID
         end,
+        -- Item stats: def.stats, e.g. { ITEM_MOD_STRENGTH_SHORT = 20 }.
+        GetItemStats = function(value)
+            local itemID = parseItemID(value)
+            local def = itemID and world.items[itemID]
+            return def and def.stats or nil
+        end,
         -- Actual item level; nil until the item's data is loaded.
         GetDetailedItemLevelInfo = function(value)
             local itemID = parseItemID(value)

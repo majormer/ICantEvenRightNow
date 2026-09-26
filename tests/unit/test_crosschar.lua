@@ -244,3 +244,40 @@ T.test("gear levels are read again after login when they weren't loaded", functi
     T.eq(char.equipped[16], 280)
     T.eq(char.averageItemLevel, 275)
 end)
+
+T.test("weapon types and primary stats limit who can use gear", function()
+    local DRUID = { name = "Druidalt", realm = "R", level = 90, classFile = "DRUID" }
+    local PRIEST = { name = "Priestalt", realm = "R", level = 90, classFile = "PRIEST" }
+    local saved = roster({ { player = MAIN, role = "main" }, { player = DRUID, role = "leveling" },
+        { player = PRIEST, role = "leveling" } })
+    local g = login(saved, MAIN, function(w)
+        w:defineItem(8201, { name = "Old Bow", classID = 2, subclassID = 2, equipLoc = "INVTYPE_RANGED",
+            itemLevel = 300, requiredLevel = 80, bindType = 2, sellPrice = 1, expansionID = 9 })
+        w:defineItem(8202, { name = "Old Sword", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 300, requiredLevel = 80, bindType = 2, sellPrice = 1, expansionID = 9,
+            stats = { ITEM_MOD_STRENGTH_SHORT = 10 } })
+        w:defineItem(8203, { name = "Brute Trinket", classID = 4, subclassID = 0, equipLoc = "INVTYPE_TRINKET",
+            itemLevel = 300, requiredLevel = 80, bindType = 2, sellPrice = 1, expansionID = 9,
+            stats = { ITEM_MOD_STRENGTH_SHORT = 10 } })
+        w:defineItem(8204, { name = "Hybrid Trinket", classID = 4, subclassID = 0, equipLoc = "INVTYPE_TRINKET",
+            itemLevel = 300, requiredLevel = 80, bindType = 2, sellPrice = 1, expansionID = 9,
+            stats = { ITEM_MOD_AGILITY_INTELLECT_SHORT = 10 } })
+        w:put(0, 1, 8201, 1) w:put(0, 2, 8202, 1) w:put(0, 3, 8203, 1) w:put(0, 4, 8204, 1)
+    end)
+    g:Core().ScanInventory("bags", true)
+    local P = g:P()
+    local function users(id)
+        for _, item in ipairs(P.GetScanList("bags")) do
+            if item.itemID == id then
+                local names = {}
+                for _, c in ipairs(P.GearUsersFor(item)) do names[#names + 1] = c.name end
+                table.sort(names)
+                return table.concat(names, ",")
+            end
+        end
+    end
+    T.eq(users(8201), "Main", "a warrior can use a bow; druids and priests cannot")
+    T.eq(users(8202), "Main", "swords: not druids or priests")
+    T.eq(users(8203), "Main", "a Strength trinket only for the warrior")
+    T.eq(users(8204), "Druidalt,Priestalt", "Agility/Intellect trinket: druid and priest, not a Strength warrior")
+end)

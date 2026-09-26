@@ -213,8 +213,85 @@ P.IsGearItem = IsGear
 
 local SHIELD_CLASSES = { PALADIN = true, SHAMAN = true, WARRIOR = true }
 
--- Can this character wear the item at all (armor type, shields, level)?
+-- Weapon proficiencies by weapon subclass (Enum.ItemWeaponSubclass), from
+-- warcraft.wiki.gg "Proficiency" (verified 2026-09-26). Without this, bows and
+-- swords counted as upgrades for Druids and Priests and were kept (in game).
+local function Classes(list)
+    local set = {}
+    for class in list:gmatch("%S+") do set[class] = true end
+    return set
+end
+local WEAPON_CLASSES = {
+    [0]  = Classes("DEATHKNIGHT DEMONHUNTER EVOKER HUNTER MONK PALADIN ROGUE SHAMAN WARRIOR"),        -- 1H axe
+    [1]  = Classes("DEATHKNIGHT EVOKER HUNTER PALADIN SHAMAN WARRIOR"),                              -- 2H axe
+    [2]  = Classes("HUNTER ROGUE WARRIOR"),                                                           -- bow
+    [3]  = Classes("HUNTER ROGUE WARRIOR"),                                                           -- gun
+    [4]  = Classes("DEATHKNIGHT DRUID EVOKER MONK PALADIN PRIEST ROGUE SHAMAN WARRIOR"),             -- 1H mace
+    [5]  = Classes("DEATHKNIGHT DRUID EVOKER PALADIN SHAMAN WARRIOR"),                               -- 2H mace
+    [6]  = Classes("DEATHKNIGHT DRUID HUNTER MONK PALADIN WARRIOR"),                                 -- polearm
+    [7]  = Classes("DEATHKNIGHT DEMONHUNTER EVOKER HUNTER MAGE MONK PALADIN ROGUE WARLOCK WARRIOR"), -- 1H sword
+    [8]  = Classes("DEATHKNIGHT EVOKER HUNTER PALADIN WARRIOR"),                                     -- 2H sword
+    [9]  = Classes("DEMONHUNTER"),                                                                    -- warglaive
+    [10] = Classes("DRUID EVOKER HUNTER MAGE MONK PRIEST SHAMAN WARLOCK WARRIOR"),                   -- staff
+    [13] = Classes("DEMONHUNTER DRUID EVOKER HUNTER MONK ROGUE SHAMAN WARRIOR"),                     -- fist
+    [15] = Classes("DRUID EVOKER HUNTER MAGE PRIEST ROGUE SHAMAN WARLOCK WARRIOR"),                  -- dagger
+    [18] = Classes("HUNTER ROGUE WARRIOR"),                                                           -- crossbow
+    [19] = Classes("MAGE PRIEST WARLOCK"),                                                            -- wand
+}
+P.WEAPON_CLASSES = WEAPON_CLASSES
+
+-- Primary stats each class can use (any spec). A Strength trinket is no use
+-- to a Priest.
+local CLASS_STATS = {
+    DEATHKNIGHT = { STRENGTH = true }, WARRIOR = { STRENGTH = true },
+    PALADIN = { STRENGTH = true, INTELLECT = true },
+    DEMONHUNTER = { AGILITY = true }, HUNTER = { AGILITY = true }, ROGUE = { AGILITY = true },
+    DRUID = { AGILITY = true, INTELLECT = true }, MONK = { AGILITY = true, INTELLECT = true },
+    SHAMAN = { AGILITY = true, INTELLECT = true },
+    EVOKER = { INTELLECT = true }, MAGE = { INTELLECT = true }, PRIEST = { INTELLECT = true },
+    WARLOCK = { INTELLECT = true },
+}
+
+-- The item's primary stats as a set (STRENGTH/AGILITY/INTELLECT), or nil
+-- when unknown or it has none. Combined keys (ITEM_MOD_AGILITY_INTELLECT_SHORT)
+-- count for each stat they name. Cached per link.
+local primaryStatCache = {}
+local function PrimaryStats(item)
+    local link = item.link or (item.itemID and ("item:" .. item.itemID))
+    if not link or not (C_Item and C_Item.GetItemStats) then return nil end
+    local cached = primaryStatCache[link]
+    if cached ~= nil then return cached or nil end
+    local ok, stats = pcall(C_Item.GetItemStats, link)
+    if not ok or type(stats) ~= "table" then return nil end
+    local set, any = {}, false
+    for key in pairs(stats) do
+        if type(key) == "string" and key:find("^ITEM_MOD_") then
+            for _, stat in ipairs({ "STRENGTH", "AGILITY", "INTELLECT" }) do
+                if key:find(stat, 1, true) then set[stat] = true any = true end
+            end
+        end
+    end
+    primaryStatCache[link] = any and set or false
+    return any and set or nil
+end
+
+-- Can this character wear the item at all (armor type, shields, weapon type,
+-- primary stat, level)?
 local function CanCharacterUse(char, item, levelLimited)
+    local class = char.classFile or ""
+    if item.classID == 2 and item.subclassID and WEAPON_CLASSES[item.subclassID] and class ~= "" then
+        if not WEAPON_CLASSES[item.subclassID][class] then return false end
+    end
+    if (item.classID == 2 or item.classID == 4) and CLASS_STATS[class] then
+        local stats = PrimaryStats(item)
+        if stats then
+            local usable = false
+            for stat in pairs(stats) do
+                if CLASS_STATS[class][stat] then usable = true break end
+            end
+            if not usable then return false end
+        end
+    end
     if item.classID == 4 then
         local sub = item.subclassID
         if sub == 6 then
