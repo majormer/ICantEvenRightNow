@@ -69,6 +69,13 @@ Check `/icanteven ctx`. Known false signals, all removed:
 
 Another addon sold them (seen with the "Vendor" addon). This addon only sells selected items from a Sell click, at most 12 per click. Check the Buyback tab, and disable auto-sell in other addons while testing.
 
+### Movement keys work, but you can't type in chat
+
+Not this addon: its only text boxes (Transfer search and item level) never take focus by themselves, and a focused box would also block movement. Two causes seen in testing:
+
+- Another window holds keyboard focus (a Windows notification did once). WoW still reads movement keys but typed characters go to the focused window. Dismiss notifications (Win+N) and click into the game.
+- Another addon: disable all addons, then re-enable in groups. In 2026-09 it was TomTom v4.3.11 (no errors were logged; the culprit took input silently).
+
 ### Items show without names, or as "Item 12345"
 
 The client hadn't loaded their data when they were scanned. `/icanteven itemdata` shows what's still missing. Scans retry when data arrives (`GET_ITEM_INFO_RECEIVED`).
