@@ -504,6 +504,18 @@ Next, matched to how much the player has set up (detected from the tab settings,
 - **Some settings:** as built; plus a one-line note when many items fall back to general tabs.
 - **Detailed settings:** no suggestions. Per-item destination rules ("always put this in Tab 4") alongside Protect, Ignore and Never Sell.
 
+## 12g. Future: Hoard Explorer ("Confront your hoard")
+
+A place to explore everything the account holds and decide, instead of only acting on task lists. Motivated by the 0.6.0 cleanup session, where the useful view was a per-item report read outside the game (`/icanteven why items`).
+
+- **One row per item, deduplicated across the account:** total count, and where it is (each character's bags and bank, the Warband bank) with counts and scan ages.
+- **Verdict and why:** the item's disposition (Can go, Your call, Keep, No clear reason) and its reasons with evidence, as the Why engine gives them ("Upgrade for Shamekink", "Starts a quest you already completed", "In Finalomega's M+ set").
+- **What it is:** a copyable Wowhead link (`https://www.wowhead.com/item=<id>`), shown in a selectable box on click, since addons can't open a browser. Especially useful for quest items and old materials the player doesn't recognize.
+- **Sort and group:** by verdict, by value, by slots used, by how long held, by expansion. "Biggest wins first": the items that free the most slots or gold.
+- **Act from it:** each row links to the task or route that handles it (sell, deposit, pull, hand off) and to the row menu (Protect, Keepsake, Keep for an alt), so exploring turns into decisions.
+- **Export:** a copyable text/CSV of the whole list for reading or sorting outside the game.
+- **The "No clear reason" bucket first:** 45 Warband and 108 bank stacks had no reason in testing; the explorer is where the player teaches the addon (keep reasons) or lets them go.
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:
