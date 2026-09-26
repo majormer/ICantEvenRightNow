@@ -448,6 +448,35 @@ local function ItemValue(item)
 end
 
 -- scope: "current" (this character's bags + bank, and the Warband bank) or "all".
+-- One line per item for the enhanced log (/icanteven why items): where it is,
+-- item level, binding, and the primary reason with its evidence. Too long for
+-- chat; meant for reading from the saved file.
+function P.WhyItemLines(scope)
+    local currentKey = P.currentCharacterKey or P.GetCharacterKey()
+    local lines = {}
+    for _, snapshot in ipairs(P.AllSnapshots()) do
+        local char = snapshot.character
+        local include = scope == "all" or snapshot.scope == "warband" or (char and char.key == currentKey)
+        if include then
+            local label = snapshot.scope == "warband" and "Warband" or ((char and char.name or "?") .. " " .. snapshot.scope)
+            local locationKey = snapshot.scope == "warband" and "warband" or LocationKeyFor(snapshot.scope, char and char.key)
+            for _, item in ipairs(snapshot.items) do
+                if P.GetItemType and not item.typeTag then item.typeTag = P.GetItemType(item) end
+                local explanation = ExplainItem(item, { locationKey = locationKey, owner = char })
+                local evidence = {}
+                for _, r in ipairs(explanation.reasons or {}) do
+                    evidence[#evidence + 1] = r.id .. (r.evidence and (":" .. r.evidence) or "")
+                end
+                lines[#lines + 1] = string.format("%s | %s x%d | q%s ilvl %s req %s | %s | %s | %s",
+                    label, tostring(item.name), item.count or 1, tostring(item.quality), tostring(item.itemLevel),
+                    tostring(item.requiredLevel), tostring(item.bindingScope), explanation.disposition,
+                    table.concat(evidence, "; "))
+            end
+        end
+    end
+    return lines
+end
+
 function P.BuildWhyReport(scope)
     local currentKey = P.currentCharacterKey or P.GetCharacterKey()
     local groups, total = {}, 0

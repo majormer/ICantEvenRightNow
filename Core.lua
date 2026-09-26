@@ -265,7 +265,17 @@ function Core.HandleSlashCommand(msg)
         -- Read-only: explains why items are being kept. "/icanteven why all" covers every known character.
         local scope = (arg1 or ""):lower() == "all" and "all" or "current"
         if scope == "current" then pcall(Core.ScanInventory, ns.DB.context.bankOpen and "all" or BAG_SCOPE, true) end
-        for _, line in ipairs(P.WhyReportLines(scope)) do Print(line) end
+        if (arg1 or ""):lower() == "items" then
+            -- Per-item detail goes to the enhanced log only (hundreds of lines).
+            if not P.IsLogging() then P.SetLogging(true) Print("Enhanced logging turned on.") end
+            local lines = P.WhyItemLines("current")
+            for _, line in ipairs(lines) do P.Log("why", "%s", line) end
+            Print(#lines .. " item line(s) written to the enhanced log (/icanteven log, or the saved file after /reload).")
+        else
+            local lines = P.WhyReportLines(scope)
+            for _, line in ipairs(lines) do Print(line) end
+            for _, line in ipairs(lines) do P.Log("why", "%s", line) end
+        end
     elseif cmd == "where" then
         for _, line in ipairs(P.WhereIsLines(arg1)) do Print(line) end
     elseif cmd == "migration" then
