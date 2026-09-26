@@ -164,6 +164,7 @@ function P.BuildHomeTab(parent)
     parent.rescan = kit.CreateButton(parent, "Rescan", 80, 24)
     parent.rescan:SetPoint("RIGHT", parent.custom, "LEFT", -8, 0)
     parent.rescan:SetScript("OnClick", function()
+        if P.ClearLateData then P.ClearLateData() end
         Core.ScanInventory(ns.DB.context.bankOpen and "all" or BAG_SCOPE, true)
         Core.RefreshUI()
     end)
@@ -224,12 +225,11 @@ function P.RefreshHome()
     local char = P.GetCurrentCharacter()
     local warband = P.GetWarbandSnapshot()
     panel.headline:SetText(ContextHeadline())
-    local checking = P.PendingDetailCount and P.PendingDetailCount() or 0
+    local readiness = P.ReadinessText and P.ReadinessText()
     panel.scanInfo:SetText("Bags scanned " .. FormatAge(char.lastScan.bags)
         .. "  -  Bank " .. FormatAge(char.lastScan.bank)
         .. "  -  Warband bank " .. FormatAge(warband.scannedAt)
-        .. (checking > 0 and ("  -  |cffffd100Checking details for " .. checking .. " item"
-            .. (checking == 1 and "" or "s") .. "; counts may change|r") or ""))
+        .. (readiness and ("  -  |cffffd100" .. readiness .. "|r") or ""))
     panel.rescan:SetEnabled(not ns.DB.context.inCombat)
 
     -- Notice strip
@@ -529,9 +529,17 @@ function P.HideContextNotice()
 end
 
 -- Called after a bank or vendor opens and the scan finished.
+-- A bank, vendor or auction house opened: get ready first; the notice shows
+-- once the data is in (Readiness.lua), so its numbers don't change after.
 function P.OnContextOpened()
-    -- Load gear details now so task lists are complete when opened.
-    if P.PrefetchGearDetails then pcall(P.PrefetchGearDetails) end
+    if P.BeginSettling then
+        P.BeginSettling("context", true)
+    else
+        P.ShowContextNotice()
+    end
+end
+
+function P.ShowContextNotice()
     local mode = ns.DB.ui.contextNotice or "notice"
     if mode == "off" or ns.DB.context.inCombat then return end
     if UI.frame and UI.frame:IsShown() then return end
@@ -570,7 +578,7 @@ function P.RefreshContextNotice()
     local frame = UI.contextNoticeFrame
     if not (frame and frame:IsShown()) then return end
     frame:Hide()
-    P.OnContextOpened()
+    P.ShowContextNotice()
 end
 
 -- Cross-character hand-offs (Warband.lua) need both tasks and Home notices.

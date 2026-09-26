@@ -452,6 +452,9 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
 
     -- Keep the roster's facts (level, professions) current for this character.
     -- Gear levels are often not loaded at login; read them again shortly after.
+    if event == "PLAYER_ENTERING_WORLD" and P.BeginSettling then
+        C_Timer.After(1, function() pcall(P.BeginSettling, "login", false) end)
+    end
     if event == "PLAYER_ENTERING_WORLD" and P.RefreshEquipped then
         for _, delay in ipairs({ 5, 20 }) do
             C_Timer.After(delay, function()

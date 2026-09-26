@@ -76,9 +76,9 @@ Not this addon: its only text boxes (Transfer search and item level) never take 
 - Another window holds keyboard focus (a Windows notification did once). WoW still reads movement keys but typed characters go to the focused window. Dismiss notifications (Win+N) and click into the game.
 - Another addon: disable all addons, then re-enable in groups. In 2026-09 it was TomTom v4.3.11 (no errors were logged; the culprit took input silently).
 
-### Items join a list a few seconds late / "Checking details for N items"
+### "Getting ready... checking N items" / counts that used to change by themselves
 
-Gear is judged partly on its main stat, which the game loads on demand. Until it arrives, the item shows "Checking item details..." (no verdict), the Home header and Transfer footer say how many are still loading, and the list refreshes by itself when the data arrives (each item waits at most 10 seconds). Details are requested when a bank or vendor opens, so this is usually done before a task is opened.
+Gear is judged partly on its main stat and appearance, which the game loads on demand. After a reload, or when a bank, vendor or auction house opens, the addon requests those details and waits (at most 8 seconds) before showing counts, the notice or actions, so the numbers don't change while you watch. Items still missing after that are reported as "N items couldn't be checked". Details arriving later show "Some item details arrived after checking: Rescan to include them"; the screen doesn't change until you click Rescan. The log shows `[ready]` lines for each wait and `[list]` lines for what each task included.
 
 ### An item reads "BoE" in the Warband bank but "Warbound until equipped" in bags
 

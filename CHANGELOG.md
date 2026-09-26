@@ -13,6 +13,7 @@ Release note rules:
 
 ### Added
 
+- **Getting ready, then stable results.** After a reload, or when a bank, vendor or auction house opens, the addon waits for item details first and says "Getting ready... checking N items". Counts, the notice and actions appear once, complete, instead of changing while you watch. Details that arrive later are flagged ("Rescan to include them") rather than changing the screen.
 - **Home screen.** The console opens on Home, where every task is a card with a live count and value ("Deposit Old Items: 23 ready (4g 12s)"). Cards that need a bank or vendor say so, and clicking a card opens its review list. Home replaces the Summary tab and the task dropdown.
 - **Character roles.** A new Characters tab lists every character that has logged in with the addon. Give each one a role (Main / Active; Leveling, which also covers alts that craft; Crafting only; Utility), with what each role does shown on the tab, and the addon uses the roles to decide which characters can use an item. Unassigned characters are ignored. Each character is asked once, with a suggested role (and "Same as" your last configured alt); you can also accept all suggestions at once.
 - **Warband tabs.** Each Warband bank tab is its own source and destination, and "Warband (by tab settings)" sends each item to the tab whose Blizzard "assign to" settings match it. The addon never changes your tab settings.

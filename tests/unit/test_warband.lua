@@ -232,7 +232,7 @@ T.test("undo pre-selects the last batch's items for the reverse route", function
     T.eq(g.world:findItem(I.JUNK)[1].bagID, 12, "back in the Warband bank")
 end)
 
-T.test("gear whose stats load late updates the lists by itself when the data arrives", function()
+local function lateAxeGame(statsDelay, openHome)
     local g = T.game({ player = P_MAIN, setup = function(w)
         F.defineItems(w)
         w:addBankTab(0, 6, "Main", 0, 20)
@@ -240,32 +240,59 @@ T.test("gear whose stats load late updates the lists by itself when the data arr
         -- Agility axe, Warbound until equipped: a Strength warrior can't use it.
         w:defineItem(8601, { name = "Late Axe", classID = 2, subclassID = 0, equipLoc = "INVTYPE_WEAPON",
             itemLevel = 220, requiredLevel = 90, bindType = 2, quality = 3, sellPrice = 100, expansionID = 11,
-            stats = { ITEM_MOD_AGILITY_SHORT = 10 }, statsAt = 1790000000 + 2 })   -- name loaded, stats late (as in game)
+            stats = { ITEM_MOD_AGILITY_SHORT = 10 }, statsAt = 1790000000 + statsDelay })
         w:put(12, 1, 8601, 1, { warboundUntilEquipped = true })
     end })
     g:P().SetCharacterRole("Main-R", "main")
     g:P().SetLogging(true)
     g:openBank()
-    g:Core().ShowHomeUI()
-    local function cardText()
-        for _, widget in ipairs(g:UI().frame.panels.Home.cards) do
-            if widget:IsShown() and widget.card and widget.card.name == "Pull Warband Items That Can Go" then
-                return widget.card.ready
-            end
+    if openHome ~= false then g:Core().ShowHomeUI() end
+    return g
+end
+
+local function pullCard(g)
+    for _, widget in ipairs(g:UI().frame.panels.Home.cards) do
+        if widget:IsShown() and widget.card and widget.card.name == "Pull Warband Items That Can Go" then
+            return widget.card
         end
-        return 0
     end
-    T.eq(cardText(), 0, "stats unknown: not judged Can go yet")
-    T.contains(g:UI().frame.panels.Home.scanInfo:GetText(), "Checking details for 1 item", "the wait is visible")
-    local axe
-    for _, it in ipairs(g:P().GetWarbandSnapshot().items) do if it.itemID == 8601 then axe = it end end
-    T.eq(g:P().ExplainScanned(axe).primary.id, "details_loading", "no verdict while loading")
-    g.world:advance(6)           -- stats arrive; nobody clicks anything
-    T.eq(cardText(), 1, "the card updated by itself")
-    T.notContains(g:UI().frame.panels.Home.scanInfo:GetText(), "Checking details", "indicator clears")
-    local lines, pendingLines = g:P().GetLogLines(), 0
-    for _, line in ipairs(lines) do if line:find("stats not available yet for Late Axe", 1, true) then pendingLines = pendingLines + 1 end end
-    T.ok(pendingLines <= 1, "logged once, not per lookup (" .. pendingLines .. ")")
+end
+
+T.test("getting ready: no counts until the data is in, then one stable result", function()
+    local g = lateAxeGame(2)
+    local header = g:UI().frame.panels.Home.scanInfo
+    T.contains(header:GetText(), "Getting ready... checking 1 item")
+    local card = pullCard(g)
+    T.eq(card and g:P().CardSummary(card) or "Getting ready...", "Getting ready...", "no count while getting ready")
+    g.world:advance(4)           -- stats arrive; the addon settles
+    T.notContains(header:GetText(), "Getting ready")
+    T.eq(pullCard(g).ready, 1, "complete result")
+end)
+
+T.test("getting ready: the bank notice waits until the data is in", function()
+    local g = lateAxeGame(2, false)
+    local notice = g:UI().contextNoticeFrame
+    T.ok(not notice or not notice:IsShown(), "no notice while getting ready")
+    g.world:advance(4)
+    notice = g:UI().contextNoticeFrame
+    T.ok(notice and notice:IsShown(), "notice after settling")
+    T.notContains(notice.text:GetText(), "Getting ready")
+end)
+
+T.test("data arriving after settling doesn't change the screen until Rescan", function()
+    local g = lateAxeGame(15)       -- longer than the 10 s limit
+    g.world:advance(11)             -- settled without the axe's stats
+    local header = g:UI().frame.panels.Home.scanInfo
+    T.contains(header:GetText(), "couldn't be checked")
+    local before = pullCard(g) and pullCard(g).ready or 0
+    g.world:advance(6)              -- stats arrive late
+    g:Core().RefreshUI()            -- e.g. any unrelated refresh
+    local p = g:P()
+    for _, it in ipairs(p.GetWarbandSnapshot().items) do if it.itemID == 8601 then p.GearDetailsPending(it) end end
+    g:Core().RefreshUI()
+    T.contains(header:GetText(), "Rescan to include them", "late data is flagged, not applied silently")
+    g:click(g:UI().frame.panels.Home.rescan)
+    T.notContains(header:GetText(), "Rescan to include")
 end)
 
 T.test("Warbound-until-equipped items in the Warband bank are read from the tooltip", function()

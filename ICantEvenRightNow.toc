@@ -23,6 +23,7 @@ Characters.lua
 Mail.lua
 Evaluator.lua
 Reasons.lua
+Readiness.lua
 Warband.lua
 Filter.lua
 Scanner.lua

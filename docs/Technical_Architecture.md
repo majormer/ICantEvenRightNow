@@ -30,6 +30,7 @@ Design intent:
 | `Mail.lua` | Auction mail reminder: `auctionAt` on AUCTION_HOUSE_SHOW, `mail` inbox summary on MAIL_INBOX_UPDATE, `auctionFlag`; `P.MailDeadline`, `P.MailAtRisk` (10-day window), `P.MailRiskText`. Home notice `auction-mail` (priority 40, 12 when 3 days or less). |
 | `Evaluator.lua` | Binding detection, item type classification, decisions (`BuildDecision`, `GetAllDecisions`) |
 | `Reasons.lua` | "Why is this here?" detectors, time held per location, keep reasons, `ExplainItem`, `/icanteven why` report, who-benefits hints, reason-driven tasks |
+| `Readiness.lua` | Getting ready, then stable results. `P.BeginSettling(reason, wantsNotice)` on login and context open prefetches stats and item data and waits (at most 8 s) while `P.ItemDataPending` holds for relevant items; meanwhile `P.IsSettling()` is true, card summaries read "Getting ready...", Transfer actions are disabled and the context notice is deferred. `P.ReadinessText()` feeds the Home header and Transfer footer. Data arriving later calls `P.NoteLateData()` (flagged, not applied); Rescan calls `P.ClearLateData()`. |
 | `Warband.lua` | Warband tab routing by `depositFlags`, alt hand-off queue |
 | `Filter.lua` | Filter state and matching, upgrade detection, quick tasks (`QUICK_WORKFLOWS`), saved tasks |
 | `Scanner.lua` | Container scanning (incl. quest info), bounded item-data retries, time-held and hand-off upkeep after scans |

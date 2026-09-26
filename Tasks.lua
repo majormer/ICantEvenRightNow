@@ -260,13 +260,19 @@ function P.GetTopReadyCard()
         end
         return nil
     end
-    -- At a vendor, a ready task that sells comes first (in game the notice
-    -- showed Auction Candidates at a vendor).
+    -- At a vendor, the ready selling task with the most items comes first
+    -- (in game the notice showed Auction Candidates, then Sell Old
+    -- Consumables with 5 while Sell Items That Can Go had 9).
     if ns.DB.context.vendorOpen then
+        local best
         for _, card in ipairs(cards) do
             local _, dest = TaskRoute(card.task or {})
-            if card.ready > 0 and not card.task.count and dest == "Vendor" then return card end
+            if card.ready > 0 and not card.task.count and dest == "Vendor"
+                and (not best or card.ready > best.ready) then
+                best = card
+            end
         end
+        if best then return best end
     end
     for _, card in ipairs(cards) do
         if card.ready > 0 then return card end
@@ -278,6 +284,7 @@ end
 -- One-line card summary: "23 ready (4g 12s)" / "12 waiting: Visit a bank".
 function P.CardSummary(card)
     if card.filterOnly then return "Filter preset (no route)" end
+    if P.IsSettling and P.IsSettling() then return "Getting ready..." end
     if card.task and not card.task.count and not card.task.open then
         local source, dest = TaskRoute(card.task)
         if (P.IsWarbandStorage(source) or P.IsWarbandStorage(dest)) and P.WarbandTabsPurchased() == 0 then

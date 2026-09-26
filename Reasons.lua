@@ -266,6 +266,9 @@ local primaryStatCache = {}
 local STATS_REFRESH_TRIES = 3
 local statsRefreshTries, statsRefreshScheduled = 0, false
 function P.ScheduleStatsRefresh()
+    -- While getting ready, Readiness.lua refreshes; afterwards nothing
+    -- changes on screen by itself (player's rule: stable results).
+    if P.IsSettling then return end
     if statsRefreshScheduled or statsRefreshTries >= STATS_REFRESH_TRIES or not C_Timer then return end
     statsRefreshScheduled = true
     statsRefreshTries = statsRefreshTries + 1
@@ -283,6 +286,7 @@ if CreateFrame then
     statsFrame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     local pending = false
     statsFrame:SetScript("OnEvent", function()
+        if P.IsSettling then return end   -- Readiness.lua handles refreshing
         if not P.statsPending or pending then return end
         pending = true
         C_Timer.After(0.5, function()
@@ -345,6 +349,7 @@ local function PrimaryStats(item)
     end
     if item.itemID and detailsPending[item.itemID] then
         detailsPending[item.itemID] = nil
+        if P.NoteLateData then P.NoteLateData() end
         P.Log("itemdata", "stats loaded for %s (%s)", tostring(item.name), tostring(item.itemID))
     end
     local set, any = {}, false
@@ -483,6 +488,7 @@ local function AnyRolesAssigned()
     local counts = P.CountByRole()
     return (counts.main + counts.leveling + counts.crafter + counts.utility) > 0
 end
+P.RolesAssigned = AnyRolesAssigned
 
 -- ---------------------------------------------------------------------------
 -- Detection

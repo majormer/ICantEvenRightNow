@@ -1507,6 +1507,7 @@ local function BuildTransferTab(parent)
     parent.rescan = CreateButton(parent, "Rescan", 96)
     parent.rescan:SetPoint("TOPRIGHT", parent, "TOPLEFT", CONTENT_WIDTH, TASK_Y)
     parent.rescan:SetScript("OnClick", function()
+        if P.ClearLateData then P.ClearLateData() end
         Core.ScanInventory(IsBankContextDetected() and "all" or BAG_SCOPE)
     end)
 
@@ -2162,10 +2163,11 @@ function Core.RefreshTransferUncached()
         actionLabel = "Move " .. selectedCount
     end
     panel.execute:SetText(actionLabel)
-    panel.execute:SetEnabled(not ns.DB.context.inCombat and selectedCount > 0)
+    local notReady = P.IsSettling and P.IsSettling()
+    panel.execute:SetEnabled(not ns.DB.context.inCombat and selectedCount > 0 and not notReady)
     panel.clearSel:SetEnabled(selectedCount > 0)
     panel.clearSel:SetShown(selectedCount > 0)
-    panel.selectAll:SetEnabled(movableCount > 0)
+    panel.selectAll:SetEnabled(movableCount > 0 and not (P.IsSettling and P.IsSettling()))
     panel.selectAll:SetShown(movableCount > 0)
     panel.selectAll:ClearAllPoints()
     panel.selectAll:SetPoint("RIGHT", selectedCount > 0 and panel.clearSel or panel.execute, "LEFT", -8, 0)
@@ -2185,18 +2187,13 @@ function Core.RefreshTransferUncached()
     local startIndex = offset + 1
 
     local statusSuffix = UI.inventoryStatus and ("  |  " .. UI.inventoryStatus) or ""
-    -- Items in this source still loading: they may still join this list.
-    local checking = 0
-    if P.GearDetailsPending then
-        for _, plan in ipairs(allCandidates) do
-            if P.GearDetailsPending(plan.item) then checking = checking + 1 end
-        end
-    end
-    if checking > 0 then
-        statusSuffix = "  |  |cffffd100Checking details for " .. checking .. " item" .. (checking == 1 and "" or "s") .. "...|r"
+    -- Getting ready: no actions until the list is complete (stable results).
+    local settling = P.IsSettling and P.IsSettling()
+    local readiness = P.ReadinessText and P.ReadinessText()
+    if readiness then
+        statusSuffix = "  |  |cffffd100" .. readiness .. (settling and "; actions available when done" or "") .. "|r"
             .. statusSuffix
     end
-    UI.transferChecking = checking
     panel.itemCount:SetText(#allCandidates .. " source  •  " .. #matched .. " matching  •  "
         .. movableCount .. " movable  •  " .. selectedCount .. " selected" .. statusSuffix)
 
@@ -2260,7 +2257,7 @@ function Core.RefreshTransferUncached()
                 actionText = "Move"
             end
             row.action:SetText(actionText)
-            row.action:SetEnabled(plan.movable)
+            row.action:SetEnabled(plan.movable and not (P.IsSettling and P.IsSettling()))
             row.action:SetScript("OnClick", function()
                 -- Acts on every stack in the row; vendor sales stop at one buyback batch.
                 local limit = (dest == "Vendor" and not P.IsVendorJunk(item)) and (P.VENDOR_BATCH_SIZE or 12) or #members
