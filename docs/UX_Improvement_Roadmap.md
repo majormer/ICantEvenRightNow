@@ -468,6 +468,14 @@ Auctions expire after at most 48 hours and come back by mail, sale gold arrives 
 - **As built:** better than last login. At each mailbox visit the addon records the soonest expiry of mail carrying items or gold (`GetInboxHeaderInfo` daysLeft); an auction house visit after that adds a 30-day deadline for returns and sales. Warns 10 days before the earliest deadline (urgent in the last 3). Characters are marked by visiting an auction house (60 days) or by the "Auctions" checkbox; mail with items or gold warns on any character.
 - **Limits:** mail that arrives while the character is offline (other than auction returns) is unknown until its next mailbox visit.
 
+## 12c. Future: Leveling Look-Ahead and Heirloom-Aware Gear
+
+Today a Leveling character only counts for gear it can equip now (required level at or below its current level). Two refinements for later:
+
+- **Look-ahead window (setting, off by default):** also keep gear up to N levels above the character's current level (for example 10), for players who want a small buffer.
+- **Heirloom-aware slots:** heirlooms scale while leveling, so ordinary leveling gear for a slot the account covers with an heirloom is rarely worth keeping. For a Leveling character, a slot counts as covered when the account owns a suitable heirloom for it (`C_Heirloom.PlayerHasHeirloom`) whose upgrade tier still covers the character's level (tier caps: base 29 up to tier 6 at level 70, `C_Heirloom.GetHeirloomMaxUpgradeLevel`). Gear for covered slots would not count as an upgrade until the character outlevels the heirloom. Players without heirlooms are unaffected.
+- **Reference:** the author's Heirloom Upgrade Planner addon (`L:\Personal\Repos\Heirloom_Upgrade_Planner`) already maps heirlooms to slots by class, spec, primary stat, armor type and weapon style, handles mutually exclusive items and legacy tier caps, and knows the upgrade tiers and costs. Reuse its slot and eligibility rules rather than rebuilding them.
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:
