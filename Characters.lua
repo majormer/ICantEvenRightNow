@@ -23,9 +23,10 @@ local ROLE_DEFS = {
     main       = { label = "Main / Active", receivesGear = true,  receivesMaterials = true,
                    description = "A character you play. Gets gear upgrades and materials for its professions." },
     leveling   = { label = "Leveling",      receivesGear = true,  receivesMaterials = true, levelLimitedGear = true,
-                   description = "A character you are leveling. Gets gear it can use now and materials for its professions." },
-    crafter    = { label = "Crafter",       receivesGear = false, receivesMaterials = true,
-                   description = "Profession-only. Gets materials for its professions, never gear." },
+                   description = "An alt you are leveling (crafters too). Gets gear it can wear now and materials for its professions." },
+    -- "Crafter" read as "has professions"; the role means "never send gear".
+    crafter    = { label = "Crafting only", receivesGear = false, receivesMaterials = true,
+                   description = "Kept only for professions. Gets materials for its professions, never gear." },
     utility    = { label = "Utility",       receivesGear = false, receivesMaterials = false,
                    description = "Gold farmer, bank or auction alt. Receives nothing; its items are yours to move or sell." },
     unassigned = { label = "Unassigned",    receivesGear = false, receivesMaterials = false,
@@ -255,6 +256,7 @@ end
 P.GetRole = GetRole
 
 function P.GetRoleLabel(role) return (ROLE_DEFS[role] or ROLE_DEFS.unassigned).label end
+function P.GetRoleDescription(role) return (ROLE_DEFS[role] or ROLE_DEFS.unassigned).description end
 
 function P.RoleReceives(role, capability)
     local def = ROLE_DEFS[role or "unassigned"] or ROLE_DEFS.unassigned
@@ -369,6 +371,7 @@ local function SuggestRole(char)
     end
     if #professions > 0 then
         return "crafter", "Level " .. tostring(char.level or "?") .. " with " .. table.concat(professions, " and ")
+            .. "; pick Leveling if you still level it"
     end
     return "utility", "Level " .. tostring(char.level or "?") .. " without professions"
 end

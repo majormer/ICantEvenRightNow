@@ -108,7 +108,7 @@ Each character gets exactly one role, set account-wide from any character:
 |---|---|---|---|
 | Main / Active | Yes | For its professions | Characters actually played |
 | Leveling | Yes, level-appropriate only | For its professions | Alts being leveled |
-| Crafter | Never | For its professions | Tradeskill-only alts |
+| Crafting only (was "Crafter") | Never | For its professions | Tradeskill-only alts. Renamed in testing: "Crafter" read as "has professions", and a leveling alt that crafts was set to it and lost gear. Leveling already covers alts that also craft. |
 | Utility | Never | Never | Garrison gold farmers, bank or AH mules |
 | Unassigned (default) | Never | Never | Every character not yet sorted |
 

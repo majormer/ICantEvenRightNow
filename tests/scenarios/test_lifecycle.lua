@@ -75,7 +75,7 @@ T.test("alt, first login: rules and tasks from the main apply; role suggested; h
     local saved = g:logout()
     -- The alt must exist before it can receive hand-offs: log it in once.
     local altFirst = session(saved, ALT, function(w) end)
-    T.contains(homeNotice(altFirst), "Suggested: Crafter (Level 14 with Tailoring)")
+    T.contains(homeNotice(altFirst), "Suggested: Crafting only (Level 14 with Tailoring")
     local sameAs
     for _, b in ipairs(altFirst:UI().frame.panels.Home.notice.buttons) do
         if b:IsShown() and b:GetText() == "Same as Mainchar" then sameAs = b end
@@ -85,7 +85,7 @@ T.test("alt, first login: rules and tasks from the main apply; role suggested; h
     local myMats
     for _, c in ipairs(altFirst:P().GetTaskCards()) do if c.name == "My Mats" then myMats = c end end
     T.ok(myMats, "saved task shared account-wide")
-    clickNoticeButton(altFirst, "Yes, Crafter")
+    clickNoticeButton(altFirst, "Yes, Crafting only")
     saved = altFirst:logout()
 
     -- Main sends linen.

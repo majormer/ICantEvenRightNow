@@ -20,7 +20,7 @@ It is not built for:
 
 Dozens of characters, few played. Some farm gold (garrisons), some only craft.
 
-- Sets roles once: played characters Main / Active, the alt being leveled Leveling, profession alts Crafter, farmers and mules Utility. Unassigned alts are ignored.
+- Sets roles once: played characters Main / Active, alts being leveled Leveling (including alts that also craft), alts kept only for professions Crafting only, farmers and mules Utility. Unassigned alts are ignored.
 - Uses Deposit to Warband to share only what another character benefits from, and Send to Alts / Waiting for You for specific hand-offs.
 - Relies on "Upgrade for <alt>" and "Used by <alt> (<profession>)" hints; gear nobody played can wear is suggested for selling instead of hoarding.
 

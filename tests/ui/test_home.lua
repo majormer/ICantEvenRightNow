@@ -206,7 +206,7 @@ T.test("Characters tab lists the roster and accepts suggestions in bulk", functi
     game:slash("characters")
     local panel = game:UI().frame.panels.Characters
     T.contains(panel.rows[1].name:GetText(), "Main-R  (you)")
-    T.contains(panel.rows[2].suggestion:GetText(), "Crafter")
+    T.contains(panel.rows[2].suggestion:GetText(), "Crafting only")
     game:click(panel.acceptAll)
     local P = game:P()
     T.eq(P.GetRole(P.GetCharacter("Alt-R")), "crafter")

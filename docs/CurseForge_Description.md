@@ -22,7 +22,7 @@ If you want full automation with no review, this addon is probably not a fit. If
 
 ### Characters and roles
 
-- Give each character a role: Main / Active, Leveling, Crafter, or Utility. Unassigned characters are ignored.
+- Give each character a role: Main / Active, Leveling (gear it can wear plus materials for its professions), Crafting only (materials, never gear), or Utility (nothing). Unassigned characters are ignored.
 - Suggested roles (max level, leveling, professions) that learn from your choices; accept them all at once.
 - Hints like "Upgrade for Tankalt (Leveling)" and "Used by Stitcher (Tailoring)".
 

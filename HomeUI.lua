@@ -358,6 +358,16 @@ function P.BuildCharactersTab(parent)
         "Characters appear here after logging in once with the addon enabled. Roles can be set from any character.",
         "GameFontDisableSmall")
     parent.note:SetPoint("BOTTOMLEFT", parent, "BOTTOMLEFT", 0, 0)
+    -- What each role does, always visible: the names alone were ambiguous.
+    parent.legend = kit.CreateLabel(parent, "", "GameFontHighlightSmall")
+    parent.legend:SetPoint("BOTTOMLEFT", parent.note, "TOPLEFT", 0, 8)
+    parent.legend:SetWidth(780)
+    parent.legend:SetJustifyH("LEFT")
+    local lines = {}
+    for _, role in ipairs(P.ROLE_ORDER) do
+        lines[#lines + 1] = "|cffffd100" .. P.GetRoleLabel(role) .. ":|r " .. (P.GetRoleDescription(role) or "")
+    end
+    parent.legend:SetText(table.concat(lines, "\n"))
 
     parent.listFrame = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     parent.listFrame:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, -48)
