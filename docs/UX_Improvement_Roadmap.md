@@ -487,6 +487,7 @@ An optional ElvUI datatext, so ready work is visible on the player's info bars w
 - **Cost control:** update on the addon's own refresh (context change, scan, transfer), throttled; never compute cards per frame.
 - **Risk:** ElvUI's datatext API and Midnight's protected-value rules change often; verify the registration API against the installed ElvUI before building.
 - **Later, separately:** ElvUI skinning of the console and notice, and settings inside `/ec`, as a setting for players who prefer consistent styling.
+- **BenikUI:** its info panels use ElvUI's datatext system (its own datatexts register the same way), so this datatext is selectable there with no extra work. If ElvUI skinning is added later, also apply BenikUI's finish when it's loaded (`frame:BuiStyle(...)` / `CreateWideShadow`, as its per-addon skins do). BenikUI dashboards are a fixed set, so the datatext is the integration point.
 
 ## 12. Safety Guardrails to Preserve
 
