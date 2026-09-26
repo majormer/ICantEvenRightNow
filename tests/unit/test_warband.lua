@@ -272,11 +272,21 @@ end)
 T.test("getting ready: the bank notice waits until the data is in", function()
     local g = lateAxeGame(2, false)
     local notice = g:UI().contextNoticeFrame
-    T.ok(not notice or not notice:IsShown(), "no notice while getting ready")
+    T.ok(notice and notice:IsShown(), "the notice says it's getting ready right away")
+    T.contains(notice.text:GetText(), "Getting ready... checking 1 item")
+    T.no(notice.text:GetText():find("ready %("), "no count while getting ready")
     g.world:advance(4)
-    notice = g:UI().contextNoticeFrame
-    T.ok(notice and notice:IsShown(), "notice after settling")
+    T.ok(notice:IsShown(), "notice after settling")
     T.notContains(notice.text:GetText(), "Getting ready")
+    T.contains(notice.text:GetText(), "1 ready")
+end)
+
+T.test("getting ready: closing the notice while waiting keeps it closed", function()
+    local g = lateAxeGame(2, false)
+    local notice = g:UI().contextNoticeFrame
+    g:click(notice.close)
+    g.world:advance(4)
+    T.no(notice:IsShown(), "stays closed after settling")
 end)
 
 T.test("data arriving after settling doesn't change the screen until Rescan", function()

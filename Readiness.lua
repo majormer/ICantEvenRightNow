@@ -113,6 +113,7 @@ local function Tick()
         return
     end
     Refresh()
+    if state.noticeWanted and P.ShowGettingReadyNotice then pcall(P.ShowGettingReadyNotice, P.ReadinessText()) end
     C_Timer.After(TICK, Tick)
 end
 
@@ -133,6 +134,7 @@ function P.BeginSettling(reason, wantsNotice)
     state.pending = CountPending()
     P.Log("ready", "getting ready (%s): %d item(s) to check", tostring(reason), state.pending)
     Refresh()
+    if state.noticeWanted and P.ShowGettingReadyNotice then pcall(P.ShowGettingReadyNotice, P.ReadinessText()) end
     if not ticking then
         ticking = true
         if C_Timer then C_Timer.After(0, Tick) else Tick() end

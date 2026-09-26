@@ -528,7 +528,10 @@ local function EnsureNoticeFrame()
     end)
     frame.close = kit.CreateButton(frame, "x", 22, 22)
     frame.close:SetPoint("RIGHT", frame, "RIGHT", -6, 0)
-    frame.close:SetScript("OnClick", function() frame:Hide() end)
+    frame.close:SetScript("OnClick", function()
+        frame.dismissed = true   -- stays closed until the next bank/vendor/AH visit
+        frame:Hide()
+    end)
     frame:Hide()
     UI.contextNoticeFrame = frame
     return frame
@@ -541,7 +544,25 @@ end
 -- Called after a bank or vendor opens and the scan finished.
 -- A bank, vendor or auction house opened: get ready first; the notice shows
 -- once the data is in (Readiness.lua), so its numbers don't change after.
+-- While getting ready, the notice says so right away instead of appearing
+-- only when the results are in (a 9 s silent wait at a vendor in testing).
+function P.ShowGettingReadyNotice(text)
+    local mode = ns.DB.ui.contextNotice or "notice"
+    if mode ~= "notice" or ns.DB.context.inCombat then return end
+    if UI.frame and UI.frame:IsShown() then return end
+    local frame = EnsureNoticeFrame()
+    if frame.dismissed then return end
+    frame.gettingReady = true
+    frame.taskName, frame.secondary = nil, nil
+    frame.open:SetText("Open")
+    frame.open:SetWidth(60)
+    frame.text:SetWidth(420 - frame.open:GetWidth() - 60)
+    frame.text:SetText(text)
+    frame:Show()
+end
+
 function P.OnContextOpened()
+    if UI.contextNoticeFrame then UI.contextNoticeFrame.dismissed = nil end
     if P.BeginSettling then
         P.BeginSettling("context", true)
     else
@@ -558,12 +579,18 @@ function P.ShowContextNotice()
     if card and card.valueMode == "auction" and P.LogAuctionCandidates then
         P.LogAuctionCandidates(P.AuctionCandidateItems())
     end
-    if not card then return end
+    local existing = UI.contextNoticeFrame
+    if existing and existing.dismissed then return end
+    if not card then
+        if existing and existing.gettingReady then existing.gettingReady = nil existing:Hide() end
+        return
+    end
     if mode == "open" then
         Core.ShowHomeUI()
         return
     end
     local frame = EnsureNoticeFrame()
+    frame.gettingReady = nil
     frame.taskName = card.name
     frame.text:SetText(card.name .. ": " .. P.CardSummary(card))
     -- Prefer the card's direct action when it applies here (e.g. at the AH).
