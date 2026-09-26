@@ -68,6 +68,7 @@ function P.IsSettling() return state.settling end
 -- One line for headers and footers, or nil when there's nothing to say.
 function P.ReadinessText()
     if state.settling then
+        if state.pending == 0 then return "Getting ready..." end
         return "Getting ready... checking " .. state.pending .. " item" .. (state.pending == 1 and "" or "s")
     end
     if state.lateData then
