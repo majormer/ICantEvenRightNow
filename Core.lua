@@ -433,7 +433,15 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     end
 
     -- Keep the roster's facts (level, professions) current for this character.
-    -- Once per login: auction mail about to be deleted on any character.
+    -- Gear levels are often not loaded at login; read them again shortly after.
+    if event == "PLAYER_ENTERING_WORLD" and P.RefreshEquipped then
+        for _, delay in ipairs({ 5, 20 }) do
+            C_Timer.After(delay, function()
+                local ok, read = pcall(P.RefreshEquipped)
+                P.Log("character", "equipped levels read after %ds: %s slot(s)", delay, ok and read or "error")
+            end)
+        end
+    end    -- Once per login: auction mail about to be deleted on any character.
     if event == "PLAYER_LOGIN" and P.MailAtRisk then
         C_Timer.After(8, function()
             local ok, risks = pcall(P.MailAtRisk)

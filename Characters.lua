@@ -132,16 +132,44 @@ local function ReadEquipped()
     if not (ItemLocation and ItemLocation.CreateFromEquipmentSlot and C_Item and C_Item.GetCurrentItemLevel) then
         return nil
     end
-    local equipped = {}
+    -- At login the gear's data is often not loaded yet and levels come back 0;
+    -- in game that saved empty tables for every character, so every piece of
+    -- gear looked like an upgrade. Only real levels are kept (0 = unknown),
+    -- with the item link as a fallback. Returns the table and how many slots
+    -- were read; empty slots are simply absent (treated as 0 when comparing).
+    local equipped, read = {}, 0
     for _, slot in ipairs(EQUIP_SLOTS) do
+        local level
         local ok, location = pcall(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slot)
         if ok and location and location:IsValid() then
-            local okLevel, level = pcall(C_Item.GetCurrentItemLevel, location)
-            if okLevel and type(level) == "number" then equipped[slot] = level end
+            local okLevel, value = pcall(C_Item.GetCurrentItemLevel, location)
+            if okLevel and type(value) == "number" and value > 0 then level = value end
+            if not level and GetInventoryItemLink and C_Item.GetDetailedItemLevelInfo then
+                local link = GetInventoryItemLink("player", slot)
+                local value2 = link and C_Item.GetDetailedItemLevelInfo(link)
+                if type(value2) == "number" and value2 > 0 then level = value2 end
+            end
+        end
+        if level then equipped[slot] = level read = read + 1 end
+    end
+    return equipped, read
+end
+
+-- Refresh the current character's equipped levels, keeping earlier data when
+-- nothing could be read yet. Also records the overall equipped average, used
+-- when per-slot data is missing.
+local function RefreshEquipped(char)
+    local equipped, read = ReadEquipped()
+    if equipped and read > 0 then char.equipped = equipped end
+    if GetAverageItemLevel then
+        local _, equippedAverage = GetAverageItemLevel()
+        if type(equippedAverage) == "number" and equippedAverage > 0 then
+            char.averageItemLevel = math.floor(equippedAverage)
         end
     end
-    return equipped
+    return read or 0
 end
+P.RefreshEquipped = function() return RefreshEquipped(P.GetCurrentCharacter()) end
 
 -- Creates or refreshes the current character's record. Safe to call often.
 local function EnsureCurrentCharacter(levelOverride)
@@ -172,7 +200,7 @@ local function EnsureCurrentCharacter(levelOverride)
     end
     local professions = ReadProfessions()
     if #professions > 0 or isNew then char.professions = professions end
-    char.equipped = ReadEquipped() or char.equipped
+    RefreshEquipped(char)
     if P.NoteReturn and not isNew then P.NoteReturn(char, char.lastSeen) end
     char.lastSeen = Now()
     EnsureSnapshots(char)

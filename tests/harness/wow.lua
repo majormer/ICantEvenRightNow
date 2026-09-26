@@ -445,6 +445,14 @@ function World:_buildEnv()
     G.GetTime = function() return world.now end
     G.GetServerTime = function() return math.floor(world.now) end
     G.GetMoney = function() return world.money end
+    -- Equipped average; world.equippedAverage overrides (0 = not loaded yet).
+    G.GetAverageItemLevel = function()
+        if world.equippedAverage then return world.equippedAverage, world.equippedAverage, world.equippedAverage end
+        local sum, n = 0, 0
+        for _, level in pairs(world.equipped) do sum = sum + level n = n + 1 end
+        local avg = n > 0 and sum / n or 0
+        return avg, avg, avg
+    end
     G.GetInboxNumItems = function() local n = #(world.inbox or {}) return n, n end
     G.GetInboxHeaderInfo = function(i)
         local m = (world.inbox or {})[i]

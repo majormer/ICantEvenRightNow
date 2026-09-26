@@ -245,10 +245,20 @@ local function UpgradeUsers(item)
     if not slots or not item.itemLevel or item.itemLevel <= 0 then return {} end
     local users = {}
     for _, char in ipairs(GearUsers(item)) do
-        if char.equipped then
+        -- Unknown equipment (never read, or read before the gear loaded) is
+        -- not an upgrade target; fall back to the equipped average if known.
+        -- Saves from before this fix hold 0 for every slot: also unknown.
+        local known = false
+        for _, level in pairs(char.equipped or {}) do
+            if type(level) == "number" and level > 0 then known = true break end
+        end
+        if known or (char.averageItemLevel or 0) > 0 then
             local lowest
             for _, slot in ipairs(slots) do
-                local level = char.equipped[slot] or 0
+                local level = known and (char.equipped[slot] or 0) or char.averageItemLevel
+                if known and level == 0 and (char.averageItemLevel or 0) > 0 and char.equipped[slot] == 0 then
+                    level = char.averageItemLevel -- a stored 0 means "not loaded", not "empty"
+                end
                 if not lowest or level < lowest then lowest = level end
             end
             if item.itemLevel > (lowest or 0) then table.insert(users, char) end

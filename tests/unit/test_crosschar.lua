@@ -209,3 +209,38 @@ T.test("a bags-only rescan right after a row deposit keeps the hand-off", functi
     g.world:advance(10)                      -- later full rescans see it in the Warband bank
     T.eq(P.GetHandoffs()[1] and P.GetHandoffs()[1].state, "deposited")
 end)
+
+T.test("unknown equipment is not an upgrade target; levels read later are used", function()
+    -- Tankalt's gear wasn't loaded at login: saved as zeros (like real saves).
+    local saved = roster({ { player = MAIN, role = "main" }, { player = TANKALT, role = "leveling" } })
+    saved.characters["Tankalt-R"].equipped = { [16] = 0, [1] = 0 }
+    saved.characters["Tankalt-R"].averageItemLevel = nil
+    local g = login(saved, MAIN, function(w)
+        w:defineItem(8103, { name = "Old Hammer", classID = 2, subclassID = 5, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 150, requiredLevel = 50, bindType = 2, sellPrice = 100, expansionID = 9 })
+        w:put(0, 1, 8103, 1)
+    end)
+    g:Core().ScanInventory("bags", true)
+    local P = g:P()
+    local hammer = P.GetScanList("bags")[1]
+    T.eq(#P.UpgradeUsersFor(hammer), 0, "zeros mean unknown, not empty slots")
+    -- With a known average above the item, still no upgrade.
+    g:db().characters["Tankalt-R"].averageItemLevel = 220
+    T.eq(#P.UpgradeUsersFor(hammer), 0)
+    g:db().characters["Tankalt-R"].averageItemLevel = 120
+    T.eq(#P.UpgradeUsersFor(hammer), 1, "above the known average: an upgrade")
+end)
+
+T.test("gear levels are read again after login when they weren't loaded", function()
+    local g = T.game({ player = MAIN, setup = function(w)
+        F.defineItems(w); F.addBank(w)
+        w.equippedAverage = 0         -- not loaded at login
+    end })
+    local char = g:P().GetCurrentCharacter()
+    T.eq(next(char.equipped or {}), nil)
+    g.world.equipped[16] = 280
+    g.world.equippedAverage = 275
+    g.world:advance(6)
+    T.eq(char.equipped[16], 280)
+    T.eq(char.averageItemLevel, 275)
+end)
