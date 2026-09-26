@@ -583,6 +583,7 @@ local function ApplyTransferWorkflow(workflow, panel, savedName)
     ApplySavedFilter(workflow, "Transfer")
     UI.transferSelected = {}
     UI.activeTaskPredicate = nil
+    UI.warbandFallback = nil
     UI.activeSavedFilterName = savedName
     UI.activeQuickWorkflowName = savedName and nil or workflow.name
     UI.activeTaskModified = false
@@ -1780,6 +1781,21 @@ local function BuildTransferTab(parent)
         Core.RefreshUI()
     end)
 
+    -- Shown when tabs assigned to some items are full but general tabs have room.
+    parent.warbandFallback = CreateButton(parent, "", 220, 20)
+    parent.warbandFallback:SetPoint("BOTTOMLEFT", parent.listFrame, "TOPLEFT", 0, 4)
+    parent.warbandFallback:SetScript("OnClick", function()
+        UI.warbandFallback = true
+        P.Log("transfer", "player allowed general Warband tabs for full assigned tabs")
+        Core.RefreshUI()
+    end)
+    parent.warbandFallback:SetScript("OnEnter", function(self)
+        ShowTooltip(self, { "Use general tabs", "The Warband tabs you assigned to these items are full.",
+            "Put them in a general tab (one without settings) for this batch instead." })
+    end)
+    parent.warbandFallback:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    parent.warbandFallback:Hide()
+
     parent.selectAll = CreateButton(parent, "Select Movable", 116)
     parent.selectAll:SetParent(parent.footer)
     parent.selectAll:SetPoint("RIGHT", parent.clearSel, "LEFT", -8, 0)
@@ -1959,6 +1975,26 @@ function Core.RefreshTransferUncached()
     end
     SortTransferPlans(visible, sortMode)
     UI.transferVisible = visible
+
+    -- Warband routing: space summary, and the choice to use general tabs for
+    -- items whose assigned tab is full (never done silently).
+    local fullAssigned = 0
+    if dest == P.STORAGE_WARBAND_ROUTED then
+        local prefix = P.WARBAND_ASSIGNED_FULL or "\1"
+        for _, plan in ipairs(matched) do
+            if plan.blocked and plan.blocked:sub(1, #prefix) == prefix then fullAssigned = fullAssigned + 1 end
+        end
+        if not noticeText then
+            local parts = {}
+            for _, tab in ipairs(P.GetWarbandTabs()) do
+                local free = CContainer.GetContainerNumFreeSlots and CContainer.GetContainerNumFreeSlots(tab.bagID) or nil
+                parts[#parts + 1] = P.WarbandTabName(tab) .. " " .. tostring(free or "?") .. " free"
+            end
+            if #parts > 0 then SetContextNotice(panel.contextNotice, "Warband space: " .. table.concat(parts, ", ")) end
+        end
+    end
+    panel.warbandFallback:SetText("Use general tabs for " .. fullAssigned .. " item" .. (fullAssigned == 1 and "" or "s"))
+    panel.warbandFallback:SetShown(fullAssigned > 0 and not UI.warbandFallback)
 
     -- Group identical items (same item, same status) into one row (H4).
     local displayRows = {}

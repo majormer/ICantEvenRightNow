@@ -125,6 +125,9 @@ function P.TaskRouteAvailable(task)
     if not task or task.filterOnly or task.open then return true end
     local source, dest = TaskRoute(task)
     local context = ns.DB.context
+    if (P.IsWarbandStorage(source) or P.IsWarbandStorage(dest)) and P.WarbandTabsPurchased() == 0 then
+        return false, "Buy a Warband tab"
+    end
     if (P.NeedsBankStorage(source) or P.NeedsBankStorage(dest)) and not context.bankOpen then
         return false, "Visit a bank"
     end
@@ -267,6 +270,12 @@ end
 -- One-line card summary: "23 ready (4g 12s)" / "12 waiting: Visit a bank".
 function P.CardSummary(card)
     if card.filterOnly then return "Filter preset (no route)" end
+    if card.task and not card.task.count and not card.task.open then
+        local source, dest = TaskRoute(card.task)
+        if (P.IsWarbandStorage(source) or P.IsWarbandStorage(dest)) and P.WarbandTabsPurchased() == 0 then
+            return "No Warband bank tab yet: the first costs 1,000g at any banker"
+        end
+    end
     if card.summaryText then return card.summaryText end
     local money = card.value > 0
         and (" (" .. (card.valueMode == "auction" and "~" or "") .. P.FormatMoney(card.value)

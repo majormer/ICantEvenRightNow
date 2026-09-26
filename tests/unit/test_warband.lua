@@ -114,3 +114,80 @@ T.test("tabs without settings are detected (for the onboarding hint)", function(
     g:openBank()
     T.ok(g:P().WarbandTabsHaveNoSettings())
 end)
+
+local P_MAIN = { name = "Main", realm = "R", level = 90, classFile = "WARRIOR" }
+
+local function depositAll(g)
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_WARBAND_ROUTED
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    for _, plan in ipairs(UI.transferVisible) do if plan.movable then UI.transferSelected[plan.key] = true end end
+    g.world:withHardwareEvent(function() g:Core().ExecuteTransferSelected() end)
+    g:advance(2)
+end
+
+T.test("several general Warband tabs fill one after another", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 1)
+        w:addBankTab(2, 13, "Tab 2", 0, 1)
+        w:put(0, 1, I.LINEN, 20)
+        w:put(0, 2, I.OLD_SWORD, 1)
+    end })
+    g:openBank()
+    depositAll(g)
+    local inTab2 = 0
+    for _ in pairs(g.world.containers[13].slots) do inTab2 = inTab2 + 1 end
+    T.eq(inTab2, 1, "the second general tab took what the first couldn't")
+end)
+
+T.test("a full assigned tab asks before using a general tab", function()
+    local REAGENTS = 0x80
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Mats", REAGENTS, 1)
+        w:addBankTab(2, 13, "General", 0, 5)
+        w:put(12, 1, I.OLD_SWORD, 1)     -- Mats tab full
+        w:put(0, 1, I.LINEN, 20)
+    end })
+    g:openBank()
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_WARBAND_ROUTED
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    local panel = UI.frame.panels.Transfer
+    local linen
+    for _, plan in ipairs(P.GetTransferCandidates("Bags", P.STORAGE_WARBAND_ROUTED)) do
+        if plan.item.itemID == I.LINEN then linen = plan end
+    end
+    T.contains(linen.blocked, "Assigned tab full")
+    T.ok(panel.warbandFallback:IsShown(), "offers general tabs")
+    g:click(panel.warbandFallback)
+    T.ok(not panel.warbandFallback:IsShown())
+    depositAll(g)
+    T.eq(g.world:findItem(I.LINEN)[1].bagID, 13, "went to the general tab after the player agreed")
+end)
+
+T.test("no Warband tab bought: no Warband options, cards explain, picker explains", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:put(0, 1, I.LINEN, 20)
+    end })
+    g:openBank()
+    local P = g:P()
+    T.eq(P.WarbandTabsPurchased(), 0)
+    for _, o in ipairs(P.GetTransferDestOptions()) do
+        T.ok(not P.IsWarbandStorage(o.value), "no Warband destination: " .. tostring(o.value))
+    end
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
+    T.contains(P.CardSummary(card), "No Warband bank tab yet")
+    P.ShowHandoffPicker(P.GetScanList("bags")[1])
+    T.contains(g:UI().handoffPicker.title:GetText(), "Buy its first tab")
+end)

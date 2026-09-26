@@ -495,6 +495,15 @@ Built in 0.6.0: items in any character's Equipment Manager sets are kept ("In Fi
 
 Next step: record each character's specializations (and their roles: tank, healer, damage) at login, and judge gear against the specs a character actually has, not just its class. A tank-stat trinket or shield would count for a character with a tank spec; an Intellect weapon for a Paladin only if it has Holy. On-use trinket effects can't be judged automatically; they stay "Your call".
 
+## 12f. Future: Warband Tab Setup for Every Skill Level
+
+Built in 0.6.0: any number of Warband tabs (0 to 5; the first costs 1,000g, then 25k, 100k, 500k, 2.5M), general tabs fill in order, a free-space summary on the Transfer list, and an explicit "Use general tabs" choice when an assigned tab is full. The addon never changes tab settings.
+
+Next, matched to how much the player has set up (detected from the tab settings, never asked):
+- **No settings:** one dismissible suggestion ("Everything is going to Tab 1. Want your Warband bank to sort itself?") with a proposed layout (gear, materials, consumables) and how to apply it in Blizzard's tab settings. Check whether addons may change tab settings (`C_Bank.UpdateBankTabSettings`) before offering to apply it; if allowed, only on an explicit click.
+- **Some settings:** as built; plus a one-line note when many items fall back to general tabs.
+- **Detailed settings:** no suggestions. Per-item destination rules ("always put this in Tab 4") alongside Protect, Ignore and Never Sell.
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:

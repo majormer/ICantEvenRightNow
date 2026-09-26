@@ -353,6 +353,15 @@ local function WarbandTabStorageKey(bagID)
 end
 
 -- Known Warband tabs: live data at a banker, else the account snapshot copy.
+-- How many Warband tabs the account has bought: a number once a bank visit
+-- has read it (0 = none bought yet; the first costs gold), or nil if unknown.
+function P.WarbandTabsPurchased()
+    if #WARBAND_TAB_DATA > 0 then return #WARBAND_TAB_DATA end
+    local warband = ns.DB and ns.DB.warband
+    if warband and warband.tabsKnownAt then return #(warband.tabs or {}) end
+    return nil
+end
+
 local function GetWarbandTabs()
     if #WARBAND_TAB_DATA > 0 then return WARBAND_TAB_DATA end
     return ns.DB and ns.DB.warband and ns.DB.warband.tabs or {}
@@ -480,7 +489,10 @@ local function RefreshBankTabData()
             table.insert(WARBAND_TAB_DATA, entry)
             table.insert(cached, { bagID = entry.bagID, name = entry.name, flags = entry.flags })
         end
-        if ns.DB and ns.DB.warband then ns.DB.warband.tabs = cached end
+        if ns.DB and ns.DB.warband then
+            ns.DB.warband.tabs = cached
+            ns.DB.warband.tabsKnownAt = time and time() or 0
+        end
     end
     -- Notify UI to rebuild source/dest dropdowns (defined later in UI.lua).
     if Core.RefreshTransferDropdowns then
@@ -607,7 +619,10 @@ local function GetTransferSourceOptions()
         else
             table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
         end
-        table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+        -- No Warband option until a tab is bought (verified: the first tab costs gold).
+        if #WARBAND_TAB_DATA > 0 then
+            table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+        end
         for _, tab in ipairs(WARBAND_TAB_DATA) do
             table.insert(opts, { text = GetWarbandTabLabel(tab), value = WarbandTabStorageKey(tab.bagID) })
         end

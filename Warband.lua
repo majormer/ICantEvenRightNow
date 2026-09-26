@@ -80,26 +80,56 @@ local function ScoreTab(tab, item)
     return nil
 end
 
--- Returns { bagID, tab, reason } for the best Warband tab, or nil with a reason.
+local function TabName(tab)
+    return tab.name ~= "" and tab.name or ("Tab " .. tostring(tab.bagID - 11))
+end
+P.WarbandTabName = TabName
+
+-- Returns a route for an item, or nil with a reason:
+--   { bagIDs = tabs in fill order, bagID = the first, tab, reason,
+--     assigned = true when a tab's settings claim the item,
+--     fallbackBagIDs = general tabs usable when the assigned tabs are full }
+-- All tabs with the best score are candidates, in tab order, so several
+-- general tabs fill one after another (in game only Tab 1 was used and
+-- filled while Tabs 2 and 3 had room). General tabs are only a fallback for
+-- items a tab was assigned to, and only when the player allows it.
 local function RouteToWarbandTab(item)
     local tabs = P.GetWarbandTabs()
-    if #tabs == 0 then return nil, "No Warband tabs are known yet: visit a bank" end
-    local best, bestScore, bestLabel
+    if #tabs == 0 then
+        if P.WarbandTabsPurchased() == 0 then
+            return nil, "No Warband bank tab yet (the first costs 1,000g at any banker)"
+        end
+        return nil, "No Warband tabs are known yet: visit a bank"
+    end
+    local bestScore, bestLabel
+    local scored = {}
     for _, tab in ipairs(tabs) do
         local score, label = ScoreTab(tab, item)
-        if score and (not bestScore or score > bestScore) then
-            best, bestScore, bestLabel = tab, score, label
+        if score then
+            table.insert(scored, { tab = tab, score = score, label = label })
+            if not bestScore or score > bestScore then bestScore, bestLabel = score, label end
         end
     end
-    if not best then return nil, "No Warband tab accepts this item (check the tabs' settings)" end
-    local tabName = best.name ~= "" and best.name or ("Tab " .. tostring(best.bagID - 11))
-    local reason
-    if bestLabel then
-        reason = tabName .. " (accepts " .. bestLabel .. ")"
-    else
-        reason = tabName .. " (general tab)"
+    if not bestScore then return nil, "No Warband tab accepts this item (check the tabs' settings)" end
+    local route = { bagIDs = {}, fallbackBagIDs = {}, assigned = bestScore >= 2 }
+    local names = {}
+    for _, entry in ipairs(scored) do
+        if entry.score == bestScore then
+            table.insert(route.bagIDs, entry.tab.bagID)
+            table.insert(names, TabName(entry.tab))
+            route.tab = route.tab or entry.tab
+        elseif route.assigned and entry.score < 2 then
+            table.insert(route.fallbackBagIDs, entry.tab.bagID)
+        end
     end
-    return { bagID = best.bagID, tab = best, reason = reason }
+    route.bagID = route.bagIDs[1]
+    local tabNames = table.concat(names, ", ")
+    if bestLabel then
+        route.reason = tabNames .. " (accepts " .. bestLabel .. ")"
+    else
+        route.reason = tabNames .. (#names > 1 and " (general tabs)" or " (general tab)")
+    end
+    return route
 end
 P.RouteToWarbandTab = RouteToWarbandTab
 

@@ -345,11 +345,23 @@ local STORAGE_WARBAND_ROUTED = P.STORAGE_WARBAND_ROUTED
 local function GetTargetBagIDs(item, dest)
     if dest == STORAGE_WARBAND_ROUTED then
         local route = P.RouteToWarbandTab(item)
-        return route and { route.bagID } or {}, route
+        if not route then return {}, nil end
+        local bagIDs = {}
+        for _, bagID in ipairs(route.bagIDs) do table.insert(bagIDs, bagID) end
+        -- The player allowed general tabs for items whose assigned tabs are full.
+        if UI.warbandFallback then
+            for _, bagID in ipairs(route.fallbackBagIDs) do table.insert(bagIDs, bagID) end
+        end
+        return bagIDs, route
     end
     return GetStorageBagIDs(dest), nil
 end
 P.GetTargetBagIDs = GetTargetBagIDs
+
+-- Block reason prefix when a tab assigned to the item is full but a general
+-- tab has room; the Transfer panel then offers to use general tabs.
+local WARBAND_ASSIGNED_FULL = "Assigned tab full: "
+P.WARBAND_ASSIGNED_FULL = WARBAND_ASSIGNED_FULL
 
 local function GetTransferBlockReason(item, source, dest)
     if ns.DB.context.inCombat then return "In combat" end
@@ -409,6 +421,10 @@ local function GetTransferBlockReason(item, source, dest)
     elseif dest ~= "Vendor" then
         local bagIDs, route = GetTargetBagIDs(item, dest)
         if not HasRoomIn(bagIDs, item) then
+            if route and route.assigned and #route.fallbackBagIDs > 0 and not UI.warbandFallback
+                and HasRoomIn(route.fallbackBagIDs, item) then
+                return WARBAND_ASSIGNED_FULL .. (route.reason or "")
+            end
             return "No empty slots in " .. (route and route.reason or GetStorageDisplayName(dest))
         end
     end

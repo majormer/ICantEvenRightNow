@@ -603,8 +603,14 @@ function P.ShowHandoffPicker(item)
         UI.handoffPicker = frame
     end
     local recipients = P.HandoffRecipients(item)
-    frame.title:SetText(#recipients > 0 and ("Send " .. (item.name or "item") .. " to:")
-        or "No other character with a matching role can use this.")
+    if P.WarbandTabsPurchased() == 0 then
+        -- Hand-offs travel through the Warband bank.
+        recipients = {}
+        frame.title:SetText("Hand-offs go through the Warband bank. Buy its first tab (1,000g) at any banker.")
+    else
+        frame.title:SetText(#recipients > 0 and ("Send " .. (item.name or "item") .. " to:")
+            or "No other character with a matching role can use this.")
+    end
     for i, button in ipairs(frame.buttons) do
         local char = recipients[i]
         if char then
