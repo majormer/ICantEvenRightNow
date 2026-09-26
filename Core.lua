@@ -393,6 +393,7 @@ eventFrame:RegisterEvent("ITEM_SEARCH_RESULTS_UPDATED")
 eventFrame:RegisterEvent("MAIL_SHOW")
 eventFrame:RegisterEvent("MAIL_CLOSED")
 eventFrame:RegisterEvent("MAIL_INBOX_UPDATE")
+eventFrame:RegisterEvent("EQUIPMENT_SETS_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
@@ -422,6 +423,11 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "PLAYER_REGEN_ENABLED" and P.OnCombatEnded then P.OnCombatEnded() end
 
     -- Auction house context and paced price lookups (Value.lua).
+    if event == "EQUIPMENT_SETS_CHANGED" then
+        if P.RecordEquipmentSets then pcall(P.RecordEquipmentSets) end
+        if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+        return
+    end
     if event == "MAIL_INBOX_UPDATE" then
         pcall(P.RecordInbox)
         return

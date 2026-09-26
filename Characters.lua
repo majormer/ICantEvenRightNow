@@ -58,7 +58,7 @@ local function MaxLevel()
     local fn = GetMaxLevelForPlayerExpansion or GetMaxLevelForLatestExpansion
     local ok, level = pcall(function() return fn and fn() end)
     if ok and type(level) == "number" and level > 0 then return level end
-    return 80
+    return 90 -- Midnight level cap
 end
 P.GetMaxPlayerLevel = MaxLevel
 
@@ -172,6 +172,39 @@ local function RefreshEquipped(char)
 end
 P.RefreshEquipped = function() return RefreshEquipped(P.GetCurrentCharacter()) end
 
+-- Items in the character's saved Equipment Manager sets: { [itemID] = { set names } }.
+-- An item a player put in a set is one they keep on purpose.
+local function RecordEquipmentSets(char)
+    if not (C_EquipmentSet and C_EquipmentSet.GetEquipmentSetIDs and C_EquipmentSet.GetItemIDs) then return end
+    local ok, ids = pcall(C_EquipmentSet.GetEquipmentSetIDs)
+    if not ok or type(ids) ~= "table" then return end
+    local items = {}
+    for _, setID in ipairs(ids) do
+        local name = C_EquipmentSet.GetEquipmentSetInfo and C_EquipmentSet.GetEquipmentSetInfo(setID) or ("Set " .. setID)
+        local okItems, byslot = pcall(C_EquipmentSet.GetItemIDs, setID)
+        if okItems and type(byslot) == "table" then
+            for _, itemID in pairs(byslot) do
+                if type(itemID) == "number" and itemID > 0 then
+                    items[itemID] = items[itemID] or {}
+                    table.insert(items[itemID], name)
+                end
+            end
+        end
+    end
+    char.equipmentSetItems = items
+end
+P.RecordEquipmentSets = function() RecordEquipmentSets(P.GetCurrentCharacter()) end
+
+-- Characters (any role) whose saved sets include this item, with set names.
+function P.EquipmentSetsWith(itemID)
+    local found = {}
+    for _, char in pairs(Roster()) do
+        local names = char.equipmentSetItems and char.equipmentSetItems[itemID]
+        if names then table.insert(found, { character = char, sets = names }) end
+    end
+    return found
+end
+
 -- Creates or refreshes the current character's record. Safe to call often.
 local function EnsureCurrentCharacter(levelOverride)
     local roster = Roster()
@@ -202,6 +235,7 @@ local function EnsureCurrentCharacter(levelOverride)
     local professions = ReadProfessions()
     if #professions > 0 or isNew then char.professions = professions end
     RefreshEquipped(char)
+    RecordEquipmentSets(char)
     if P.NoteReturn and not isNew then P.NoteReturn(char, char.lastSeen) end
     char.lastSeen = Now()
     EnsureSnapshots(char)

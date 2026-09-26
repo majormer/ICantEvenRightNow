@@ -281,3 +281,29 @@ T.test("weapon types and primary stats limit who can use gear", function()
     T.eq(users(8203), "Main", "a Strength trinket only for the warrior")
     T.eq(users(8204), "Druidalt,Priestalt", "Agility/Intellect trinket: druid and priest, not a Strength warrior")
 end)
+
+T.test("equipment sets keep items; max-level trinkets and weapons are your call, never pre-sold", function()
+    local saved = roster({ { player = MAIN, role = "main" } }, { Main = { [13] = 300, [14] = 300, [16] = 300 } })
+    local g = T.game({ savedVariables = saved, player = MAIN, setup = function(w)
+        F.defineItems(w) F.addBank(w)
+        w.equipped[13], w.equipped[14], w.equipped[16] = 300, 300, 300
+        w:defineItem(8301, { name = "Odd Trinket", classID = 4, subclassID = 0, equipLoc = "INVTYPE_TRINKET",
+            itemLevel = 280, requiredLevel = 90, bindType = 1, quality = 4, sellPrice = 500, expansionID = 11 })
+        w:defineItem(8302, { name = "Set Trinket", classID = 4, subclassID = 0, equipLoc = "INVTYPE_TRINKET",
+            itemLevel = 270, requiredLevel = 90, bindType = 1, quality = 4, sellPrice = 500, expansionID = 11 })
+        w:defineItem(8303, { name = "Leveling Sword", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 180, requiredLevel = 85, bindType = 2, quality = 2, sellPrice = 50, expansionID = 11 })
+        w:put(0, 1, 8301, 1) w:put(0, 2, 8302, 1) w:put(0, 3, 8303, 1)
+        w.equipmentSets = { { name = "M+", items = { [13] = 8302 } } }
+    end })
+    g:Core().ScanInventory("bags", true)
+    local P = g:P()
+    local function explain(id)
+        for _, item in ipairs(P.GetScanList("bags")) do if item.itemID == id then return P.ExplainScanned(item) end end
+    end
+    T.eq(explain(8301).primary.id, "situational_gear")
+    T.eq(explain(8301).disposition, "review")
+    T.eq(explain(8302).primary.id, "equipment_set")
+    T.contains(explain(8302).evidence, "Main's M+ set")
+    T.eq(explain(8303).primary.id, "outgrown_gear", "leveling weapons below max level stay ordinary")
+end)

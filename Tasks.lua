@@ -288,7 +288,9 @@ function P.PreselectTask(task)
         if safe and P.ExplainItem then
             local explanation = P.ExplainItem(plan.item, {})
             if P.IsValueFlagged and P.IsValueFlagged(plan.item, plan.dest) then safe = false end
-            if plan.dest == "Vendor" and explanation.disposition == "keep" then safe = false end
+            -- Selling: only items that can clearly go. "Your call" items
+            -- (situational trinkets, outgrown gear) are never pre-selected.
+            if plan.dest == "Vendor" and explanation.disposition ~= "free" then safe = false end
         end
         if safe then UI.transferSelected[plan.key] = true end
     end

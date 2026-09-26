@@ -45,6 +45,7 @@ local REASONS = {
     appearance_uncollected = { disposition = "keep", label = "Appearance not collected yet" },
     used_by_crafter      = { disposition = "keep",   label = "Material one of your crafters uses" },
     usable_gear          = { disposition = "keep",   label = "Gear one of your played characters can use" },
+    equipment_set        = { disposition = "keep",   label = "In a saved equipment set" },
     current_expansion    = { disposition = "keep",   label = "From the current expansion" },
     -- free
     appearance_collected = { disposition = "free",   label = "Appearance already collected" },
@@ -62,6 +63,7 @@ local REASONS = {
     long_untouched       = { disposition = "review", label = "Untouched for over a year" },
     roles_needed         = { disposition = "review", label = "Assign character roles to see who can use this" },
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
+    situational_gear     = { disposition = "review", label = "Max-level trinket or weapon: check before selling" },
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
@@ -305,6 +307,19 @@ local function CanCharacterUse(char, item, levelLimited)
 end
 P.CanCharacterUse = CanCharacterUse
 
+-- Trinkets, weapons, off-hands and shields that need max level: their value
+-- depends on spec, role and content more than item level.
+local SITUATIONAL_SLOTS = {
+    INVTYPE_TRINKET = true, INVTYPE_WEAPON = true, INVTYPE_2HWEAPON = true, INVTYPE_WEAPONMAINHAND = true,
+    INVTYPE_WEAPONOFFHAND = true, INVTYPE_HOLDABLE = true, INVTYPE_SHIELD = true, INVTYPE_RANGED = true,
+    INVTYPE_RANGEDRIGHT = true,
+}
+local function IsSituational(item)
+    if not SITUATIONAL_SLOTS[item.equipLoc or ""] then return false end
+    local maxLevel = P.GetMaxPlayerLevel and P.GetMaxPlayerLevel() or 0
+    return maxLevel > 0 and (item.requiredLevel or 0) >= maxLevel
+end
+
 local function GearUsers(item)
     local users = {}
     for _, char in ipairs(P.CharactersWith("receivesGear")) do
@@ -402,6 +417,12 @@ local function ExplainItem(item, ctx)
         else add("collectible_unlearned", "Use it to add the " .. kind .. " to your collection") end
     end
 
+    if IsGear(item) and P.EquipmentSetsWith then
+        for _, entry in ipairs(P.EquipmentSetsWith(item.itemID)) do
+            add("equipment_set", "In " .. (entry.character.name or "?") .. "'s " .. table.concat(entry.sets, ", ") .. " set")
+        end
+    end
+
     if IsGear(item) then
         local collected = AppearanceCollected(item)
         if collected == false then add("appearance_uncollected") end
@@ -414,6 +435,11 @@ local function ExplainItem(item, ctx)
                     labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
                 end
                 add("usable_gear", "Upgrade for " .. Names(labels))
+            elseif #users > 0 and IsSituational(item) then
+                -- Item level is a weak test for these: an on-use effect or a
+                -- spec, role or content fit can matter more (player's point).
+                add("situational_gear", "Wearable by " .. Names(users, "name")
+                    .. "; trinkets and weapons can matter for a spec, role, or dungeon vs. raid")
             elseif #users > 0 then
                 -- Wearable but worse than what everyone wears (maybe an off-spec
                 -- or transmog piece): the player decides, the addon doesn't keep it.

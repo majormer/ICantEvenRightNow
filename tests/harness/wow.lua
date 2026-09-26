@@ -500,6 +500,22 @@ function World:_buildEnv()
     G.LE_EXPANSION_LEVEL_CURRENT = #EXPANSIONS - 1
     G.GetExpansionLevel = function() return #EXPANSIONS - 1 end
     G.GetMaxLevelForPlayerExpansion = function() return world.maxLevel or 90 end
+    -- Equipment Manager: world.equipmentSets = { { name = "Raid", items = { [13] = itemID } }, ... }
+    G.C_EquipmentSet = {
+        GetEquipmentSetIDs = function()
+            local ids = {}
+            for i in ipairs(world.equipmentSets or {}) do ids[#ids + 1] = i - 1 end
+            return ids
+        end,
+        GetEquipmentSetInfo = function(id)
+            local set = (world.equipmentSets or {})[id + 1]
+            return set and set.name
+        end,
+        GetItemIDs = function(id)
+            local set = (world.equipmentSets or {})[id + 1]
+            return set and set.items or {}
+        end,
+    }
     G.GetMaxLevelForLatestExpansion = G.GetMaxLevelForPlayerExpansion
 
     G.Enum = deepcopy(ENUM)

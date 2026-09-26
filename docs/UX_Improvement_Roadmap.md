@@ -489,6 +489,12 @@ An optional ElvUI datatext, so ready work is visible on the player's info bars w
 - **Later, separately:** ElvUI skinning of the console and notice, and settings inside `/ec`, as a setting for players who prefer consistent styling.
 - **BenikUI:** its info panels use ElvUI's datatext system (its own datatexts register the same way), so this datatext is selectable there with no extra work. If ElvUI skinning is added later, also apply BenikUI's finish when it's loaded (`frame:BuiStyle(...)` / `CreateWideShadow`, as its per-addon skins do). BenikUI dashboards are a fixed set, so the datatext is the integration point.
 
+## 12e. Future: Spec and Role Awareness for Gear
+
+Built in 0.6.0: items in any character's Equipment Manager sets are kept ("In Finalomega's M+ set"), and max-level trinkets, weapons, off-hands and shields that someone can wear are "Your call" (never pre-selected for selling) because item level is a weak test for them.
+
+Next step: record each character's specializations (and their roles: tank, healer, damage) at login, and judge gear against the specs a character actually has, not just its class. A tank-stat trinket or shield would count for a character with a tank spec; an Intellect weapon for a Paladin only if it has Holy. On-use trinket effects can't be judged automatically; they stay "Your call".
+
 ## 12. Safety Guardrails to Preserve
 
 Do not remove:
