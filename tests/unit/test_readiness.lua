@@ -173,3 +173,11 @@ T.test("appearance: an empty answer for the link falls back to the item ID", fun
     local fresh = helm(g)
     T.eq((P.ItemAppearance(fresh)), false, "not collected is still reported")
 end)
+
+T.test("appearance: collected if either check says so (the link check can be wrong)", function()
+    local g = game({ appearanceSourceID = 296661, byItemInfoSaysNo = true, appearanceLinkLookupFails = true })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g.world.collections.appearances[296661] = true
+    T.eq((P.ItemAppearance(helm(g))), true)
+end)

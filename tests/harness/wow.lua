@@ -840,6 +840,8 @@ function World:_buildEnv()
         PlayerHasTransmogByItemInfo = function(value)
             local itemID = parseItemID(value)
             local def = itemID and world.items[itemID]
+            -- def.byItemInfoSaysNo: the link check answers false although collected (seen in game).
+            if def and def.byItemInfoSaysNo then return false end
             return def and def.appearanceSourceID and world.collections.appearances[def.appearanceSourceID] and true or false
         end,
     }

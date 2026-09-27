@@ -166,14 +166,18 @@ function P.ItemAppearance(item)
         end
     end
     if not entry then return nil, state end
-    -- Found by item ID: the base item's source may not be this variant's, so
-    -- ask with the link first (it accounts for bonus IDs).
-    if entry[2] and item.link and C_TransmogCollection.PlayerHasTransmogByItemInfo then
-        local ok, has = pcall(C_TransmogCollection.PlayerHasTransmogByItemInfo, item.link)
-        if ok and has ~= nil then return has and true or false, state end
-    end
+    -- Collected if either check says so. In game each one answered "not
+    -- collected" for an item the player had collected: the link check for
+    -- all five worn Relentless Rider's pieces (their source said collected),
+    -- and the source found by item ID can be another variant's (Steelbark
+    -- Casque, where the link check was right).
     local ok, has = pcall(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance, entry[1])
-    return (ok and has) and true or false, state
+    if ok and has then return true, state end
+    if item.link and C_TransmogCollection.PlayerHasTransmogByItemInfo then
+        local okLink, hasLink = pcall(C_TransmogCollection.PlayerHasTransmogByItemInfo, item.link)
+        if okLink and hasLink then return true, state end
+    end
+    return false, state
 end
 
 -- Give up-and-retry: Rescan asks again for everything that failed.
