@@ -58,6 +58,9 @@ local function IsHeadedOut(item)
     local explanation = P.ExplainScanned(item)
     for _, reason in ipairs(explanation.reasons or {}) do
         if reason.id == "quest_active" then return true end
+        -- Stays in the bags (utility items the player uses: Jeeves).
+        local def = P.REASONS and P.REASONS[reason.id]
+        if def and def.bags then return true end
     end
     return explanation.disposition == "free"
 end

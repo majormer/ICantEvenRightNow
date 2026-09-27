@@ -269,3 +269,20 @@ T.test("a quest-starting item keeps its quest when the container info has no que
     game.world.containerQuestInfoDropped = true
     T.eq(explain(game, I.QUEST_START).primary.id, "quest_done", "judged from the quest log, not the dropped info")
 end)
+
+T.test("utility items (a bound device with a Use effect) stay in the bags: no deposit task offers them", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 49040, 1, { bound = true })
+        w:put(0, 2, I.LINEN, 20)
+    end, function(w) w:defineItem(49040, { name = "Jeeves", classID = 7, subclassID = 2, itemSubType = "Explosives and Devices",
+        quality = 3, sellPrice = 12345, expansionID = 2, bindType = 1, useSpell = "Summon Jeeves" }) end)
+    local e = explain(game, 49040)
+    T.eq(e.primary.id, "utility_item")
+    T.eq(e.disposition, "keep")
+    game:openBank()
+    local P = game:P()
+    local ids = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
+    T.no(ids[49040], "Jeeves stays in the bags")
+    T.ok(ids[I.LINEN], "other old items still deposit")
+end)

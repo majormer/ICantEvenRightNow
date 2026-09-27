@@ -48,6 +48,8 @@ local REASONS = {
     usable_gear          = { disposition = "keep",   label = "Gear one of your played characters can use" },
     equipment_set        = { disposition = "keep",   label = "In a saved equipment set" },
     current_expansion    = { disposition = "keep",   label = "From the current expansion" },
+    -- bags = true: stays in the bags, so no deposit task offers it.
+    utility_item         = { disposition = "keep",   label = "Utility item you use: stays in your bags", bags = true },
     -- free
     appearance_collected = { disposition = "free",   label = "Appearance already collected" },
     collectible_learned  = { disposition = "free",   label = "Collectible already learned" },
@@ -622,6 +624,16 @@ local function ExplainItem(item, ctx)
     -- "below what you wear").
     local useSpell = IsGear(item) and not SITUATIONAL_SLOTS[item.equipLoc or ""] and P.ItemUseSpell and P.ItemUseSpell(item)
     if useSpell then add("use_effect", "Use: " .. useSpell) end
+    -- Utility items (player's rule 2026-09-27, Jeeves): a bound device or
+    -- gadget with a Use effect that isn't a consumable stays in the bags.
+    -- Consumables (class 0), quest items and collectibles are handled above.
+    if not IsGear(item) and (item.isBound or item.isWarbandBound) and item.classID ~= 0 and item.classID ~= 12
+        and not CollectibleState(item) and P.ItemUseSpell then
+        local gadgetUse = P.ItemUseSpell(item)
+        local device = (item.classID == 7 and item.subclassID == 2) or item.itemSubTypeName == "Explosives and Devices"
+            or (item.classID == 15 and (item.subclassID == 0 or item.subclassID == 4))
+        if gadgetUse and device then add("utility_item", "Use: " .. gadgetUse) end
+    end
     local curiosity = IsGear(item) and item.itemLevel and item.itemLevel <= 1
     if curiosity then
         add("possible_keepsake", "Item level 1: usually a treasure, quest curiosity or cosmetic, not real gear")
