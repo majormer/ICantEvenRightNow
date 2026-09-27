@@ -316,3 +316,21 @@ T.test("a gear token with a class restriction is kept for a character of that cl
             expansionID = 9, bindType = 7, useSpell = "Create Primalist Cloth Boots" }) end)
     T.eq(explain(plain, 203641).primary.id, "gear_token")
 end)
+
+T.test("deck cards are for sale even in the current expansion (the player doesn't assemble decks)", function()
+    local game = mageWith(function(w) w:put(0, 1, 7201, 3) end,
+        function(w) w:defineItem(7201, { name = "Six of Blood", classID = 7, subclassID = 16, quality = 3, maxStack = 20,
+            sellPrice = 100, expansionID = 11, bindType = 0 }) end)
+    local e = explain(game, 7201)
+    T.eq(e.primary.id, "deck_card")
+    T.eq(e.disposition, "free")
+    game:db().prices = { ["c:7201"] = { price = 500000, at = game.env.time() } }
+    game:Core().ScanInventory("bags", true)
+    local card
+    for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7201 then card = it end end
+    T.ok(game:P().IsAuctionCandidate(card), "an auction candidate once priced")
+    -- Not a card: "Vial of Something" doesn't match the rank words.
+    game.world:defineItem(7202, { name = "Vial of Blood", classID = 7, subclassID = 16, quality = 3, maxStack = 20, sellPrice = 100, expansionID = 11 })
+    game.world:put(0, 2, 7202, 1)
+    T.ok(explain(game, 7202).primary.id ~= "deck_card")
+end)

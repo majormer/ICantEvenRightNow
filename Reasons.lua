@@ -65,6 +65,8 @@ local REASONS = {
     -- Same, when it has an auction price (in game the refused soup sold for ~19s there).
     vendor_refused_auction = { disposition = "free", label = "No vendor buys it: sell it at the auction house or keep it", rank = 1.9 },
     no_use_no_market     = { disposition = "free",   label = "Nothing keeps it, and it can't be auctioned: sell it to a vendor" },
+    -- rank 0.9: ahead of "current expansion" (keep, 1), a player's rule.
+    deck_card            = { disposition = "free",   label = "Deck card, and you don't assemble decks: sell it", rank = 0.9 },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -747,6 +749,15 @@ local function ExplainItem(item, ctx)
     end
 
     if item.quality == 0 then add("junk") end
+    -- Darkmoon-style deck cards ("Six of Blood"): the player doesn't
+    -- assemble decks (2026-09-27), so they're for sale whatever the
+    -- expansion. Rank 0.9 puts this above the current-expansion keep.
+    if item.name and item.name:match("^%u%l+ of %u%l+$") and (item.classID == 7 or item.classID == 15)
+        and (item.quality or 0) >= 2 and not item.isBound then
+        local rank = item.name:match("^(%u%l+) of ")
+        local ranks = { Ace = true, Two = true, Three = true, Four = true, Five = true, Six = true, Seven = true, Eight = true }
+        if ranks[rank] then add("deck_card", "Deck cards only matter if you assemble the deck") end
+    end
     if item.classID == 0 and SPENT_CONSUMABLE_SUBCLASSES[item.subclassID or -1] and P.IsOldExpansion(item.expansionID) then
         add("old_consumable", "From " .. P.GetExpansionName(item.expansionID))
     end
