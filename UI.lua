@@ -592,6 +592,12 @@ function P.StartCustomTransfer()
     UI.activeTaskPredicate = nil
     UI.membershipTask = nil
     UI.transferSelected = {}
+    -- Route for where the player is (in game it came up Bags -> Bank at a vendor).
+    if ns.DB.context.vendorOpen then
+        UI.transferSource, UI.transferDest = "Bags", "Vendor"
+    elseif ns.DB.context.bankOpen then
+        UI.transferSource, UI.transferDest = "Bags", STORAGE_PRIVATE_BANK
+    end
     P.UIKit.SetTab("Transfer")
 end
 

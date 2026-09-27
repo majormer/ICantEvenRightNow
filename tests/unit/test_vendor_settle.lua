@@ -216,6 +216,7 @@ T.test("custom transfer starts clean; 'show all' lifts a task's hidden rule", fu
     g:click(UI.frame.panels.Home.custom)
     g:Core().RefreshUI()
     T.eq(UI.activeTaskPredicate, nil)
+    T.eq(UI.transferDest, "Vendor", "at a vendor, the custom list sells")
     T.ok(listed(8805), "custom list shows everything sellable")
     -- Back in the task, sell the junk, then 'Show all items' from the empty list.
     P.OpenTask("Sell Items That Can Go")
