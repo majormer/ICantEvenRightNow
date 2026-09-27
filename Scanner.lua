@@ -7,6 +7,9 @@ local Core = ns.Core
 local Data = ns.Data
 local P    = ns.Private
 
+-- Quest activity seen at the last scan, per quest (for the change log above).
+local lastQuestActive = {}
+
 local BAG_IDS          = P.BAG_IDS
 local PRIVATE_BANK_IDS = P.PRIVATE_BANK_IDS
 local REAGENT_BANK_IDS = P.REAGENT_BANK_IDS
@@ -174,6 +177,18 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             local questID = questInfo and questInfo.questID or nil
             local questCompleted = questID and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted
                 and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
+            -- The quest log is asked too: right after a reload the container
+            -- info read a quest in progress as not active (Story of a
+            -- Memorable Victory), which offered the item for deposit once.
+            local questActive = questInfo and questInfo.isActive or false
+            if questID and not questActive and C_QuestLog and C_QuestLog.IsOnQuest then
+                questActive = C_QuestLog.IsOnQuest(questID) and true or false
+            end
+            if questID and lastQuestActive[questID] ~= nil and lastQuestActive[questID] ~= questActive then
+                P.Log("scan", "quest %s for %s changed: active %s -> %s", tostring(questID),
+                    tostring(name or itemID), tostring(lastQuestActive[questID]), tostring(questActive))
+            end
+            if questID then lastQuestActive[questID] = questActive end
             table.insert(output, {
                 itemID        = itemID,
                 name          = P.ItemDisplayName(name or info.itemName, link or hyperlink, itemID),
@@ -206,7 +221,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 levelPending       = levelPending or nil,
                 isQuestItem        = questInfo and questInfo.isQuestItem or false,
                 questID            = questID,
-                questActive        = questInfo and questInfo.isActive or false,
+                questActive        = questActive,
                 questCompleted     = questCompleted and true or false,
             })
         end

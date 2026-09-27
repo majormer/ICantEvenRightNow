@@ -216,3 +216,12 @@ T.test("a learned pet isn't 'not learned' while the pet journal is still loading
     game.world:fire("PET_JOURNAL_LIST_UPDATE")
     T.eq(explain(game, 7002).primary.id, "collectible_learned")
 end)
+
+T.test("a quest in progress is read from the quest log when the container info lags (after a reload)", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, I.QUEST_START, 1)
+        w.quests.active[90001] = true
+        w.containerQuestInfoStale = true
+    end)
+    T.eq(explain(game, I.QUEST_START).primary.id, "quest_active")
+end)

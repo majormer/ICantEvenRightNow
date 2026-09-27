@@ -694,7 +694,8 @@ function World:_buildEnv()
             return {
                 isQuestItem = def.isQuestItem and true or false,
                 questID = questID,
-                isActive = questID and world.quests.active[questID] and true or false,
+                -- containerQuestInfoStale: the container info lags the quest log (seen after a reload).
+                isActive = questID and not world.containerQuestInfoStale and world.quests.active[questID] and true or false,
             }
         end,
         PickupContainerItem = function(bagID, slot) world:pickup(bagID, slot) end,
