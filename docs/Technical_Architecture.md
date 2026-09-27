@@ -138,6 +138,10 @@ Tabs: Home, Transfer, Characters, Rules, Settings.
 - Game behavior (secret values, protected actions, server timing, UI rendering) still needs in-game verification; the offline suite reflects the API as documented.
 - Characters are known only after logging in once with the addon enabled.
 
+## Triage decisions (`Triage.lua`, `TriageUI.lua`)
+
+`db.decisions[itemID] = { choice, at, until_, reason, note, by }` holds the player's decision per item (sell, auction, destroy, keep, use, defer; keep with note "carry" = stays in the bags). Reasons `decided_*` (rank 0.5) make the decision the primary verdict; `IsAuctionCandidate`, `IsValueFlagged`, `NeedsPriceCheck`, `CanGoAndSellable`, `IsHeadedOut` and the pull tasks read it. Sell/auction/destroy decisions are swept once the item leaves the account. `TriageUI.lua` is the screen (queue by location, options from the channels, recommendation from the verdict and the rules, confirm steps, Wowhead edit boxes, keyboard) and registers the "Justify every item" card. The Destroy destination (`P.STORAGE_DESTROY`) is bags only, one item per click (`PickupContainerItem` + `DeleteCursorItem`).
+
 ## What can happen to an item (`P.ItemChannels`, Evaluator.lua)
 
 One function decides which channels an item can take; every task, block reason and candidate rule reads it. Rules from [Bind](https://warcraft.wiki.gg/wiki/Bind) and [Warbound until Equipped](https://warcraft.wiki.gg/wiki/Warbound_until_Equipped).
