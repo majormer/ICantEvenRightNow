@@ -155,7 +155,11 @@ local function EnsurePriceFirstFrame()
     local frame = CreateFrame("Frame", "ICantEvenRightNowPriceFirst", parent, "BackdropTemplate")
     frame:SetSize(460, 150)
     frame:SetPoint("CENTER", parent, "CENTER", 0, 40)
-    frame:SetFrameStrata("DIALOG")
+    -- Above the console's own panels (in game a DIALOG-strata child was drawn
+    -- underneath the Transfer list and never seen).
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    frame:SetToplevel(true)
+    frame:SetFrameLevel((parent.GetFrameLevel and parent:GetFrameLevel() or 0) + 50)
     frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
     frame:SetBackdropColor(0.08, 0.06, 0.02, 0.96)
     frame:SetBackdropBorderColor(0.8, 0.62, 0.18, 1)
@@ -213,6 +217,7 @@ function P.MaybePromptPriceFirst(task)
         .. " no price from the last day (" .. table.concat(names, ", ") .. (count > #names and ", ..." or "") .. ").\n\n"
         .. PriceFirstHow())
     frame:Show()
+    frame:Raise()
     return true
 end
 
