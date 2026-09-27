@@ -192,3 +192,44 @@ T.test("a saved 'refusal' that wasn't one (the busy bug) is dropped", function()
     T.ok(not g:P().MerchantRefused(8803))
     T.eq(g:db().vendorRefused[8803], nil)
 end)
+
+T.test("custom transfer starts clean; 'show all' lifts a task's hidden rule", function()
+    local g = T.game({ player = PLAYER, setup = F.setup(function(w)
+        w:put(0, 1, I.JUNK, 1)
+        w:defineItem(8804, { name = "Keeper Ring", classID = 4, subclassID = 0, equipLoc = "INVTYPE_FINGER",
+            itemLevel = 100, requiredLevel = 10, bindType = 1, quality = 3, sellPrice = 1000, expansionID = 11 })
+        w:put(0, 2, 8804, 1, { bound = true })
+        w:defineItem(8805, { name = "Current Potion", classID = 0, subclassID = 1, quality = 1, sellPrice = 100,
+            expansionID = 11, maxStack = 20 })
+        w:put(0, 3, 8805, 1)
+    end) })
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    local P, UI = g:P(), g:UI()
+    P.OpenTask("Sell Items That Can Go")
+    local function listed(id)
+        for _, plan in ipairs(UI.transferVisible or {}) do if plan.item.itemID == id then return true end end
+    end
+    T.ok(not listed(8805), "the task leaves out a current-expansion potion")
+    -- Custom transfer from Home: a clean list on the vendor route.
+    g:Core().ShowHomeUI()
+    g:click(UI.frame.panels.Home.custom)
+    g:Core().RefreshUI()
+    T.eq(UI.activeTaskPredicate, nil)
+    T.ok(listed(8805), "custom list shows everything sellable")
+    -- Back in the task, sell the junk, then 'Show all items' from the empty list.
+    P.OpenTask("Sell Items That Can Go")
+    for _, plan in ipairs(UI.transferVisible) do if plan.item.itemID == I.JUNK then UI.transferSelected[plan.key] = true end end
+    g.world:withHardwareEvent(function() g:Core().ExecuteTransferSelected() end)
+    g.world:advance(8)
+    g:Core().RefreshUI()
+    local panel = UI.frame.panels.Transfer
+    T.contains(panel.empty:GetText(), "All done")
+    -- Searching inside the task for an item it leaves out explains why and offers "Show all items".
+    g:type(panel.searchInput or panel.search, "Keeper")
+    g:Core().RefreshUI()
+    T.contains(panel.empty:GetText(), "Nothing here fits this task")
+    T.eq(panel.emptyAction:GetText(), "Show all items")
+    g:click(panel.emptyAction)
+    T.ok(listed(8804), "the ring is listed after 'Show all items'")
+end)

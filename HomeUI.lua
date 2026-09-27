@@ -274,7 +274,7 @@ function P.BuildHomeTab(parent)
 
     parent.custom = kit.CreateButton(parent, "Custom transfer", 120, 24)
     parent.custom:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
-    parent.custom:SetScript("OnClick", function() kit.SetTab("Transfer") end)
+    parent.custom:SetScript("OnClick", function() P.StartCustomTransfer() end)
     parent.rescan = kit.CreateButton(parent, "Rescan", 80, 24)
     parent.rescan:SetPoint("RIGHT", parent.custom, "LEFT", -8, 0)
     parent.rescan:SetScript("OnClick", function()

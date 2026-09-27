@@ -584,6 +584,17 @@ local function ForgetActiveTask()
     UI.activeTaskModified = false
 end
 
+-- A fresh Transfer list on the current route: no task, no task rule, no
+-- filters, nothing selected (in game "Custom transfer" reopened the last task).
+function P.StartCustomTransfer()
+    ResetTabFilters("Transfer")
+    ForgetActiveTask()
+    UI.activeTaskPredicate = nil
+    UI.membershipTask = nil
+    UI.transferSelected = {}
+    P.UIKit.SetTab("Transfer")
+end
+
 local function ApplyTransferWorkflow(workflow, panel, savedName)
     if not workflow then return end
     ApplySavedFilter(workflow, "Transfer")
@@ -1789,6 +1800,7 @@ local function BuildTransferTab(parent)
         elseif self.mode == "clear" then
             ResetTabFilters("Transfer")
             ClearActiveWorkflowState()
+            UI.activeTaskPredicate = nil   -- "show all" includes items outside the task's rule
             Core.RefreshUI()
         elseif self.mode == "blocked" then
             SetFilterHideBlocked("Transfer", false)
@@ -2165,6 +2177,12 @@ function Core.RefreshTransferUncached()
         emptyActionText = "Back to Home"
     elseif #allCandidates == 0 then
         emptyMsg = "No items were found in " .. GetStorageDisplayName(source) .. "."
+    elseif #matched == 0 and UI.activeTaskPredicate then
+        -- The task's own rule hides the rest (in game "Clear filters" left
+        -- 0 of 117 shown with no explanation).
+        emptyMsg = "Nothing here fits this task. It only lists items that fit it."
+        emptyActionMode = "clear"
+        emptyActionText = "Show all items"
     elseif #matched == 0 then
         emptyMsg = "No items match the active filters."
         emptyActionMode = "clear"
