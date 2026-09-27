@@ -53,10 +53,16 @@ local TASK_EXTRAS = {
         -- Not items headed out: in game, right after pulling auction
         -- candidates this offered to deposit them again (and "Can go" items
         -- that Pull Items That Can Go takes back out).
+        -- Items for a quest in progress stay in the bags too (in game this
+        -- offered to bank one).
         predicate = function(item)
             if P.IsAuctionCandidate and P.IsAuctionCandidate(item) then return false end
             if not P.ExplainScanned then return true end
-            return P.ExplainScanned(item).disposition ~= "free"
+            local explanation = P.ExplainScanned(item)
+            for _, reason in ipairs(explanation.reasons or {}) do
+                if reason.id == "quest_active" then return false end
+            end
+            return explanation.disposition ~= "free"
         end,
     },
     ["Pull Bank Upgrades"] = { description = "Gear in the bank that beats what you're wearing." },

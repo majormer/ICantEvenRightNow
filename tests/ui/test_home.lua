@@ -275,3 +275,22 @@ T.test("at a bank, Auction Candidates is bank work only while candidates are in 
     T.contains(plan, "here: bank (" .. bankTasks .. " task", "bags-only candidates aren't a bank task")
     T.contains(plan, "auction house (1 to list)")
 end)
+
+T.test("Deposit Old Items keeps items for a quest in progress in the bags", function()
+    local game = bagGame(function(w)
+        w:put(0, 1, I.LINEN, 20)
+        w:put(0, 2, I.QUEST_START, 1)
+        w.quests.active[90001] = true
+    end)
+    game:openBank()
+    local P = game:P()
+    local names = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do names[plan.item.itemID] = true end
+    T.ok(names[I.LINEN])
+    T.no(names[I.QUEST_START], "active quest item stays in the bags")
+    game.world.quests.active[90001] = nil
+    game:Core().ScanInventory("all", true)
+    names = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do names[plan.item.itemID] = true end
+    T.ok(names[I.QUEST_START], "a quest not started yet can be banked (your call)")
+end)
