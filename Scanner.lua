@@ -303,6 +303,33 @@ local function CountUnknownItems()
     return n
 end
 
+-- Diagnostic (enhanced log on): items whose verdict changed since the
+-- previous scan. In game, Home counts moved by one within seconds of a bank
+-- opening with the player doing nothing; this names the item and the change.
+local lastVerdict = {}
+local function LogVerdictChanges()
+    if not P.IsLogging() or not P.ExplainScanned or not P.WithEvaluationCache then return end
+    local seen = {}
+    local function check(list)
+        for _, item in ipairs(list or {}) do
+            local key = table.concat({ tostring(item.storageKind), tostring(item.bagID), tostring(item.slot), tostring(item.itemID) }, ":")
+            local ok, e = pcall(P.ExplainScanned, item)
+            local verdict = ok and (tostring(e.disposition) .. "/" .. tostring(e.primary and e.primary.id)) or "error"
+            seen[key] = verdict
+            if lastVerdict[key] and lastVerdict[key] ~= verdict then
+                P.Log("scan", "verdict changed: %s (%s) at %s: %s -> %s", tostring(item.name), tostring(item.itemID),
+                    tostring(item.location), lastVerdict[key], verdict)
+            end
+        end
+    end
+    P.WithEvaluationCache(function()
+        check(P.GetScanList(BAG_SCOPE))
+        check(P.GetScanList(BANK_SCOPE))
+        check(P.GetWarbandSnapshot and P.GetWarbandSnapshot().items)
+    end)
+    lastVerdict = seen
+end
+
 function Core.ScanInventory(scope, quiet, isItemDataRetry)
     Core.UpdateContext()
     if not isItemDataRetry then
@@ -379,6 +406,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
     end
 
     if P.IsLogging() then
+        LogVerdictChanges()
         P.Log("scan", "%s%s: bags=%s bank=%s warband=%s missingData=%s", scope,
             isItemDataRetry and " (item-data retry)" or "",
             scanBags and #P.GetScanList(BAG_SCOPE) or "-",
