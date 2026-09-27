@@ -250,3 +250,28 @@ T.test("Deposit Old Items leaves out items headed out (can go, auction candidate
     end
     T.no(names[I.VALUABLE_ORE], "auction candidate stays in the bags for the auction house")
 end)
+
+T.test("at a bank, Auction Candidates is bank work only while candidates are in a bank", function()
+    local game = bagGame(function(w)
+        w:put(0, 1, I.LINEN, 20)
+        w:put(0, 2, I.VALUABLE_ORE, 20)   -- auction candidate, already in the bags
+    end)
+    game:db().prices = { ["c:" .. I.VALUABLE_ORE] = { price = 500000, at = game.env.time() } }
+    game:openBank()
+    game:advance(9)
+    local P = game:P()
+    T.ok(P.FindTask("Auction Candidates"), "auction task available")
+    local top = P.GetTopReadyCard()
+    T.ok(top and top.name ~= "Auction Candidates", "the notice names real bank work")
+    local cards, bankTasks = P.GetTaskCards(), 0
+    for _, card in ipairs(cards) do
+        if card.name == "Auction Candidates" then T.eq(card.bankWork, 0) end
+        if not card.filterOnly and not card.task.count and not card.task.open and card.ready + card.waiting > 0 then
+            local source, dest = P.GetTaskRoute(card.task)
+            if P.NeedsBankStorage(source) or P.NeedsBankStorage(dest) then bankTasks = bankTasks + 1 end
+        end
+    end
+    local plan = P.TripPlan(cards) or ""
+    T.contains(plan, "here: bank (" .. bankTasks .. " task", "bags-only candidates aren't a bank task")
+    T.contains(plan, "auction house (1 to list)")
+end)

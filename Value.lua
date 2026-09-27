@@ -791,8 +791,9 @@ function P.RegisterValueTasks()
             if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
             if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
             if inWarband > 0 then parts[#parts + 1] = inWarband .. " in the Warband bank" end
+            -- 5th value: candidates still in a bank (the only bank work here).
             return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction"
-                .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")"
+                .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")", inBank + inWarband
         end,
         secondary = {
             label = function()

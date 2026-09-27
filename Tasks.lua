@@ -191,8 +191,9 @@ local function EvaluateTask(task)
     if task.filterOnly then
         -- no count: the route is chosen when the filters are applied
     elseif task.count then
-        local ready, needs, value, summary = task.count()
+        local ready, needs, value, summary, bankWork = task.count()
         card.ready, card.needs, card.value, card.summaryText = ready or 0, needs, value or 0, summary
+        card.bankWork = bankWork
     else
         for _, plan in ipairs(TaskPlans(task)) do
             local item = plan.item
@@ -269,6 +270,9 @@ function P.GetTaskCards()
     local atBank = ns.DB.context.bankOpen
     local function step(card)
         if not atBank or card.ready == 0 then return 0 end
+        -- Counted tasks (Auction Candidates) have bank work only while
+        -- items are still in a bank; otherwise they wait for the next stop.
+        if card.task and card.task.count then return (card.bankWork or 0) > 0 and 1 or 3 end
         local source, dest = TaskRoute(card.task or {})
         if dest == "Bags" and P.NeedsBankStorage(source) then return 1 end
         return 2
@@ -310,7 +314,9 @@ function P.TripPlan(cards)
     for _, card in ipairs(cards or {}) do
         if not card.filterOnly and card.task and not card.task.open and (card.ready + card.waiting) > 0 then
             local source, dest = TaskRoute(card.task)
-            if P.NeedsBankStorage(source) or P.NeedsBankStorage(dest) then
+            if card.task.count then
+                if (card.bankWork or 0) > 0 then bank = bank + 1 end
+            elseif P.NeedsBankStorage(source) or P.NeedsBankStorage(dest) then
                 bank = bank + 1
             elseif dest == "Vendor" then
                 vendor = math.max(vendor, card.ready + card.waiting)
@@ -366,6 +372,23 @@ function P.GetTopReadyCard()
         -- Nothing to sell: no notice (an auction or bank task isn't what a
         -- vendor visit is for; in game Auction Candidates showed again).
         return best
+    end
+    -- At a bank, the first task with bank work (in game the notice named
+    -- Auction Candidates after every candidate was already in the bags).
+    if ns.DB.context.bankOpen then
+        for _, card in ipairs(cards) do
+            if card.ready > 0 and not card.filterOnly and card.task and not card.task.open then
+                local source, dest = TaskRoute(card.task)
+                local bankWork
+                if card.task.count then
+                    bankWork = (card.bankWork or 0) > 0
+                else
+                    bankWork = P.NeedsBankStorage(source) or P.NeedsBankStorage(dest)
+                end
+                if bankWork then return card end
+            end
+        end
+        return nil
     end
     for _, card in ipairs(cards) do
         if card.ready > 0 then return card end
