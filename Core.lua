@@ -282,6 +282,8 @@ function Core.HandleSlashCommand(msg)
         end
     elseif cmd == "where" then
         for _, line in ipairs(P.WhereIsLines(arg1)) do Print(line) end
+    elseif cmd == "explain" then
+        for _, line in ipairs(P.ExplainLines(arg1)) do Print(line) P.Log("explain", "%s", line) end
     elseif cmd == "migration" then
         local report = P.LatestMigrationReport()
         if not report then
@@ -290,7 +292,7 @@ function Core.HandleSlashCommand(msg)
             for _, line in ipairs(P.MigrationReportLines(report)) do Print(line) end
         end
     else
-        Print("Commands: /icanteven (Home), transfer, characters, why [all], scan [bags|bank|all], dump, recall, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
+        Print("Commands: /icanteven (Home), transfer, characters, why [all], explain <item>, scan [bags|bank|all], dump, recall, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
     end
 end
 

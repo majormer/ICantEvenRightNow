@@ -798,6 +798,46 @@ function P.WhyItemLines(scope)
     return lines
 end
 
+-- Diagnostic: everything behind one item's verdict, for items whose name
+-- contains the query (this character's bags, bank, and the Warband bank).
+function P.ExplainLines(query)
+    query = (query or ""):lower()
+    local lines = {}
+    if query == "" then return { "Usage: /icanteven explain <item name>" } end
+    local currentKey = P.currentCharacterKey or P.GetCharacterKey()
+    for _, snapshot in ipairs(P.AllSnapshots()) do
+        local char = snapshot.character
+        if snapshot.scope == "warband" or (char and char.key == currentKey) then
+            for _, item in ipairs(snapshot.items) do
+                if item.name and item.name:lower():find(query, 1, true) then
+                    local explanation = P.ExplainScanned(item)
+                    local evidence = {}
+                    for _, r in ipairs(explanation.reasons or {}) do
+                        evidence[#evidence + 1] = r.id .. (r.evidence and (": " .. r.evidence) or "")
+                    end
+                    local price = P.GetAuctionPrice and P.GetAuctionPrice(item)
+                    local advice, why = P.AuctionAdvice and P.AuctionAdvice(item, true)
+                    local kind, learned = P.GetCollectibleState and P.GetCollectibleState(item)
+                    lines[#lines + 1] = string.format("%s (%s) at %s: %s [%s]", tostring(item.name), tostring(item.itemID),
+                        tostring(item.location), explanation.disposition, table.concat(evidence, "; "))
+                    lines[#lines + 1] = string.format("  data %s | link %s | vendor %s | price %s | advice %s%s",
+                        tostring(P.ItemDataState and P.ItemDataState(item)), tostring(item.link),
+                        P.FormatMoney and P.FormatMoney(item.sellPrice or 0) or tostring(item.sellPrice),
+                        price and (P.FormatMoney(price.price) .. " (" .. P.FormatPriceSource(price) .. ")") or "none",
+                        tostring(advice), why and (": " .. why) or "")
+                    lines[#lines + 1] = string.format("  can go and sellable %s | auction candidate %s | refused %s | collectible %s/%s | pet journal ready %s",
+                        tostring(P.CanGoAndSellable and P.CanGoAndSellable(item)),
+                        tostring(P.IsAuctionCandidate and P.IsAuctionCandidate(item)),
+                        tostring(P.MerchantRefused and P.MerchantRefused(item.itemID)),
+                        tostring(kind), tostring(learned), tostring(P.PetJournalReady and P.PetJournalReady()))
+                end
+            end
+        end
+    end
+    if #lines == 0 then lines[1] = "No scanned item matches \"" .. query .. "\"." end
+    return lines
+end
+
 function P.BuildWhyReport(scope)
     local currentKey = P.currentCharacterKey or P.GetCharacterKey()
     local groups, total = {}, 0
