@@ -954,7 +954,7 @@ function World:_buildEnv()
         return world.postNeedsConfirmation or false
     end
     G.C_AuctionHouse = {
-        IsThrottledMessageSystemReady = function() return true end,
+        IsThrottledMessageSystemReady = function() return not world.auctionHouseBusy end,
         GetItemCommodityStatus = function(location)
             local stack = stackFor(location)
             local def = stack and world.items[stack.itemID]

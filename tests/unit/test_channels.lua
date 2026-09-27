@@ -117,3 +117,26 @@ T.test("an item that can't be auctioned and nobody can use goes to the vendor, w
     T.eq((P.GetItemValue(helm)), helm.sellPrice, "valued at the vendor price")
     T.ok(P.CanGoAndSellable(helm), "Sell Items That Can Go offers it")
 end)
+
+T.test("a post while the auction house is busy is refused up front, and the item stays selected", function()
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end)
+    g:db().prices = { ["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 900000, at = g.env.time() } }
+    g:openAuctionHouse()
+    g:Core().UpdateContext()
+    g:Core().ScanInventory("bags", true)
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_AUCTION_HOUSE
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    g.world:advance(9)
+    g:Core().RefreshUI()
+    local panel = UI.frame.panels.Transfer
+    g:click(panel.selectAll)
+    g.world.auctionHouseBusy = true
+    local mark = g:logMark()
+    g:click(panel.execute)
+    T.contains(g:printed(mark), "busy")
+    T.eq(#(g.world.posted or {}), 0, "nothing sent")
+    T.no(P.AuctionRefused(I.OLD_SWORD), "not remembered as refused")
+end)

@@ -811,7 +811,8 @@ end
 -- so the item isn't offered again; /icanteven refused shows them.
 -- ===========================================================================
 local LISTING_CHECK_DELAY = 1.5
-local listingWatch = nil       -- { items, errors }
+local LISTING_CHECK_TRIES = 4  -- an item stays locked while the game processes the post
+local listingWatch = nil       -- { items, errors, tries }
 
 local function AuctionRefusedStore()
     ns.DB.auctionRefused = ns.DB.auctionRefused or {}
@@ -830,18 +831,28 @@ if CreateFrame then
     end)
 end
 
-local function CheckListings()
+local CheckListings
+CheckListings = function()
     local watch = listingWatch
-    listingWatch = nil
     if not watch then return end
-    local listed, refused = {}, {}
+    local listed, refused, waiting = {}, {}, false
     for _, item in ipairs(watch.items) do
-        if CContainer.GetContainerItemID(item.bagID, item.slot) == item.itemID then
+        local id = CContainer.GetContainerItemID(item.bagID, item.slot)
+        local info = CContainer.GetContainerItemInfo(item.bagID, item.slot)
+        if id == item.itemID and info and info.isLocked then
+            waiting = true
+        elseif id == item.itemID then
             table.insert(refused, item)
         else
             table.insert(listed, item)
         end
     end
+    if waiting and (watch.tries or 0) < LISTING_CHECK_TRIES then
+        watch.tries = (watch.tries or 0) + 1
+        C_Timer.After(LISTING_CHECK_DELAY, CheckListings)
+        return
+    end
+    listingWatch = nil
     local reason = watch.errors[#watch.errors]
     P.Log("auction", "confirmed: %d listed, %d refused%s", #listed, #refused,
         reason and (" (" .. table.concat(watch.errors, "; ") .. ")") or "")
@@ -878,6 +889,11 @@ local function PostAuction(item)
     end
     local price = P.ListingPrice(item)
     if not price then return false, "No listing price" end
+    -- The auction house takes one request at a time; a post sent while it's
+    -- busy is dropped without a word (in game: "no answer" on two items).
+    if C_AuctionHouse.IsThrottledMessageSystemReady and not C_AuctionHouse.IsThrottledMessageSystemReady() then
+        return false, "The auction house is busy: click List again in a moment"
+    end
     local location = ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot)
     local duration = P.LISTING_DURATION or 2
     local commodityValue = Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity or 2
