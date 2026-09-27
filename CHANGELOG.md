@@ -48,6 +48,8 @@ Release note rules:
 
 ### Improved
 
+- **Trip order.** Home shows where to go next in the order that avoids shuffling items ("Trip: here: bank (4 tasks) -> auction house (8 to list) -> vendor (44 to sell)"). At a bank, pulls are listed before deposits because they free the space deposits need; deposit cards say when the Warband bank is short on space, and pull cards say when your bags are.
+
 - **Price first, then sell.** Opening a sell task asks first when items in it could sell at the auction house but have no price from the last day, from any source (Auctionator, TSM, or the addon's own lookups), and says how to get one. "Sell anyway" stops asking for the session.
 - **Full scans count.** After an Auctionator full scan, items it found no listings for are marked "not listed at the auction house" and are no longer held back for pricing. Common and uncommon items listed at 5,000g or more are marked unconfirmed and left out of value totals (troll listings).
 - **Freshest price wins.** When several sources know an item's price, the most recent one is used.

@@ -255,3 +255,28 @@ T.test("a refused item with an auction price suggests the auction house; letting
     T.contains(explanation.label, "sell it at the auction house")
     T.contains(explanation.evidence, "about")
 end)
+
+T.test("at a bank, pulls come before deposits, and Home shows the trip", function()
+    local g = T.game({ player = PLAYER, setup = F.setup(function(w)
+        w:put(6, 1, I.JUNK, 1)            -- in the bank: can go (pull it out)
+        w:put(0, 1, I.OLD_POTION, 5)      -- in the bags: old expansion (deposit it)
+        w:put(0, 2, I.JUNK, 2)            -- in the bags: sell at a vendor
+    end) })
+    g:openBank()
+    g:advance(9)
+    local P = g:P()
+    local cards = P.GetTaskCards()
+    local pullAt, depositAt
+    for index, card in ipairs(cards) do
+        if card.name == "Pull Items That Can Go" and card.ready > 0 then pullAt = index end
+        if card.name == "Deposit Old Items" and card.ready > 0 then depositAt = index end
+    end
+    T.ok(pullAt and depositAt, "both ready")
+    T.ok(pullAt < depositAt, "pull first: it frees the space deposits need")
+    local plan = P.TripPlan(cards)
+    T.contains(plan, "here: bank")
+    T.contains(plan, "vendor")
+    T.ok(plan:find("bank", 1, true) < plan:find("vendor", 1, true), "bank before vendor")
+    g:Core().ShowHomeUI()
+    T.contains(g:UI().frame.panels.Home.tripPlan:GetText(), "Trip: here: bank")
+end)

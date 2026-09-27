@@ -271,6 +271,9 @@ function P.BuildHomeTab(parent)
     parent.headline:SetPoint("TOPLEFT", parent, "TOPLEFT", 0, 0)
     parent.scanInfo = kit.CreateLabel(parent, "", "GameFontDisableSmall")
     parent.scanInfo:SetPoint("TOPLEFT", parent.headline, "BOTTOMLEFT", 0, -6)
+    -- Where to go next (bank -> auction house -> vendor).
+    parent.tripPlan = kit.CreateLabel(parent, "", "GameFontNormalSmall")
+    parent.tripPlan:SetPoint("LEFT", parent.headline, "RIGHT", 16, 0)
 
     parent.custom = kit.CreateButton(parent, "Custom transfer", 120, 24)
     parent.custom:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
@@ -379,6 +382,10 @@ function P.RefreshHome()
 
     -- Cards
     local cards = P.GetTaskCards()
+    if panel.tripPlan then
+        local settling = P.IsSettling and P.IsSettling()
+        panel.tripPlan:SetText(not settling and P.TripPlan and P.TripPlan(cards) or "")
+    end
     panel.cardData = cards
     local pages = math.max(1, math.ceil(#cards / CARDS_PER_PAGE))
     if panel.page > pages then panel.page = pages end

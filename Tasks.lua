@@ -254,13 +254,77 @@ function P.GetTaskCards()
         if card.waiting > 0 or (card.blocked or 0) > 0 then return 2 end
         return 3
     end
+    -- At a bank, pulls come before deposits: they free the space deposits
+    -- need (in game a deposit filled the Warband bank right before a pull).
+    local atBank = ns.DB.context.bankOpen
+    local function step(card)
+        if not atBank or card.ready == 0 then return 0 end
+        local source, dest = TaskRoute(card.task or {})
+        if dest == "Bags" and P.NeedsBankStorage(source) then return 1 end
+        return 2
+    end
     table.sort(cards, function(a, b)
         local ra, rb = rank(a), rank(b)
         if ra ~= rb then return ra < rb end
+        local sa, sb = step(a), step(b)
+        if sa ~= sb then return sa < sb end
         if a.total ~= b.total then return a.total > b.total end
         return a.name < b.name
     end)
     return cards
+end
+
+-- Free slots in the bags, and in the Warband bank's tabs (nil when unknown).
+function P.FreeBagSlots()
+    local free = 0
+    for _, bagID in ipairs(P.NORMAL_BAG_IDS or {}) do
+        free = free + (C_Container.GetContainerNumFreeSlots and C_Container.GetContainerNumFreeSlots(bagID) or 0)
+    end
+    return free
+end
+
+function P.FreeWarbandSlots()
+    if not ns.DB.context.bankOpen then return nil end
+    local free, any = 0, false
+    for _, tab in ipairs(P.GetWarbandTabs and P.GetWarbandTabs() or {}) do
+        any = true
+        free = free + (C_Container.GetContainerNumFreeSlots and C_Container.GetContainerNumFreeSlots(tab.bagID) or 0)
+    end
+    return any and free or nil
+end
+
+-- One line for Home: where to go next and why, in the order that avoids
+-- shuffling (bank -> auction house -> vendor). Current stop marked "here".
+function P.TripPlan(cards)
+    local bank, vendor = 0, 0
+    for _, card in ipairs(cards or {}) do
+        if not card.filterOnly and card.task and not card.task.open and (card.ready + card.waiting) > 0 then
+            local source, dest = TaskRoute(card.task)
+            if P.NeedsBankStorage(source) or P.NeedsBankStorage(dest) then
+                bank = bank + 1
+            elseif dest == "Vendor" then
+                vendor = math.max(vendor, card.ready + card.waiting)
+            end
+        end
+    end
+    local auction = 0
+    if P.AuctionCandidateItems then
+        for _, item in ipairs(P.AuctionCandidateItems()) do
+            if item.scope == P.BAG_SCOPE then auction = auction + 1 end
+        end
+    end
+    local context = ns.DB.context
+    local stops = {}
+    local function add(here, label, count, unit)
+        if count > 0 then
+            stops[#stops + 1] = (here and "here: " or "") .. label .. " (" .. count .. " " .. unit .. ")"
+        end
+    end
+    add(context.bankOpen, "bank", bank, bank == 1 and "task" or "tasks")
+    add(context.auctionHouseOpen, "auction house", auction, "to list")
+    add(context.vendorOpen, "vendor", vendor, "to sell")
+    if #stops == 0 then return nil end
+    return "Trip: " .. table.concat(stops, "  ->  ")
 end
 
 -- The card to mention in the bank/vendor notice: the biggest ready card.
@@ -321,6 +385,18 @@ function P.CardSummary(card)
     if needsPrice then worthMore = worthMore and (worthMore .. ", " .. needsPrice) or needsPrice end
     if card.ready > 0 then
         local extra = card.waiting > 0 and (", " .. card.waiting .. " more elsewhere") or ""
+        local source, dest = TaskRoute(card.task or {})
+        if P.IsWarbandStorage(dest) then
+            local free = P.FreeWarbandSlots()
+            if free and free < card.ready then
+                extra = extra .. "; Warband bank has " .. free .. " free: pull items that can go first"
+            end
+        elseif dest == "Bags" and P.NeedsBankStorage(source) then
+            local free = P.FreeBagSlots()
+            if free < card.ready then
+                extra = extra .. "; bags have " .. free .. " free: sell at a vendor first"
+            end
+        end
         return card.ready .. " ready" .. money .. extra .. (worthMore and (", " .. worthMore) or "")
     elseif card.waiting > 0 then
         return card.waiting .. " waiting: " .. (card.needs or "change location")
