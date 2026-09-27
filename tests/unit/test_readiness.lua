@@ -142,3 +142,22 @@ T.test("item data: no stats wait for things that aren't gear", function()
     T.eq(state, "ready")
     T.eq(#P.ItemDataWaits(), 0, "nothing to wait for")
 end)
+
+T.test("scanner: no retry rescans for items it already knows when the game drops their data", function()
+    local g = game({})
+    local P = g:P()
+    P.SetLogging(true)
+    g:slash("scan bags")
+    local def = g.world.items[8701]
+    def.cached, def.neverLoads = false, true   -- the client dropped the helm
+    g:slash("scan bags")
+    g:advance(15)
+    local retries = 0
+    for _, line in ipairs(P.GetLogLines()) do
+        if line:find("item-data retry", 1, true) then retries = retries + 1 end
+    end
+    T.eq(retries, 0, "no rescans for a known item")
+    local item = helm(g)
+    T.eq(item.name, "Test Helm", "kept what it knew")
+    T.eq(item.classID, 4)
+end)

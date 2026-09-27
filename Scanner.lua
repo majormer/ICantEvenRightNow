@@ -128,10 +128,15 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName = name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName
                 k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID = maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
             else
-                missingData = true
                 if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
                 -- Keep what an earlier scan knew until the client loads the data.
+                -- Only an item never described before is missing: the client
+                -- drops and reloads item data it already had (in game, 11
+                -- rescans in 11 s for items the addon knew all along).
                 local k = known[itemID]
+                if not (k and k.name and k.classID) then
+                    missingData = true
+                end
                 if k then
                     name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName = k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName
                     maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID = k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID
