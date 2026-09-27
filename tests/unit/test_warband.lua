@@ -463,4 +463,8 @@ T.test("a full Warband bank says so and offers to make room", function()
     T.contains(panel.empty:GetText(), "The Warband bank is full")
     T.contains(panel.empty:GetText(), "1 of 5 bought")
     T.eq(panel.emptyAction:GetText(), "Pull Warband Items That Can Go")
+    -- The Home card says so too, instead of "Nothing to do right now".
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
+    if card and (card.blocked or 0) > 0 then T.contains(P.CardSummary(card), "blocked: Warband bank full") end
 end)

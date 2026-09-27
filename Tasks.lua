@@ -205,7 +205,12 @@ local function EvaluateTask(task)
                 card.waiting = card.waiting + 1
                 card.value = card.value + stackValue
                 card.needs = card.needs or CONTEXT_BLOCKS[plan.blocked]
-            elseif plan.blocked and task.kind == "extra" and task.predicate then
+            elseif plan.blocked and task.predicate and (task.kind == "extra"
+                or plan.blocked:find("No empty slots", 1, true)
+                or (P.WARBAND_ASSIGNED_FULL and plan.blocked:sub(1, #P.WARBAND_ASSIGNED_FULL) == P.WARBAND_ASSIGNED_FULL)) then
+                -- (Also any task whose destination is full: in game "Deposit
+                -- to Warband" said "Nothing to do right now" with the Warband
+                -- bank full and an item waiting.)
                 -- Items the player asked for (e.g. marked for an alt) but that
                 -- can't move: say why instead of "Nothing to do" (in game: a
                 -- full Warband tab hid a queued hand-off).
@@ -320,7 +325,13 @@ function P.CardSummary(card)
     elseif card.waiting > 0 then
         return card.waiting .. " waiting: " .. (card.needs or "change location")
     elseif (card.blocked or 0) > 0 then
-        return card.blocked .. " blocked: " .. tostring(card.blockedReason)
+        local reason = tostring(card.blockedReason)
+        local _, dest = TaskRoute(card.task or {})
+        if P.IsWarbandStorage(dest) and (reason:find("No empty slots", 1, true)
+            or (P.WARBAND_ASSIGNED_FULL and reason:sub(1, #P.WARBAND_ASSIGNED_FULL) == P.WARBAND_ASSIGNED_FULL)) then
+            reason = "Warband bank full"
+        end
+        return card.blocked .. " blocked: " .. reason
     elseif worthMore then
         return worthMore .. ((card.worthMore or 0) > 0 and ": see Auction Candidates" or "")
     end

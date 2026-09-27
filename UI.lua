@@ -2261,6 +2261,10 @@ function Core.RefreshTransferUncached()
     panel.emptyAction.mode = emptyActionMode
     panel.emptyAction.scanScope = emptyScanScope
     panel.emptyAction:SetText(emptyActionText or "")
+    -- Fit longer labels ("Pull Warband Items That Can Go" overflowed in game).
+    local label = panel.emptyAction.GetFontString and panel.emptyAction:GetFontString()
+    local textWidth = label and label.GetStringWidth and label:GetStringWidth() or 0
+    panel.emptyAction:SetWidth(math.max(128, textWidth + 24))
     panel.emptyAction:SetShown(#visible == 0 and emptyActionMode ~= nil)
 
     local selectedCount = 0
