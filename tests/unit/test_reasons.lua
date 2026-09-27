@@ -274,7 +274,7 @@ T.test("utility items (a bound device with a Use effect) stay in the bags: no de
     local game = mageWith(function(w)
         w:put(0, 1, 49040, 1, { bound = true })
         w:put(0, 2, I.LINEN, 20)
-    end, function(w) w:defineItem(49040, { name = "Jeeves", classID = 7, subclassID = 2, itemSubType = "Explosives and Devices",
+    end, function(w) w:defineItem(49040, { name = "Jeeves", classID = 0, subclassID = 0, itemSubType = "Explosives and Devices",
         quality = 3, sellPrice = 12345, expansionID = 2, bindType = 1, useSpell = "Summon Jeeves" }) end)
     local e = explain(game, 49040)
     T.eq(e.primary.id, "utility_item")

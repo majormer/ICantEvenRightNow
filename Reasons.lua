@@ -625,12 +625,14 @@ local function ExplainItem(item, ctx)
     local useSpell = IsGear(item) and not SITUATIONAL_SLOTS[item.equipLoc or ""] and P.ItemUseSpell and P.ItemUseSpell(item)
     if useSpell then add("use_effect", "Use: " .. useSpell) end
     -- Utility items (player's rule 2026-09-27, Jeeves): a bound device or
-    -- gadget with a Use effect that isn't a consumable stays in the bags.
-    -- Consumables (class 0), quest items and collectibles are handled above.
-    if not IsGear(item) and (item.isBound or item.isWarbandBound) and item.classID ~= 0 and item.classID ~= 12
+    -- gadget with a Use effect stays in the bags. Devices are keyed on the
+    -- subtype: in game Jeeves is item class 0 ("Explosives and Devices"),
+    -- the same class as potions, so the class alone can't tell them apart.
+    -- Potions, food, quest items and collectibles are handled above.
+    if not IsGear(item) and (item.isBound or item.isWarbandBound) and item.classID ~= 12
         and not CollectibleState(item) and P.ItemUseSpell then
         local gadgetUse = P.ItemUseSpell(item)
-        local device = (item.classID == 7 and item.subclassID == 2) or item.itemSubTypeName == "Explosives and Devices"
+        local device = item.itemSubTypeName == "Explosives and Devices" or (item.classID == 7 and item.subclassID == 2)
             or (item.classID == 15 and (item.subclassID == 0 or item.subclassID == 4))
         if gadgetUse and device then add("utility_item", "Use: " .. gadgetUse) end
     end
