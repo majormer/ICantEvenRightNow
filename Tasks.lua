@@ -48,7 +48,17 @@ end
 P.IsShareableItem = IsShareable
 
 local TASK_EXTRAS = {
-    ["Deposit Old Items"] = { description = "Old-expansion items from your bags into the bank." },
+    ["Deposit Old Items"] = {
+        description = "Old-expansion items from your bags into the bank.",
+        -- Not items headed out: in game, right after pulling auction
+        -- candidates this offered to deposit them again (and "Can go" items
+        -- that Pull Items That Can Go takes back out).
+        predicate = function(item)
+            if P.IsAuctionCandidate and P.IsAuctionCandidate(item) then return false end
+            if not P.ExplainScanned then return true end
+            return P.ExplainScanned(item).disposition ~= "free"
+        end,
+    },
     ["Pull Bank Upgrades"] = { description = "Gear in the bank that beats what you're wearing." },
     ["Pull Auctionable BoEs"] = { description = "Bind-on-equip gear to list on the auction house." },
     ["Sell Old Consumables"] = { description = "Potions, food, and flasks from past expansions." },

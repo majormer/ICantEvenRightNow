@@ -259,7 +259,7 @@ end)
 T.test("at a bank, pulls come before deposits, and Home shows the trip", function()
     local g = T.game({ player = PLAYER, setup = F.setup(function(w)
         w:put(6, 1, I.JUNK, 1)            -- in the bank: can go (pull it out)
-        w:put(0, 1, I.OLD_POTION, 5)      -- in the bags: old expansion (deposit it)
+        w:put(0, 1, I.LINEN, 20)          -- in the bags: old expansion, kept (deposit it)
         w:put(0, 2, I.JUNK, 2)            -- in the bags: sell at a vendor
     end) })
     g:openBank()

@@ -17,7 +17,7 @@ local function bagGame(populate, extra)
 end
 
 T.test("the console opens on Home with task cards", function()
-    local game = bagGame(function(w) w:put(0, 1, I.OLD_POTION, 5) end)
+    local game = bagGame(function(w) w:put(0, 1, I.LINEN, 20) end)
     game:slash("")
     T.eq(game:UI().activeTab, "Home")
     local card = homeCard(game, "Deposit Old Items")
@@ -33,7 +33,7 @@ T.test("at a bank the card is ready and opens its review list", function()
     game:openBank()
     game:slash("")
     local card = homeCard(game, "Deposit Old Items")
-    T.contains(card.summary:GetText(), "2 ready")
+    T.contains(card.summary:GetText(), "1 ready", "the old potion can go: it isn't banked")
     game:click(card.open)
     local UI = game:UI()
     T.eq(UI.activeTab, "Transfer")
@@ -44,10 +44,10 @@ end)
 
 T.test("pre-selection setting selects safe movable items only", function()
     local game = bagGame(function(w)
-        w:put(0, 1, I.OLD_POTION, 5)
-        w:put(0, 2, I.LINEN, 20)
+        w:put(0, 1, I.LINEN, 20)
+        w:put(0, 2, I.VALUABLE_ORE, 20)
     end)
-    game:db().rules.items[I.LINEN] = { protect = true }
+    game:db().rules.items[I.VALUABLE_ORE] = { protect = true }
     game:db().ui.preselectQuickTasks = true
     game:openBank()
     game:slash("")
@@ -57,18 +57,18 @@ T.test("pre-selection setting selects safe movable items only", function()
     for _, plan in ipairs(UI.transferVisible) do
         if UI.transferSelected[plan.key] then selected[plan.item.itemID] = true end
     end
-    T.ok(selected[I.OLD_POTION], "potion pre-selected")
-    T.no(selected[I.LINEN], "protected linen never pre-selected")
+    T.ok(selected[I.LINEN], "linen pre-selected")
+    T.no(selected[I.VALUABLE_ORE], "protected ore never pre-selected")
     T.contains(UI.frame.panels.Transfer.execute:GetText(), "Deposit 1")
 end)
 
 T.test("editing a task marks it modified instead of losing its name", function()
-    local game = bagGame(function(w) w:put(0, 1, I.OLD_POTION, 5) end)
+    local game = bagGame(function(w) w:put(0, 1, I.LINEN, 20) end)
     game:openBank()
     game:slash("")
     game:click(homeCard(game, "Deposit Old Items").open)
     local panel = game:UI().frame.panels.Transfer
-    game:type(panel.search, "potion")
+    game:type(panel.search, "linen")
     game:Core().RefreshUI()
     T.eq(panel.taskTitle:GetText(), "Deposit Old Items (modified)")
 end)
@@ -158,7 +158,7 @@ T.test("vendor sales stop at 12 per click so every sale can be bought back", fun
 end)
 
 T.test("opening a bank shows a notice with the top task; Open goes to its list", function()
-    local game = bagGame(function(w) w:put(0, 1, I.OLD_POTION, 5) end)
+    local game = bagGame(function(w) w:put(0, 1, I.LINEN, 20) end)
     game:openBank()
     local notice = game:UI().contextNoticeFrame
     T.ok(notice and notice:IsShown(), "notice shown")
@@ -230,4 +230,23 @@ T.test("filter-only presets from 0.4/0.5 get no route-based count and keep the c
     T.eq(UI.transferSource, "Bank (All Tabs)", "route unchanged")
     T.eq(UI.transferDest, "Bags")
     T.eq(game:db().ui.tabFilters.Transfer.upgrade.include, "Upgrade", "filters applied")
+end)
+
+T.test("Deposit Old Items leaves out items headed out (can go, auction candidates)", function()
+    local game = bagGame(function(w)
+        w:put(0, 1, I.LINEN, 20)          -- kept: banked
+        w:put(0, 2, I.OLD_POTION, 5)      -- can go: sell it, don't bank it
+        w:put(0, 3, I.VALUABLE_ORE, 20)   -- worth far more at auction: list it
+    end)
+    game:db().prices = { ["c:" .. I.VALUABLE_ORE] = { price = 500000, at = game.env.time() } }
+    game:openBank()
+    local P = game:P()
+    local names = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do names[plan.item.itemID] = true end
+    T.ok(names[I.LINEN], "kept old material is banked")
+    T.no(names[I.OLD_POTION], "can-go potion stays in the bags for the vendor")
+    for _, item in ipairs(P.GetScanList(P.BAG_SCOPE)) do
+        if item.itemID == I.VALUABLE_ORE then T.ok(P.IsAuctionCandidate(item), "ore is an auction candidate") end
+    end
+    T.no(names[I.VALUABLE_ORE], "auction candidate stays in the bags for the auction house")
 end)

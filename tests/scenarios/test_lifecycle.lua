@@ -28,7 +28,7 @@ local function clickNoticeButton(game, label)
 end
 
 T.test("main, first login: one role question, bank tasks wait for a bank", function()
-    local g = session(nil, MAIN, function(w) w:put(0, 1, I.OLD_POTION, 5) end)
+    local g = session(nil, MAIN, function(w) w:put(0, 1, I.LINEN, 20) end)
     local text = homeNotice(g)
     T.contains(text, "What is Mainchar? Suggested: Main / Active")
     T.notContains(text, "What's new", "fresh installs skip What's New")
