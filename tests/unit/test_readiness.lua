@@ -161,3 +161,15 @@ T.test("scanner: no retry rescans for items it already knows when the game drops
     T.eq(item.name, "Test Helm", "kept what it knew")
     T.eq(item.classID, 4)
 end)
+
+T.test("appearance: an empty answer for the link falls back to the item ID", function()
+    local g = game({ appearanceSourceID = 301002, appearanceLinkLookupFails = true })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g.world.collections.appearances[301002] = true
+    local item = helm(g)
+    T.eq((P.ItemAppearance(item)), true, "collected, found by item ID")
+    g.world.collections.appearances[301002] = nil
+    local fresh = helm(g)
+    T.eq((P.ItemAppearance(fresh)), false, "not collected is still reported")
+end)

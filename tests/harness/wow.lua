@@ -830,6 +830,8 @@ function World:_buildEnv()
             local itemID = parseItemID(value)
             local def = itemID and world.items[itemID]
             if not def or not def.appearanceSourceID then return nil end
+            -- def.appearanceLinkLookupFails: a link returns nothing, the ID works (seen in game).
+            if def.appearanceLinkLookupFails and type(value) == "string" then return nil end
             return def.appearanceID or def.appearanceSourceID, def.appearanceSourceID
         end,
         PlayerHasTransmogItemModifiedAppearance = function(sourceID)

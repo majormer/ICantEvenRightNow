@@ -144,20 +144,35 @@ function P.ItemAppearance(item)
     local itemID = item.itemID
     local key = VariantKey(item)
     local byLink = appearanceCache[itemID]
-    local sourceID = byLink and byLink[key]
+    -- Cached: { sourceID, viaID } or false (no appearance).
+    local entry = byLink and byLink[key]
     local state = "ready"
-    if sourceID == nil then
+    if entry == nil then
         state = P.ItemDataState(item)
         if state == "loading" or state == "missing" then return nil, state end
         local ok, _, source = pcall(C_TransmogCollection.GetItemInfo, item.link or itemID)
-        sourceID = ok and source or false
+        entry = ok and source and { source, false } or false
+        if not entry and item.link then
+            -- In game GetItemInfo(bag link) returned nothing for Steelbark
+            -- Casque while GetItemInfo(itemID) gave its appearance, which the
+            -- player had collected: the helm read "no appearance" and so
+            -- "Your call" instead of "Can go". Ask by item ID too.
+            local okID, _, sourceByID = pcall(C_TransmogCollection.GetItemInfo, itemID)
+            entry = okID and sourceByID and { sourceByID, true } or false
+        end
         if state == "ready" then
             appearanceCache[itemID] = byLink or {}
-            appearanceCache[itemID][key] = sourceID
+            appearanceCache[itemID][key] = entry
         end
     end
-    if not sourceID then return nil, state end
-    local ok, has = pcall(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance, sourceID)
+    if not entry then return nil, state end
+    -- Found by item ID: the base item's source may not be this variant's, so
+    -- ask with the link first (it accounts for bonus IDs).
+    if entry[2] and item.link and C_TransmogCollection.PlayerHasTransmogByItemInfo then
+        local ok, has = pcall(C_TransmogCollection.PlayerHasTransmogByItemInfo, item.link)
+        if ok and has ~= nil then return has and true or false, state end
+    end
+    local ok, has = pcall(C_TransmogCollection.PlayerHasTransmogItemModifiedAppearance, entry[1])
     return (ok and has) and true or false, state
 end
 
