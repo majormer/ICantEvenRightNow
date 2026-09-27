@@ -694,7 +694,9 @@ end
 
 local function MoneyText(copper)
     if not copper then return nil end
-    return GetCoinTextureString and GetCoinTextureString(copper)
+    -- The global GetCoinTextureString is now a deprecation shim (Blizzard_DeprecatedCurrencyScript).
+    local format = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString) or GetCoinTextureString
+    return format and format(copper)
         or (math.floor(copper / 10000) .. "g " .. math.floor(copper / 100) % 100 .. "s")
 end
 
