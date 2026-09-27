@@ -92,6 +92,21 @@ T.test("the screen: shows the item, Wowhead boxes, records decisions, confirms d
     T.contains(frame.title:GetText(), "Done")
 end)
 
+T.test("the screen: prices cover every stack of the item, with the unit price alongside", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(0, 2, I.VALUABLE_ORE, 10)
+    end, { [I.VALUABLE_ORE] = 900000 })
+    local P = g:P()
+    local frame = P.ShowTriage("bags")
+    local each = g.world.items[I.VALUABLE_ORE].sellPrice or 0
+    T.contains(frame.can:GetText(), "for 30 (")
+    T.contains(frame.can:GetText(), P.FormatMoney(each * 30) .. " for 30")
+    T.contains(frame.buttons.sell:GetText(), P.FormatMoney(each * 30))
+    local listing = P.ListingPrice(scanned(g, I.VALUABLE_ORE))
+    T.contains(frame.buttons.auction:GetText(), P.FormatMoney(listing * 30))
+end)
+
 T.test("the screen: Leave puts the item at the end; Carry stores keep+carry; Previous goes back", function()
     local g = game(function(w)
         w:put(0, 1, I.LINEN, 20)

@@ -228,9 +228,19 @@ local function Render()
     end
     frame.also:SetText(#others > 0 and ("Also: " .. table.concat(others, "; ")) or "")
     frame.who:SetText(P.WhoBenefits and P.WhoBenefits(item) or "")
+    -- Prices for the whole entry (every stack of this item here), with the
+    -- unit price alongside when there is more than one.
+    local count = entry.count or 1
+    local function PriceText(each)
+        local total = (each or 0) * count
+        if count > 1 then return Money(total) .. " for " .. count .. " (" .. Money(each) .. " each)" end
+        return Money(total)
+    end
+    options.vendorTotal = (item.sellPrice or 0) * count
+    options.auctionTotal = options.auction and (options.auctionPrice or 0) * count or nil
     local can = {}
-    can[#can + 1] = "Vendor: " .. (options.sell and Money(options.vendorPrice) or ("no (" .. tostring(options.why.sell) .. ")"))
-    can[#can + 1] = "Auction: " .. (options.auction and (Money(options.auctionPrice) .. (entry.count > 1 and " each" or "")
+    can[#can + 1] = "Vendor: " .. (options.sell and PriceText(item.sellPrice) or ("no (" .. tostring(options.why.sell) .. ")"))
+    can[#can + 1] = "Auction: " .. (options.auction and (PriceText(options.auctionPrice)
         .. (options.auctionUnconfirmed and ", price unconfirmed" or "")) or ("no (" .. tostring(options.why.auction) .. ")"))
     can[#can + 1] = "Destroy: " .. (options.destroy and "yes" or ("no (" .. tostring(options.why.destroy) .. ")"))
     if options.use then can[#can + 1] = "Use: " .. tostring(options.useWhat) end
@@ -248,8 +258,8 @@ local function Render()
         local enabled = options[choice] and true or false
         button:SetEnabled(enabled)
         local label = i .. ". " .. CHOICE_LABEL[choice]
-        if choice == "sell" and options.sell then label = label .. " " .. Money(options.vendorPrice) end
-        if choice == "auction" and options.auction then label = label .. " ~" .. Money(options.auctionPrice) end
+        if choice == "sell" and options.sell then label = label .. " " .. Money(options.vendorTotal or options.vendorPrice) end
+        if choice == "auction" and options.auction then label = label .. " ~" .. Money(options.auctionTotal or options.auctionPrice) end
         if choice == "defer" then label = label .. " " .. P.TriageDeferDays() .. "d" end
         if state.pendingConfirm == choice then label = "Confirm: " .. CHOICE_LABEL[choice] end
         button:SetText(label)
