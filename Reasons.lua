@@ -838,6 +838,7 @@ function P.ExplainLines(query)
                         P.FormatMoney and P.FormatMoney(item.sellPrice or 0) or tostring(item.sellPrice),
                         price and (P.FormatMoney(price.price) .. " (" .. P.FormatPriceSource(price) .. ")") or "none",
                         tostring(advice), why and (": " .. why) or "")
+                    lines[#lines + 1] = "  can: " .. (P.ChannelsText and P.ChannelsText(item) or "?")
                     lines[#lines + 1] = string.format("  can go and sellable %s | auction candidate %s | refused %s | collectible %s/%s | pet journal ready %s",
                         tostring(P.CanGoAndSellable and P.CanGoAndSellable(item)),
                         tostring(P.IsAuctionCandidate and P.IsAuctionCandidate(item)),

@@ -230,9 +230,10 @@ T.test("/icanteven explain prints the facts behind an item's verdict", function(
     local game = mageWith(function(w) w:put(0, 1, I.JUNK, 3) end)
     game:Core().ScanInventory("bags", true)
     local lines = game:P().ExplainLines("tusk")
-    T.ok(#lines >= 3, "three lines per item")
+    T.ok(#lines >= 4, "four lines per item")
     T.contains(lines[1], "free")
-    T.contains(lines[3], "can go and sellable true")
+    T.contains(lines[3], "can: vendor yes")
+    T.contains(lines[4], "can go and sellable true")
     T.contains(game:P().ExplainLines("nothing-here")[1], "No scanned item")
 end)
 

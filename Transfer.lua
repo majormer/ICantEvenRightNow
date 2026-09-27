@@ -390,18 +390,20 @@ local function GetTransferBlockReason(item, source, dest)
     elseif dest == P.STORAGE_AUCTION_HOUSE then
         if not ns.DB.context.auctionHouseOpen then return "Auction house is not open" end
         if item.scope ~= BAG_SCOPE then return "Only items in your bags can be listed" end
-        if item.isBound or item.isSoulbound then return "Bound: can't be auctioned" end
+        local channels = P.ItemChannels(item)
+        if not channels.auction then return channels.why.auction end
         if P.AuctionSellValid(item) == false then return "Can't be auctioned" end
         local price, why = P.ListingPrice(item)
         if not price then return why end
-    elseif P.IsWarbandStorage(dest) and item.accountBankAllowed == false then
-        return "Not eligible for Warband Bank"
+    elseif P.IsWarbandStorage(dest) then
+        local channels = P.ItemChannels(item)
+        if not channels.warbandBank then return channels.why.warbandBank end
     end
 
     if item.rule then
         if item.rule.protect then return "Protected by item rule" end
         if item.rule.ignore then return "Ignored by item rule" end
-        if item.rule.neverSell and (dest == "Vendor" or dest == P.STORAGE_AUCTION_HOUSE) then return "Never sell rule" end
+        if item.rule.neverSell and dest == "Vendor" then return "Never sell rule" end
     end
 
     for _, reason in ipairs(item.blockedReasons or {}) do
@@ -649,10 +651,25 @@ function P.RefusedItemsReport(clear)
     table.sort(lines)
     if clear then
         ns.DB.vendorRefused = {}
-        return { #lines .. " remembered refusal(s) cleared: vendors will be offered them again." }
     end
-    if #lines == 0 then return { "No items remembered as refused by vendors." } end
-    table.insert(lines, 1, #lines .. " item(s) vendors refused to buy (not offered for sale; /icanteven refused clear to retry):")
+    local auction = {}
+    for itemID, entry in pairs(ns.DB.auctionRefused or {}) do
+        auction[#auction + 1] = "  " .. tostring(entry.name or ("Item " .. itemID)) .. " (" .. itemID .. "): "
+            .. tostring(entry.reason or "refused") .. (entry.at and date and (", " .. date("%Y-%m-%d", entry.at)) or "")
+    end
+    table.sort(auction)
+    if clear then
+        ns.DB.auctionRefused = {}
+        return { #lines .. " vendor and " .. #auction .. " auction refusal(s) cleared: they will be offered again." }
+    end
+    if #lines == 0 and #auction == 0 then return { "No items remembered as refused by vendors or the auction house." } end
+    if #lines > 0 then
+        table.insert(lines, 1, #lines .. " item(s) vendors refused to buy (not offered for sale; /icanteven refused clear to retry):")
+    end
+    if #auction > 0 then
+        lines[#lines + 1] = #auction .. " item(s) the auction house refused (not offered for listing):"
+        for _, line in ipairs(auction) do lines[#lines + 1] = line end
+    end
     return lines
 end
 
@@ -786,6 +803,72 @@ function P.AuctionSellValid(item)
     return valid and true or false
 end
 
+-- ===========================================================================
+-- Listing confirmation. PostItem returns before the game answers; a refusal
+-- ("Warbound items can only be given to other characters in your Warband",
+-- "You cannot auction an item with used charges") arrives as UI_ERROR_MESSAGE
+-- and the item stays in the bag. Refusals are remembered (ns.DB.auctionRefused)
+-- so the item isn't offered again; /icanteven refused shows them.
+-- ===========================================================================
+local LISTING_CHECK_DELAY = 1.5
+local listingWatch = nil       -- { items, errors }
+
+local function AuctionRefusedStore()
+    ns.DB.auctionRefused = ns.DB.auctionRefused or {}
+    return ns.DB.auctionRefused
+end
+function P.AuctionRefused(itemID)
+    return itemID and ns.DB and AuctionRefusedStore()[itemID] or nil
+end
+function P.ClearAuctionRefused() ns.DB.auctionRefused = {} end
+
+if CreateFrame then
+    local listingFrame = CreateFrame("Frame")
+    listingFrame:RegisterEvent("UI_ERROR_MESSAGE")
+    listingFrame:SetScript("OnEvent", function(_, _, _, message)
+        if listingWatch and type(message) == "string" then table.insert(listingWatch.errors, message) end
+    end)
+end
+
+local function CheckListings()
+    local watch = listingWatch
+    listingWatch = nil
+    if not watch then return end
+    local listed, refused = {}, {}
+    for _, item in ipairs(watch.items) do
+        if CContainer.GetContainerItemID(item.bagID, item.slot) == item.itemID then
+            table.insert(refused, item)
+        else
+            table.insert(listed, item)
+        end
+    end
+    local reason = watch.errors[#watch.errors]
+    P.Log("auction", "confirmed: %d listed, %d refused%s", #listed, #refused,
+        reason and (" (" .. table.concat(watch.errors, "; ") .. ")") or "")
+    for _, item in ipairs(listed) do
+        Print("Listed: " .. ItemLabel(item) .. " at " .. P.FormatMoney((P.ListingPrice(item)) or 0) .. " each.")
+    end
+    for _, item in ipairs(refused) do
+        pendingFromSlots[P.LocationKey(item)] = nil
+        if reason then
+            AuctionRefusedStore()[item.itemID] = { name = item.name, reason = reason, at = time and time() or 0 }
+        end
+        Print("Not listed: " .. ItemLabel(item) .. " (" .. (reason or "no answer from the auction house") .. ")."
+            .. (reason and " It won't be offered again; /icanteven refused clear to retry." or ""))
+    end
+    if #refused > 0 then
+        UI.inventoryStatus = #listed .. " listed, " .. #refused .. " refused by the auction house"
+        Core.ScanInventory("bags", true)
+    end
+end
+
+local function WatchListings(items)
+    if #items == 0 then listingWatch = nil return end
+    listingWatch = listingWatch or { items = {}, errors = {} }
+    for _, item in ipairs(items) do table.insert(listingWatch.items, item) end
+    if C_Timer then C_Timer.After(LISTING_CHECK_DELAY, CheckListings) else CheckListings() end
+end
+
 -- Post one auction from a click (PostItem / PostCommodity need a hardware
 -- event and can't run from /run; verified on warcraft.wiki.gg 2026-09-27).
 -- Commodities list the whole stack at a unit price; items list one.
@@ -813,7 +896,7 @@ local function PostAuction(item)
         end
     end
     if not ok then return false, "The game refused the listing: " .. tostring(needsConfirmation) end
-    P.Log("auction", "listed %s x%s at %s each (%s)", tostring(item.name), tostring(item.count or 1),
+    P.Log("auction", "posting %s x%s at %s each (%s)", tostring(item.name), tostring(item.count or 1),
         P.FormatMoney(price), commodity and "commodity" or "item")
     return true, nil
 end
@@ -921,7 +1004,8 @@ function Core.ExecuteTransferOne(plan)
         if dest == "Vendor" then
             WatchSales({ item })
         elseif dest == P.STORAGE_AUCTION_HOUSE then
-            Print("Listed: " .. ItemLabel(item) .. " at " .. P.FormatMoney((P.ListingPrice(item))) .. " each.")
+            listingWatch = listingWatch or { items = {}, errors = {} }
+            WatchListings({ item })
         else
             Print("Transferred: " .. ItemLabel(item))
         end
@@ -981,6 +1065,8 @@ function Core.ExecuteTransferSelected()
     if dest == "Vendor" then
         plans = VendorOrder(plans)
         BeginSales(GetMoney and GetMoney() or nil)
+    elseif dest == P.STORAGE_AUCTION_HOUSE then
+        listingWatch = listingWatch or { items = {}, errors = {} }   -- errors can arrive before the loop ends
     end
     local listed = 0
     for _, plan in ipairs(plans) do
@@ -1030,7 +1116,7 @@ function Core.ExecuteTransferSelected()
         HoldReservedSlotsUntilSettled()
     end
     if moved > 0 or blocked > 0 then
-        local action = dest == "Vendor" and "sent to the vendor" or dest == P.STORAGE_AUCTION_HOUSE and "listed" or "moved"
+        local action = dest == "Vendor" and "sent to the vendor" or dest == P.STORAGE_AUCTION_HOUSE and "posted (checking the auction house's answer)" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
             .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
@@ -1042,9 +1128,8 @@ function Core.ExecuteTransferSelected()
     if dest == "Vendor" then
         Print("Selling " .. moved .. (blocked > 0 and (", " .. blocked .. " blocked") or "") .. "; checking the vendor's answer...")
     elseif dest == P.STORAGE_AUCTION_HOUSE then
-        local last = movedItems[1]
-        Print("Listed " .. moved .. (last and (": " .. ItemLabel(last) .. " at " .. P.FormatMoney((P.ListingPrice(last))) .. " each") or "")
-            .. (blocked > 0 and ("; " .. blocked .. " blocked") or "") .. ".")
+        WatchListings(movedItems)
+        if blocked > 0 then Print(blocked .. " blocked.") end
     else
         Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
     end

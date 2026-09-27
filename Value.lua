@@ -220,9 +220,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local function CanBeAuctioned(item)
-    if item.isBound or item.isSoulbound or item.isWarbandBound then return false end
-    if item.classID == 12 or item.questID then return false end
-    return true
+    return P.ItemChannels(item).auction == true
 end
 P.CanBeAuctioned = CanBeAuctioned
 
@@ -241,6 +239,7 @@ end
 
 -- Returns "auction" | "vendor" | nil, reason text.
 function P.AuctionAdvice(item, allowUncertain)
+    if not CanBeAuctioned(item) then return nil end   -- Warbound, soulbound, quest: the price is moot
     local net, price = AuctionNet(item, allowUncertain)
     if not net then return nil end
     local vendor = (item.sellPrice or 0) * (item.count or 1)
@@ -366,6 +365,7 @@ end
 -- Unconfirmed prices (see AuctionatorGearPrice) are not counted as value.
 function P.GetItemValue(item)
     local vendor = (item.sellPrice or 0) * (item.count or 1)
+    if not CanBeAuctioned(item) then return vendor, "vendor" end
     local net, price = AuctionNet(item)
     if net and net > vendor and not price.unconfirmed then return net, "auction" end
     return vendor, "vendor"

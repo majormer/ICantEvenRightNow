@@ -82,7 +82,7 @@ T.test("listing is blocked with a reason: bound, unconfirmed price, no price", f
     local P = g:P()
     local reasons = {}
     for _, plan in ipairs(P.GetTransferCandidates("Bags", P.STORAGE_AUCTION_HOUSE)) do reasons[plan.item.itemID] = plan.blocked end
-    T.contains(reasons[I.BOUND_HELM], "Bound")
+    T.contains(reasons[I.BOUND_HELM], "Soulbound")
     T.contains(reasons[I.OLD_SWORD], "unconfirmed")
     T.contains(reasons[I.LINEN], "No auction price")
 end)

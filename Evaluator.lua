@@ -485,3 +485,75 @@ end
 
 P.BuildDecision   = BuildDecision
 P.GetAllDecisions = GetAllDecisions
+
+-- ===========================================================================
+-- Channels: what can happen to an item (the one source of truth)
+-- Every task, block reason and candidate rule reads this; nothing else
+-- decides "can it be auctioned" on its own. In game (2026-09-27) the addon
+-- posted Warbound-until-equipped items it had read as BoE, and the game
+-- refused them: an unknown binding now allows nothing outward.
+-- Rules (warcraft.wiki.gg/wiki/Bind, /wiki/Warbound_until_Equipped):
+--   Soulbound / quest: vendor (if it has a price) or destroy; nothing else.
+--   Warbound, Warbound until equipped: your own characters only (mail,
+--     Warband bank); never the auction house or a trade.
+--   BoE / unbound: auction, mail, trade; Warband bank if the game allows it.
+-- Returns { vendor, auction, mail, trade, warbandBank } where each is true,
+-- or false with the reason in `why[channel]`.
+-- ===========================================================================
+function P.ItemChannels(item)
+    local channels = { why = {} }
+    local function deny(channel, why)
+        channels[channel] = false
+        channels.why[channel] = why
+    end
+    local function allow(channel) if channels[channel] == nil then channels[channel] = true end end
+
+    local quest = item.classID == 12 or item.questID ~= nil or item.bindingScope == "Quest"
+    local warbound = item.isWarbandBound or item.bindingScope == "Warbound"
+        or item.bindingScope == "Warbound Until Equipped"
+    local soulbound = (item.isBound or item.isSoulbound) and not warbound
+
+    if item.bindingPending then
+        local why = "Binding not confirmed yet"
+        deny("auction", why) deny("mail", why) deny("trade", why)
+    end
+    if quest then
+        deny("vendor", "Quest item")
+        deny("auction", "Quest item") deny("mail", "Quest item") deny("trade", "Quest item")
+        deny("warbandBank", "Quest item")
+    elseif soulbound then
+        local why = "Soulbound: only this character can use it"
+        deny("auction", why) deny("mail", why) deny("trade", why)
+        if item.accountBankAllowed ~= true then deny("warbandBank", "Not eligible for Warband Bank") end
+    elseif warbound then
+        local why = "Warbound: only your own characters can have it"
+        deny("auction", why) deny("trade", why)
+        allow("mail")   -- to your own characters only
+        if item.accountBankAllowed == false then deny("warbandBank", "Not eligible for Warband Bank") end
+    else
+        if item.accountBankAllowed == false then deny("warbandBank", "Not eligible for Warband Bank") end
+    end
+
+    if (item.sellPrice or 0) <= 0 then deny("vendor", "No vendor price") end
+    if P.MerchantRefused and P.MerchantRefused(item.itemID) then deny("vendor", "Vendors won't buy this item") end
+    if P.AuctionRefused and P.AuctionRefused(item.itemID) then
+        deny("auction", "The auction house refused it: " .. tostring(P.AuctionRefused(item.itemID).reason))
+    end
+    local rule = item.rule or (ns.DB and ns.DB.rules and ns.DB.rules.items and item.itemID and ns.DB.rules.items[item.itemID])
+    if rule and rule.neverSell then
+        deny("vendor", "Never sell rule") deny("auction", "Never sell rule")
+    end
+
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank" }) do allow(channel) end
+    return channels
+end
+
+-- One line for diagnostics: "vendor yes | auction no (Warbound...) | ..."
+function P.ChannelsText(item)
+    local channels = P.ItemChannels(item)
+    local parts = {}
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank" }) do
+        parts[#parts + 1] = channel .. " " .. (channels[channel] and "yes" or ("no (" .. tostring(channels.why[channel]) .. ")"))
+    end
+    return table.concat(parts, " | ")
+end

@@ -137,3 +137,17 @@ Tabs: Home, Transfer, Characters, Rules, Settings.
 - Transfer intent stays manual: no automated execution.
 - Game behavior (secret values, protected actions, server timing, UI rendering) still needs in-game verification; the offline suite reflects the API as documented.
 - Characters are known only after logging in once with the addon enabled.
+
+## What can happen to an item (`P.ItemChannels`, Evaluator.lua)
+
+One function decides which channels an item can take; every task, block reason and candidate rule reads it. Rules from [Bind](https://warcraft.wiki.gg/wiki/Bind) and [Warbound until Equipped](https://warcraft.wiki.gg/wiki/Warbound_until_Equipped).
+
+| Binding | Vendor | Auction | Mail | Trade | Warband bank |
+|---|---|---|---|---|---|
+| Soulbound (bound, not Warbound) | if it has a price | no | no | no | only if the game allows it |
+| Quest item | no | no | no | no | no |
+| Warbound, Warbound until equipped | if it has a price | no | own characters only | no | yes (unless the game refuses) |
+| BoE / unbound | if it has a price | yes | yes | yes | yes (unless the game refuses) |
+| Binding not confirmed yet | if it has a price | no | no | no | as scanned |
+
+Overrides: a vendor refusal (`ns.DB.vendorRefused`) or an auction-house refusal (`ns.DB.auctionRefused`) closes that channel; a Never Sell rule closes vendor and auction. No auction channel means no auction advice, no value flag and no price check (`Value.lua`), so an item no character can use is a vendor sale whatever its auction price. Listings are confirmed 1.5 s after posting: an item still in the bag was refused, and the game's error message is remembered.

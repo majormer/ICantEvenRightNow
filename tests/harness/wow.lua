@@ -941,6 +941,12 @@ function World:_buildEnv()
         local stack = stackFor(location)
         assert(stack, "no item at the location")
         assert(unitPrice % 100 == 0, "PostItem silently fails on copper")
+        -- auctionRefuses[itemID] = message: the game answers with an error and keeps the item.
+        local refusal = world.auctionRefuses and world.auctionRefuses[stack.itemID]
+        if refusal then
+            world:fire("UI_ERROR_MESSAGE", 0, refusal)
+            return false
+        end
         world.posted = world.posted or {}
         table.insert(world.posted, { itemID = stack.itemID, quantity = quantity, unitPrice = unitPrice, duration = duration })
         world.containers[location.bagID].slots[location.slotIndex] = nil
