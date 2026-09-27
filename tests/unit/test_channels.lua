@@ -72,7 +72,7 @@ end)
 T.test("a listing the game refuses is reported, remembered, and not offered again", function()
     local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end)
     g:db().prices = { ["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 900000, at = g.env.time() } }
-    g.world.auctionRefuses = { [I.OLD_SWORD] = "You cannot auction an item with used charges" }
+    g.world.auctionRefuses = { [I.OLD_SWORD] = 14 }   -- UsedCharges
     g:openAuctionHouse()
     g:Core().UpdateContext()
     g:Core().ScanInventory("bags", true)
@@ -139,4 +139,47 @@ T.test("a post while the auction house is busy is refused up front, and the item
     T.contains(g:printed(mark), "busy")
     T.eq(#(g.world.posted or {}), 0, "nothing sent")
     T.no(P.AuctionRefused(I.OLD_SWORD), "not remembered as refused")
+end)
+
+local function listingGame(code)
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end)
+    g:db().prices = { ["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 900000, at = g.env.time() } }
+    g.world.auctionRefuses = { [I.OLD_SWORD] = code }
+    g:openAuctionHouse()
+    g:Core().UpdateContext()
+    g:Core().ScanInventory("bags", true)
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_AUCTION_HOUSE
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    g.world:advance(9)
+    g:Core().RefreshUI()
+    return g, UI.frame.panels.Transfer
+end
+
+T.test("a 'Warbound until equipped' refusal corrects the saved binding: the item becomes Warband-only", function()
+    local g, panel = listingGame(26)   -- ItemBoundToAccountUntilEquip
+    local P = g:P()
+    g:click(panel.selectAll)
+    local mark = g:logMark()
+    g:click(panel.execute)
+    g.world:advance(2)
+    T.contains(g:printed(mark), "Warbound until equipped")
+    T.eq(g:db().knownBinding[I.OLD_SWORD], "wue", "binding corrected from the game's answer")
+    T.ok(P.AuctionRefused(I.OLD_SWORD))
+    g:Core().ScanInventory("bags", true)
+    local c = P.ItemChannels(scanned(g, I.OLD_SWORD))
+    T.eq(c.auction, false)
+    T.eq(c.warbandBank, true, "still goes to the Warband bank")
+end)
+
+T.test("a temporary auction house error ('busy') isn't remembered", function()
+    local g, panel = listingGame(7)   -- IsBusy
+    g:click(panel.selectAll)
+    local mark = g:logMark()
+    g:click(panel.execute)
+    g.world:advance(2)
+    T.contains(g:printed(mark), "busy")
+    T.no(g:P().AuctionRefused(I.OLD_SWORD), "temporary: not remembered")
 end)

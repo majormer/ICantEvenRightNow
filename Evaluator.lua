@@ -194,7 +194,10 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
             for _, line in ipairs(data.lines or {}) do
                 if line.leftText == wanted then wue = true break end
             end
-            if itemID then known[itemID] = wue and "wue" or "boe" end
+            -- A saved "wue" stands: the game's own refusal set it (2026-09-27)
+            -- and a Warbound-until-equipped item never becomes BoE.
+            if itemID then known[itemID] = (wue or known[itemID] == "wue") and "wue" or "boe" end
+            if known[itemID] == "wue" then wue = true end
         end
         if wue then
             details.bindingScope   = "Warbound Until Equipped"

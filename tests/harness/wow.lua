@@ -941,10 +941,11 @@ function World:_buildEnv()
         local stack = stackFor(location)
         assert(stack, "no item at the location")
         assert(unitPrice % 100 == 0, "PostItem silently fails on copper")
-        -- auctionRefuses[itemID] = message: the game answers with an error and keeps the item.
+        -- auctionRefuses[itemID] = Enum.AuctionHouseError code: the game answers
+        -- with AUCTION_HOUSE_SHOW_ERROR and keeps the item.
         local refusal = world.auctionRefuses and world.auctionRefuses[stack.itemID]
         if refusal then
-            world:fire("UI_ERROR_MESSAGE", 0, refusal)
+            world:fire("AUCTION_HOUSE_SHOW_ERROR", refusal)
             return false
         end
         world.posted = world.posted or {}

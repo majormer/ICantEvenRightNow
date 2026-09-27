@@ -823,11 +823,38 @@ function P.AuctionRefused(itemID)
 end
 function P.ClearAuctionRefused() ns.DB.auctionRefused = {} end
 
+-- The auction house answers a bad post with AUCTION_HOUSE_SHOW_ERROR(code)
+-- (the red text mid-screen), not UI_ERROR_MESSAGE. Codes from
+-- Enum.AuctionHouseError (warcraft.wiki.gg, verified 2026-09-27). Item
+-- reasons are permanent and remembered; the rest are temporary.
+local AUCTION_ERRORS = {
+    [14] = { text = "the game won't auction an item with used charges", permanent = true },
+    [15] = { text = "quest item", permanent = true },
+    [16] = { text = "bound item", permanent = true, binding = "soulbound" },
+    [17] = { text = "conjured item", permanent = true },
+    [18] = { text = "limited-duration item", permanent = true },
+    [21] = { text = "wrapped item", permanent = true },
+    [26] = { text = "Warbound until equipped: only your own characters can have it", permanent = true, binding = "wue" },
+    [0]  = { text = "not enough money for the deposit" },
+    [7]  = { text = "the auction house is busy" },
+    [8]  = { text = "the auction house is unavailable right now" },
+    [10] = { text = "auction house database error" },
+}
+P.AUCTION_ERRORS = AUCTION_ERRORS
+
 if CreateFrame then
     local listingFrame = CreateFrame("Frame")
     listingFrame:RegisterEvent("UI_ERROR_MESSAGE")
-    listingFrame:SetScript("OnEvent", function(_, _, _, message)
-        if listingWatch and type(message) == "string" then table.insert(listingWatch.errors, message) end
+    listingFrame:RegisterEvent("AUCTION_HOUSE_SHOW_ERROR")
+    listingFrame:SetScript("OnEvent", function(_, event, a, b)
+        if not listingWatch then return end
+        if event == "AUCTION_HOUSE_SHOW_ERROR" then
+            local known = AUCTION_ERRORS[a]
+            table.insert(listingWatch.errors, { code = a, text = known and known.text or ("auction house error " .. tostring(a)),
+                permanent = known and known.permanent or false, binding = known and known.binding })
+        elseif type(b) == "string" then
+            table.insert(listingWatch.errors, { text = b, permanent = false })
+        end
     end)
 end
 
@@ -853,19 +880,25 @@ CheckListings = function()
         return
     end
     listingWatch = nil
-    local reason = watch.errors[#watch.errors]
+    local last = watch.errors[#watch.errors]
+    local texts = {}
+    for _, err in ipairs(watch.errors) do texts[#texts + 1] = err.text end
     P.Log("auction", "confirmed: %d listed, %d refused%s", #listed, #refused,
-        reason and (" (" .. table.concat(watch.errors, "; ") .. ")") or "")
+        #texts > 0 and (" (" .. table.concat(texts, "; ") .. ")") or "")
     for _, item in ipairs(listed) do
         Print("Listed: " .. ItemLabel(item) .. " at " .. P.FormatMoney((P.ListingPrice(item)) or 0) .. " each.")
     end
     for _, item in ipairs(refused) do
         pendingFromSlots[P.LocationKey(item)] = nil
-        if reason then
-            AuctionRefusedStore()[item.itemID] = { name = item.name, reason = reason, at = time and time() or 0 }
+        -- One refused item and one answer: the answer is about that item.
+        local reason = (#refused == 1 or #watch.errors >= #refused) and last or nil
+        if reason and reason.permanent then
+            AuctionRefusedStore()[item.itemID] = { name = item.name, reason = reason.text, at = time and time() or 0 }
+            -- The game knows the binding better than the tooltip read did.
+            if reason.binding and ns.DB.knownBinding then ns.DB.knownBinding[item.itemID] = reason.binding end
         end
-        Print("Not listed: " .. ItemLabel(item) .. " (" .. (reason or "no answer from the auction house") .. ")."
-            .. (reason and " It won't be offered again; /icanteven refused clear to retry." or ""))
+        Print("Not listed: " .. ItemLabel(item) .. " (" .. (reason and reason.text or "no answer from the auction house") .. ")."
+            .. (reason and reason.permanent and " It won't be offered for auction again (/icanteven refused clear to retry)." or ""))
     end
     if #refused > 0 then
         UI.inventoryStatus = #listed .. " listed, " .. #refused .. " refused by the auction house"
