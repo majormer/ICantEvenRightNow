@@ -266,6 +266,8 @@ function Core.HandleSlashCommand(msg)
         Print("Exported " .. count .. " item(s) (" .. ((arg1 or "") ~= "" and arg1 or "all") .. "). /reload to write the saved file.")
     elseif cmd == "decide" then
         Print(P.DecideCommand(arg1))
+    elseif cmd == "decisions" then
+        if not P.ShowDecisionPasteBox() then Print("No UI available.") end
     elseif cmd == "undo" then
         Print(P.PrepareUndo())
     elseif cmd == "clearerrors" then

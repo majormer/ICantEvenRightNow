@@ -192,3 +192,78 @@ function P.DecideCommand(args)
         .. (record.until_ and (" until " .. (date and date("%Y-%m-%d", record.until_) or "")) or "")
         .. ((total or 0) == 0 and " (not in your scans yet)" or "")
 end
+
+-- Many decisions at once: one per line, "<itemID> <choice> [note]" (a
+-- leading "/icanteven decide " is ignored, so exported lines paste as-is;
+-- text after "--" is a comment). Returns applied, skipped, and messages.
+function P.ApplyDecisionLines(text)
+    local applied, skipped, messages = 0, 0, {}
+    for raw in tostring(text or ""):gmatch("[^\r\n]+") do
+        local line = raw:gsub("%-%-.*$", ""):gsub("^%s*/icanteven%s+decide%s+", ""):gsub("^%s+", ""):gsub("%s+$", "")
+        if line ~= "" then
+            local result = P.DecideCommand(line)
+            if result:sub(1, 8) == "Decided:" or result:sub(1, 8) == "Decision" then
+                applied = applied + 1
+            else
+                skipped = skipped + 1
+                if #messages < 5 then messages[#messages + 1] = raw .. " -> " .. result end
+            end
+        end
+    end
+    P.Log("triage", "applied %d decision line(s), %d skipped", applied, skipped)
+    return applied, skipped, messages
+end
+
+-- /icanteven decisions: a box to paste decision lines into (Ctrl+V works in
+-- WoW edit boxes), then Apply. Undocumented, like the commands it serves.
+local pasteBox
+function P.ShowDecisionPasteBox()
+    if not CreateFrame then return nil end
+    if not pasteBox then
+        local frame = CreateFrame("Frame", "ICantEvenDecisionPasteBox", UIParent, "BackdropTemplate")
+        frame:SetSize(560, 360)
+        frame:SetPoint("CENTER")
+        frame:SetFrameStrata("DIALOG")
+        frame:SetMovable(true) frame:EnableMouse(true)
+        frame:RegisterForDrag("LeftButton")
+        frame:SetScript("OnDragStart", frame.StartMoving)
+        frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+        if frame.SetBackdrop then
+            frame:SetBackdrop({ bgFile = "Interface\DialogFrame\UI-DialogBox-Background", edgeFile = "Interface\DialogFrame\UI-DialogBox-Border",
+                tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 } })
+        end
+        local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        title:SetPoint("TOP", 0, -16)
+        title:SetText("Paste decisions (one per line: itemID choice [note]), then Apply")
+        local scroll = CreateFrame("ScrollFrame", nil, frame, "UIPanelScrollFrameTemplate")
+        scroll:SetPoint("TOPLEFT", 20, -40)
+        scroll:SetPoint("BOTTOMRIGHT", -40, 50)
+        local edit = CreateFrame("EditBox", nil, scroll)
+        edit:SetMultiLine(true)
+        edit:SetFontObject(ChatFontNormal)
+        edit:SetWidth(490)
+        edit:SetAutoFocus(false)
+        edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+        scroll:SetScrollChild(edit)
+        frame.edit = edit
+        local status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+        status:SetPoint("BOTTOMLEFT", 20, 22)
+        frame.status = status
+        local apply = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        apply:SetSize(100, 24) apply:SetPoint("BOTTOMRIGHT", -20, 16) apply:SetText("Apply")
+        apply:SetScript("OnClick", function()
+            local applied, skipped, messages = P.ApplyDecisionLines(edit:GetText())
+            status:SetText(applied .. " applied, " .. skipped .. " skipped" .. (#messages > 0 and (": " .. messages[1]) or ""))
+            for _, m in ipairs(messages) do P.Print(m) end
+            if applied > 0 then edit:SetText("") end
+            if Core.RefreshUI then Core.RefreshUI() end
+        end)
+        local close = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
+        close:SetSize(80, 24) close:SetPoint("RIGHT", apply, "LEFT", -8, 0) close:SetText("Close")
+        close:SetScript("OnClick", function() frame:Hide() end)
+        pasteBox = frame
+    end
+    pasteBox:Show()
+    pasteBox.edit:SetFocus()
+    return pasteBox
+end

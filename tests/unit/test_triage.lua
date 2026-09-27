@@ -195,3 +195,20 @@ T.test("decide keep with the note 'carry' keeps the item out of every deposit ta
     T.no(ids[I.LINEN], "carried: not deposited")
     T.eq(P.ExplainScanned(scanned(g, I.LINEN)).primary.id, "decided_carry")
 end)
+
+T.test("decision lines paste: exported lines apply as-is, comments and bad lines are reported", function()
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) w:put(0, 2, I.LINEN, 20) end)
+    local P = g:P()
+    local text = table.concat({
+        "/icanteven decide " .. I.OLD_SWORD .. " sell   -- Old Sword x1",
+        I.LINEN .. " keep carry",
+        "",
+        "abc nonsense",
+        "12345 eat",
+    }, "\n")
+    local applied, skipped, messages = P.ApplyDecisionLines(text)
+    T.eq(applied, 2) T.eq(skipped, 2)
+    T.eq(P.GetDecision(I.OLD_SWORD).choice, "sell")
+    T.eq(P.GetDecision(I.LINEN).note, "carry")
+    T.contains(messages[1], "Usage")
+end)
