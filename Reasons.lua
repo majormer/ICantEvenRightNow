@@ -67,6 +67,9 @@ local REASONS = {
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
     quest_not_started    = { disposition = "review", label = "Starts a quest you haven't done" },
     possible_keepsake    = { disposition = "review", label = "Possibly a keepsake" },
+    -- Outranks the "can go" reasons: in game eight Legion Legendaries and a
+    -- BfA Legendary cloak were offered as "below what you wear".
+    legendary_keepsake   = { disposition = "review", label = "Legendary: many players keep these", rank = 1.8 },
     long_untouched       = { disposition = "review", label = "Untouched for over a year" },
     roles_needed         = { disposition = "review", label = "Assign character roles to see who can use this" },
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
@@ -681,8 +684,9 @@ local function ExplainItem(item, ctx)
         add("old_consumable", "From " .. P.GetExpansionName(item.expansionID))
     end
 
-    if (item.quality or 0) >= 5 and (item.sellPrice or 0) == 0 then
-        add("possible_keepsake", "Legendary or rarer with no vendor price")
+    if (item.quality or 0) >= 5 and (item.quality or 0) ~= 7 then
+        -- Legendary (5) and Artifact (6); heirlooms (7) are handled elsewhere.
+        add("legendary_keepsake", "Usually can't be earned again; keep it for the memory or the look, or let it go")
     end
 
     if ctx.locationKey then

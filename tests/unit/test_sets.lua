@@ -157,3 +157,15 @@ T.test("item level 1 'gear' is a possible keepsake, not outgrown gear", function
     T.eq(e.primary.id, "possible_keepsake")
     T.eq(e.disposition, "review")
 end)
+
+T.test("legendaries are your call, even when below what you wear", function()
+    local g = game(function(w)
+        plate(w, 9501, { name = "Old Legendary Belt", equipLoc = "INVTYPE_WAIST", itemLevel = 60, quality = 5,
+            sellPrice = 5000, expansionID = 6 })
+        w:put(0, 7, 9501, 1, { bound = true })
+    end)
+    local e = explain(g, 9501)
+    T.eq(e.primary.id, "legendary_keepsake")
+    T.eq(e.disposition, "review")
+    T.ok(not g:P().CanGoAndSellable(select(2, explain(g, 9501))), "not in the sell tasks")
+end)
