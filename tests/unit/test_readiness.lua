@@ -199,3 +199,16 @@ T.test("scanner: a dropped item keeps its own item level, never another copy's",
     T.ok(bySlot[3].levelPending, "unknown variant waits instead of borrowing a level")
     T.eq(P.ExplainScanned(bySlot[3]).primary.id, "details_loading")
 end)
+
+T.test("away from a bank, bank items still waiting aren't counted as unchecked", function()
+    local g = game({ bindType = 1 })
+    local P = g:P()
+    g:openBank()
+    g.world:put(6, 1, 8701, 1, { bound = true, tooltipLoading = true })   -- bank: binding unknown
+    g:slash("scan all")
+    P.BeginSettling("test")
+    T.ok(P.ReadinessState.pending >= 1, "counted while the bank is open")
+    g:closeBank()
+    P.BeginSettling("test")
+    T.eq(P.ReadinessState.pending, 0, "not counted away from the bank: it can't be rescanned there")
+end)

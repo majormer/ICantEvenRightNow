@@ -66,12 +66,18 @@ local function UnresolvedReason(item)
     return nil
 end
 
--- Items this character can act on here: bags, bank, and the Warband bank.
+-- Items this character can act on here: bags always; the bank and the
+-- Warband bank only while a bank is open. Away from one, their snapshots
+-- can't be rescanned, so items still waiting there can't be checked here
+-- (in game the auction house reported "59 items couldn't be checked", all
+-- bank items whose tooltips hadn't loaded at the last bank visit).
 local function RelevantItems()
     local list = {}
     local currentKey = P.currentCharacterKey
+    local bankOpen = ns.DB.context and ns.DB.context.bankOpen
     for _, snapshot in ipairs(P.AllSnapshots and P.AllSnapshots() or {}) do
         local relevant = snapshot.scope == "warband" or (snapshot.character and snapshot.character.key == currentKey)
+        if relevant and snapshot.scope ~= "bags" and not bankOpen then relevant = false end
         if relevant then
             for _, item in ipairs(snapshot.items or {}) do list[#list + 1] = item end
         end
