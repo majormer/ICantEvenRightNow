@@ -32,6 +32,10 @@ local function PendingReason(item)
     if item.classID == nil then return "the next scan" end
     if item.bindingPending then return "binding" end
     if item.levelPending then return "item level" end
+    if ns.DB.context and ns.DB.context.auctionHouseOpen and item.scope == "bags" and not item.isBound
+        and P.AuctionSellValid and P.AuctionSellValid(item) == false then
+        return "the auction house"
+    end
     if P.GetCollectibleState then
         local kind, learned = P.GetCollectibleState(item)
         if kind == "pet" and learned == nil then

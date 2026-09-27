@@ -963,7 +963,7 @@ function World:_buildEnv()
         ConfirmPostCommodity = function() end,
         IsSellItemValid = function(location)
             local stack = stackFor(location)
-            if not stack then return false end
+            if not stack or world.auctionHouseSellNotReady then return false end
             local def = world.items[stack.itemID]
             return not stack.bound and not def.questID and (def.bindType ~= ENUM.ItemBind.OnAcquire)
         end,

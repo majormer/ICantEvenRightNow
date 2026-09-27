@@ -391,10 +391,7 @@ local function GetTransferBlockReason(item, source, dest)
         if not ns.DB.context.auctionHouseOpen then return "Auction house is not open" end
         if item.scope ~= BAG_SCOPE then return "Only items in your bags can be listed" end
         if item.isBound or item.isSoulbound then return "Bound: can't be auctioned" end
-        if C_AuctionHouse and C_AuctionHouse.IsSellItemValid and ItemLocation then
-            local ok, valid = pcall(C_AuctionHouse.IsSellItemValid, ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot))
-            if ok and not valid then return "Can't be auctioned" end
-        end
+        if P.AuctionSellValid(item) == false then return "Can't be auctioned" end
         local price, why = P.ListingPrice(item)
         if not price then return why end
     elseif P.IsWarbandStorage(dest) and item.accountBankAllowed == false then
@@ -775,6 +772,18 @@ local function WatchSales(items)
         watch.scheduled = true
         C_Timer.After(SALE_CHECK_DELAY, CheckSales)
     end
+end
+
+-- The game's own answer on whether a bag item can be posted (nil when the
+-- API isn't there). Right after the auction house opens it says no for
+-- everything for a moment (in game: "All 30 matching items are blocked"),
+-- so Readiness waits for it instead of showing that verdict.
+function P.AuctionSellValid(item)
+    if not (C_AuctionHouse and C_AuctionHouse.IsSellItemValid and ItemLocation) then return nil end
+    if item.scope ~= BAG_SCOPE or not item.bagID or not item.slot then return nil end
+    local ok, valid = pcall(C_AuctionHouse.IsSellItemValid, ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot), false)
+    if not ok then return nil end
+    return valid and true or false
 end
 
 -- Post one auction from a click (PostItem / PostCommodity need a hardware

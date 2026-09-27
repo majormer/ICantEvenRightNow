@@ -86,3 +86,18 @@ T.test("listing is blocked with a reason: bound, unconfirmed price, no price", f
     T.contains(reasons[I.OLD_SWORD], "unconfirmed")
     T.contains(reasons[I.LINEN], "No auction price")
 end)
+
+T.test("right after the auction house opens, 'can't be auctioned' is waited for, not shown", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, { [I.VALUABLE_ORE] = 500000 })
+    local P = g:P()
+    g.world.auctionHouseSellNotReady = true
+    local ore = scanned(g, I.VALUABLE_ORE)
+    T.ok(P.ItemDataPending(ore), "Getting ready waits for the auction house")
+    P.BeginSettling("context")
+    T.ok(P.IsSettling())
+    g.world.auctionHouseSellNotReady = false
+    g.world:advance(1)
+    T.no(P.IsSettling(), "settled once the game answers")
+    local plans = P.GetTransferCandidates("Bags", P.STORAGE_AUCTION_HOUSE)
+    T.ok(plans[1] and plans[1].movable, "listed as ready, not blocked")
+end)
