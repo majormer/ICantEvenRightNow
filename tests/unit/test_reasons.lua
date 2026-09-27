@@ -285,4 +285,11 @@ T.test("utility items (a bound device with a Use effect) stay in the bags: no de
     for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
     T.no(ids[49040], "Jeeves stays in the bags")
     T.ok(ids[I.LINEN], "other old items still deposit")
+    -- The same gadget sitting in the bank isn't a utility item: it keeps its ordinary verdict.
+    game.world:put(6, 1, 49040, 1, { bound = true })
+    game:Core().ScanInventory("all", true)
+    local banked
+    for _, it in ipairs(P.GetScanList("bank")) do if it.itemID == 49040 then banked = it end end
+    T.ok(banked, "in the bank")
+    T.ok(P.ExplainScanned(banked).primary.id ~= "utility_item", "not a utility item while banked")
 end)

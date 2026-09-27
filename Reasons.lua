@@ -49,7 +49,7 @@ local REASONS = {
     equipment_set        = { disposition = "keep",   label = "In a saved equipment set" },
     current_expansion    = { disposition = "keep",   label = "From the current expansion" },
     -- bags = true: stays in the bags, so no deposit task offers it.
-    utility_item         = { disposition = "keep",   label = "Utility item you use: stays in your bags", bags = true },
+    utility_item         = { disposition = "keep",   label = "Utility item you carry: stays in your bags", bags = true },
     -- free
     appearance_collected = { disposition = "free",   label = "Appearance already collected" },
     collectible_learned  = { disposition = "free",   label = "Collectible already learned" },
@@ -629,7 +629,10 @@ local function ExplainItem(item, ctx)
     -- subtype: in game Jeeves is item class 0 ("Explosives and Devices"),
     -- the same class as potions, so the class alone can't tell them apart.
     -- Potions, food, quest items and collectibles are handled above.
-    if not IsGear(item) and (item.isBound or item.isWarbandBound) and item.classID ~= 12
+    -- Only what the player carries: the same rule read 38 items including
+    -- old gadgets sitting in the bank (Kyrian Bell, Skyshard), which the
+    -- player doesn't use; those keep their ordinary verdict.
+    if not IsGear(item) and item.scope == BAG_SCOPE and (item.isBound or item.isWarbandBound) and item.classID ~= 12
         and not CollectibleState(item) and P.ItemUseSpell then
         local gadgetUse = P.ItemUseSpell(item)
         local device = item.itemSubTypeName == "Explosives and Devices" or (item.classID == 7 and item.subclassID == 2)
