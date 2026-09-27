@@ -82,6 +82,39 @@ T.test("toys: unlearned means keep, learned means it can go", function()
     T.eq(explain(toyGame(true), 7001).primary.id, "collectible_learned")
 end)
 
+T.test("recipes: learn it when the character has the profession and doesn't know it; free once known", function()
+    local function recipeGame(known, hasProfession)
+        local game = mageWith(function(w)
+            w:put(0, 1, 7101, 1)
+        end, function(w)
+            w:defineItem(7101, { name = "Plans: Demonsteel Helm", classID = 9, subclassID = 4,
+                itemType = "Recipe", itemSubType = "Blacksmithing", quality = 2,
+                tooltipLines = known and { "Already known" } or {} })
+        end)
+        game:db().characters["Mage-R"].professions = hasProfession and { { name = "Blacksmithing", skillLine = 164 } } or {}
+        game:Core().ScanInventory("bags", true)
+        return game
+    end
+    local function scannedItem(game)
+        for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7101 then return it end end
+    end
+    local game = recipeGame(false, true)
+    local e = explain(game, 7101)
+    T.eq(e.primary.id, "collectible_unlearned") T.contains(e.evidence, "Blacksmithing recipe")
+    local channels = game:P().ItemChannels(scannedItem(game))
+    T.eq(channels.use, true) T.contains(channels.useWhat, "learn the recipe")
+
+    game = recipeGame(true, true)
+    T.eq(explain(game, 7101).primary.id, "collectible_learned")
+    T.eq(explain(game, 7101).disposition, "free")
+
+    game = recipeGame(false, false)
+    e = explain(game, 7101)
+    T.eq(e.primary.id, "recipe_other_profession") T.contains(e.evidence, "doesn't have Blacksmithing")
+    channels = game:P().ItemChannels(scannedItem(game))
+    T.eq(channels.use, false) T.contains(channels.why.use, "doesn't have Blacksmithing")
+end)
+
 T.test("materials: kept for a crafter who uses them, free otherwise", function()
     local game = mageWith(function(w)
         w:put(0, 1, I.LINEN, 40)

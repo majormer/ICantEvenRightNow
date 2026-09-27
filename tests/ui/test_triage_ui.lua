@@ -64,6 +64,7 @@ T.test("options follow the channels; the recommendation follows the rules and th
     T.eq(ore.auction, true) T.eq(ore.recommended, "auction")
     local quest = P.TriageOptions(scanned(g, I.QUEST_START))
     T.eq(quest.use, true) T.eq(quest.sell, false) T.eq(quest.destroy, true)
+    T.eq(quest.recommended, "use", "something to start or learn is recommended over keep")
     local toy = P.TriageOptions(scanned(g, I.WARBOUND_TOY))
     T.eq(toy.auction, false) T.contains(toy.why.auction, "Warbound")
 end)

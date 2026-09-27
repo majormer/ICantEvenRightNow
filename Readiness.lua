@@ -37,6 +37,7 @@ local function PendingReason(item)
         if kind == "pet" and learned == nil then
             return P.PetJournalReady and not P.PetJournalReady() and "pet journal" or "pet details"
         end
+        if kind == "recipe" and learned == nil then return "recipe details" end
     end
     if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
         and P.ItemTooltipFacts and P.ItemTooltipFacts(item).state == "loading" then

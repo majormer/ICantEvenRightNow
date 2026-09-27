@@ -222,10 +222,11 @@ local SET_BONUS_PATTERN = "^%((%d+)%) "
 -- Active bonuses read "Set: ..." with no count (ITEM_SET_BONUS "Set: %s");
 -- inactive ones "(4) Set: ..." (ITEM_SET_BONUS_GRAY). Seen in game 2026-09-26.
 local ACTIVE_BONUS_PREFIX = (type(ITEM_SET_BONUS) == "string" and ITEM_SET_BONUS:match("^(.-)%%s")) or "Set: "
+local KNOWN_LINE = (type(ITEM_SPELL_KNOWN) == "string" and ITEM_SPELL_KNOWN) or "Already known"
 
 -- What the tooltip says about sets and upgrades:
 -- { state, setName, setTotal, setMin (lowest inactive bonus), activeBonuses, classes,
---   upgradeTrack, upgradeCur, upgradeMax, upgradable }.
+--   upgradeTrack, upgradeCur, upgradeMax, upgradable, known ("Already known": a learned recipe) }.
 -- state "ready", "loading" (tooltip reads "Retrieving item information"), or "unknown".
 function P.ItemTooltipFacts(item)
     -- "unknown": no tooltip to read. Never taken as "can't be upgraded".
@@ -253,6 +254,7 @@ function P.ItemTooltipFacts(item)
             end
             local classes = text:match(CLASSES_PATTERN)
             if classes then facts.classes = classes end
+            if text == KNOWN_LINE then facts.known = true end
             if not facts.setName then
                 local name, _, total = text:match(SET_NAME_PATTERN)
                 if name and tonumber(total) and tonumber(total) >= 2 then

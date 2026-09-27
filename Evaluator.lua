@@ -551,11 +551,12 @@ function P.ItemChannels(item)
     -- confirm covers uncommon and better). Use: something to learn or start.
     if rule and rule.protect then deny("destroy", "Protected by your rule") end
     if P.MYTHIC_KEYSTONE_ITEM_IDS and P.MYTHIC_KEYSTONE_ITEM_IDS[item.itemID] then deny("destroy", "Mythic Keystone") end
-    local kind, learned = P.GetCollectibleState and P.GetCollectibleState(item)
+    local kind, learned, cannotLearn
+    if P.GetCollectibleState then kind, learned, cannotLearn = P.GetCollectibleState(item) end
     local useWhy
     if kind and learned == false then useWhy = "learn the " .. kind
     elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest" end
-    if useWhy then channels.use = true channels.useWhat = useWhy else deny("use", "Nothing to learn or start") end
+    if useWhy then channels.use = true channels.useWhat = useWhy else deny("use", cannotLearn or "Nothing to learn or start") end
     for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy" }) do allow(channel) end
     return channels
 end

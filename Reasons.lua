@@ -43,6 +43,7 @@ local REASONS = {
     keep_for_now         = { disposition = "keep",   label = "You're keeping it for now" },
     quest_active         = { disposition = "keep",   label = "Quest in progress" },
     collectible_unlearned = { disposition = "keep",  label = "Collectible not learned yet" },
+    recipe_other_profession = { disposition = "review", label = "Recipe for a profession this character doesn't have" },
     appearance_uncollected = { disposition = "keep", label = "Appearance not collected yet" },
     used_by_crafter      = { disposition = "keep",   label = "Material one of your crafters uses" },
     usable_gear          = { disposition = "keep",   label = "Gear one of your played characters can use" },
@@ -195,9 +196,35 @@ local function AppearanceCollected(item)
 end
 P.IsAppearanceCollected = AppearanceCollected
 
--- Collectible learned state: "toy"|"mount"|"pet", learned (bool); nil if not a collectible.
+-- A recipe this character can learn? Returns has (bool), profession name.
+-- Recipes are class 9; the subtype is the profession ("Blacksmithing").
+local function RecipeProfession(item)
+    local subtype = item.itemSubTypeName
+    if type(subtype) ~= "string" or subtype == "" or item.subclassID == 0 then return nil end   -- "Book": class books
+    local char = P.GetCurrentCharacter and P.GetCurrentCharacter()
+    for _, prof in ipairs(char and char.professions or {}) do
+        if prof.name and prof.name:lower() == subtype:lower() then return true, subtype end
+    end
+    return false, subtype
+end
+
+-- Collectible learned state: "toy"|"mount"|"pet"|"recipe", learned (bool, nil while
+-- loading); nil if not a collectible. A third value explains why a recipe can't
+-- be learned here ("A Blacksmithing recipe; Mage doesn't have Blacksmithing").
 local function CollectibleState(item)
     local itemID = item.itemID
+    if item.classID == 9 then
+        local has, profession = RecipeProfession(item)
+        if has == nil then return nil end
+        if not has then
+            local char = P.GetCurrentCharacter and P.GetCurrentCharacter()
+            return nil, nil, "A " .. profession .. " recipe; " .. tostring(char and char.name or "this character")
+                .. " doesn't have " .. profession
+        end
+        local facts = P.ItemTooltipFacts and P.ItemTooltipFacts(item) or { state = "unknown" }
+        if facts.state == "loading" then return "recipe", nil end
+        return "recipe", facts.known == true
+    end
     if C_ToyBox and SafeCall(C_ToyBox.GetToyInfo, itemID) then
         return "toy", SafeCall(PlayerHasToy, itemID) and true or false
     end
@@ -597,11 +624,18 @@ local function ExplainItem(item, ctx)
         add("quest_item")
     end
 
-    local kind, learned = CollectibleState(item)
-    if kind then
+    local kind, learned, cannotLearn = CollectibleState(item)
+    if kind == "recipe" then
+        local profession = item.itemSubTypeName or "profession"
+        if learned then add("collectible_learned", "A " .. profession .. " recipe you already know")
+        elseif learned == false then add("collectible_unlearned", "Learn it: a " .. profession .. " recipe you don't know yet")
+        else add("details_loading", "Waiting for the recipe's details") end
+    elseif kind then
         if learned then add("collectible_learned", "This " .. kind .. " is already in your collection")
         elseif learned == false then add("collectible_unlearned", "Use it to add the " .. kind .. " to your collection")
         else add("details_loading", "Waiting for your " .. kind .. " collection to load") end
+    elseif cannotLearn then
+        add("recipe_other_profession", cannotLearn)
     end
 
     if IsGear(item) and P.EquipmentSetsWith then

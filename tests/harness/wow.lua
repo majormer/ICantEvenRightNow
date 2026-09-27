@@ -469,6 +469,7 @@ function World:_buildEnv()
     end
     G.ITEM_UPGRADE_TOOLTIP_FORMAT_STRING = "Upgrade Level: %s %d/%d"
     G.ITEM_CLASSES_ALLOWED = "Classes: %s"
+    G.ITEM_SPELL_KNOWN = "Already known"
     G.ITEM_SET_BONUS = "Set: %s"
     G.GetServerTime = function() return math.floor(world.now) end
     G.GetMoney = function() return world.money end
