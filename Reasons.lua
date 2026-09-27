@@ -473,10 +473,12 @@ local function SetVerdict(item, setID, facts, users)
         local sets = char.equippedSets or {}
         local worn = sets[setID] and sets[setID].count or 0
         local min = facts.setMin or 2
+        -- Already active: this piece adds nothing new at the lowest bonus.
+        if sets[setID] and sets[setID].active and worn >= min then min = worn + 1 end
         -- A class set replaced by another class set the character wears.
         if facts.classes and not facts.upgradable then
             for otherID, other in pairs(sets) do
-                if otherID ~= setID and other.classSet and other.count >= (other.min or 2) then
+                if otherID ~= setID and other.classSet and (other.active or other.count >= (other.min or 2)) then
                     return "set_replaced", (char.name or "?") .. " wears " .. other.count .. " pieces of "
                         .. (other.name or "a newer class set") .. (other.level and (" at " .. other.level) or "")
                         .. "; this set (" .. (facts.setName or "old set") .. ") can't be upgraded"

@@ -22,7 +22,7 @@ local function game(extra)
         for i, slot in ipairs({ 1, 3, 7 }) do
             local loc = ({ "INVTYPE_HEAD", "INVTYPE_SHOULDER", "INVTYPE_LEGS" })[i]
             plate(w, 9100 + i, { name = "New Piece " .. i, equipLoc = loc, itemLevel = 308, setID = 2055,
-                tooltipLines = { "New Set (3/5)", "Classes: Warrior", "(2) Set: New bonus", "(4) Set: More" } })
+                tooltipLines = { "New Set (3/5)", "Classes: Warrior", "Set: New bonus (active: no count)", "(4) Set: More" } })
             w.equippedItems[slot], w.equipped[slot] = 9100 + i, 308
         end
         for _, slot in ipairs({ 5, 6, 8, 9, 10, 11, 13, 14, 15, 16 }) do w.equipped[slot] = 305 end

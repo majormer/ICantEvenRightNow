@@ -217,9 +217,13 @@ local UPGRADE_PATTERN = FormatPattern(ITEM_UPGRADE_TOOLTIP_FORMAT_STRING, "^Upgr
 local CLASSES_PATTERN = FormatPattern(ITEM_CLASSES_ALLOWED, "^Classes: (.+)$")
 local SET_NAME_PATTERN = "^(.+) %((%d+)/(%d+)%)$"
 local SET_BONUS_PATTERN = "^%((%d+)%) "
+-- Active bonuses read "Set: ..." with no count (ITEM_SET_BONUS "Set: %s");
+-- inactive ones "(4) Set: ..." (ITEM_SET_BONUS_GRAY). Seen in game 2026-09-26.
+local ACTIVE_BONUS_PREFIX = (type(ITEM_SET_BONUS) == "string" and ITEM_SET_BONUS:match("^(.-)%%s")) or "Set: "
 
 -- What the tooltip says about sets and upgrades:
--- { state, setName, setTotal, setMin, classes, upgradeTrack, upgradeCur, upgradeMax, upgradable }.
+-- { state, setName, setTotal, setMin (lowest inactive bonus), activeBonuses, classes,
+--   upgradeTrack, upgradeCur, upgradeMax, upgradable }.
 -- state "ready", "loading" (tooltip reads "Retrieving item information"), or "unknown".
 function P.ItemTooltipFacts(item)
     -- "unknown": no tooltip to read. Never taken as "can't be upgraded".
@@ -236,7 +240,7 @@ function P.ItemTooltipFacts(item)
         if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item.itemID) end
         return { state = "loading" }
     end
-    local facts = { state = "ready" }
+    local facts = { state = "ready", activeBonuses = 0 }
     local bonusCounts = {}
     for _, line in ipairs(data.lines) do
         local text = line.leftText
@@ -255,6 +259,9 @@ function P.ItemTooltipFacts(item)
             end
             local count = text:match(SET_BONUS_PATTERN)
             if count and text:find("Set", 1, true) then bonusCounts[#bonusCounts + 1] = tonumber(count) end
+            if text:sub(1, #ACTIVE_BONUS_PREFIX) == ACTIVE_BONUS_PREFIX then
+                facts.activeBonuses = facts.activeBonuses + 1
+            end
         end
     end
     table.sort(bonusCounts)

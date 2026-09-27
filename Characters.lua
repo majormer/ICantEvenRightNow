@@ -170,7 +170,7 @@ local function ReadEquippedSets(equipped)
             local facts = P.ItemTooltipFacts({ itemID = itemID, link = link })
             if facts.state == "loading" then return nil end
             local entry = sets[setID] or { count = 0, name = facts.setName, min = facts.setMin or 2,
-                classSet = facts.classes ~= nil, slots = {} }
+                classSet = facts.classes ~= nil, slots = {}, active = (facts.activeBonuses or 0) > 0 }
             entry.count = entry.count + 1
             entry.slots[slot] = true
             local level = equipped and equipped[slot]
