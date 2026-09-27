@@ -575,12 +575,21 @@ function World:_buildEnv()
     G.GameTooltip:Hide()
     local tooltip = G.GameTooltip
     tooltip._lines = {}
-    tooltip.SetOwner = function(t) t._lines = {} end
+    tooltip.SetOwner = function(t, owner) t._lines = {} t._owner = owner end
+    tooltip.GetOwner = function(t) return t._owner end
     tooltip.ClearLines = function(t) t._lines = {} end
     tooltip.AddLine = function(t, text) table.insert(t._lines, tostring(text)) end
     tooltip.AddDoubleLine = function(t, a, b) table.insert(t._lines, tostring(a) .. " " .. tostring(b)) end
     tooltip.SetText = function(t, text) t._lines = { tostring(text) } end
-    tooltip.SetHyperlink = function(t, link) table.insert(t._lines, tostring(link)) end
+    -- Like the game: building an item tooltip runs the registered post-calls.
+    tooltip.SetHyperlink = function(t, link)
+        table.insert(t._lines, tostring(link))
+        local itemID = parseItemID(link)
+        local itemType = G.Enum and G.Enum.TooltipDataType and G.Enum.TooltipDataType.Item
+        for _, fn in ipairs(itemType and world.tooltipPostCalls and world.tooltipPostCalls[itemType] or {}) do
+            fn(t, { id = itemID })
+        end
+    end
     tooltip.SetBagItem = function(t, bag, slot)
         local stack = world:getStack(bag, slot)
         if stack then table.insert(t._lines, world.items[stack.itemID].name) end

@@ -584,6 +584,17 @@ local function ForgetActiveTask()
     UI.activeTaskModified = false
 end
 
+-- Row tooltips: re-add the addon's lines every time the item tooltip is built.
+if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and Enum and Enum.TooltipDataType then
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip)
+        local rowTooltip = UI.rowTooltip
+        if rowTooltip and tooltip == GameTooltip and tooltip.GetOwner and tooltip:GetOwner() == rowTooltip.owner then
+            pcall(rowTooltip.add, tooltip)
+        end
+    end)
+    UI.rowTooltipHooked = true
+end
+
 -- A fresh Transfer list on the current route: no task, no task rule, no
 -- filters, nothing selected (in game "Custom transfer" reopened the last task).
 function P.StartCustomTransfer()
@@ -2331,9 +2342,10 @@ function Core.RefreshTransferUncached()
                 end
             end)
             row.rule:SetScript("OnClick", function() ToggleRowRuleMenu(row, item) end)
-            row:SetScript("OnEnter", function(self)
-                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-                GameTooltip:SetHyperlink(item.link or ("item:" .. item.itemID))
+            -- The addon's lines, added by the item tooltip post-call below so
+            -- they survive the tooltip being rebuilt (in game, with ElvUI's
+            -- item comparison, lines added once after SetHyperlink vanished).
+            local function AddRowLines(GameTooltip)
                 GameTooltip:AddLine(" ")
                 GameTooltip:AddLine("From: " .. source, 1, 1, 1)
                 GameTooltip:AddLine("To: " .. dest, 1, 1, 1)
@@ -2382,9 +2394,18 @@ function Core.RefreshTransferUncached()
                         GameTooltip:AddLine(line, 0.9, 0.8, 0.5)
                     end
                 end
+            end
+            row:SetScript("OnEnter", function(self)
+                UI.rowTooltip = { owner = self, add = AddRowLines }
+                GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+                GameTooltip:SetHyperlink(item.link or ("item:" .. item.itemID))
+                if not UI.rowTooltipHooked then AddRowLines(GameTooltip) end
                 GameTooltip:Show()
             end)
-            row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+            row:SetScript("OnLeave", function()
+                UI.rowTooltip = nil
+                GameTooltip:Hide()
+            end)
         else
             row.plan = nil
             row:SetScript("OnClick", nil)

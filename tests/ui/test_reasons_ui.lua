@@ -35,6 +35,15 @@ T.test("tooltip explains the reason and what letting go costs", function()
     local lines = table.concat(g.env.GameTooltip._lines, "\n")
     T.contains(lines, "Why it's here: Appearance already collected")
     T.contains(lines, "If it goes: You keep the appearance.")
+    -- The game (or ElvUI's item comparison) rebuilds the tooltip: the lines come back.
+    local tip = g.env.GameTooltip
+    tip:ClearLines()
+    tip:SetHyperlink(g.world:itemLink(I.BOUND_HELM))
+    T.contains(table.concat(tip._lines, " | "), "Why it's here: Appearance already collected")
+    row:_fire("OnLeave")
+    tip:SetOwner(g.env.UIParent)
+    tip:SetHyperlink(g.world:itemLink(I.BOUND_HELM))
+    T.notContains(table.concat(tip._lines, " | "), "Why it's here", "not added to other tooltips")
 end)
 
 T.test("keep reasons from the row menu silence suggestions and show on Rules", function()
