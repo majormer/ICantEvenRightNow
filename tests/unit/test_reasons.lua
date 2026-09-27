@@ -293,3 +293,14 @@ T.test("utility items (a bound device with a Use effect) stay in the bags: no de
     T.ok(banked, "in the bank")
     T.ok(P.ExplainScanned(banked).primary.id ~= "utility_item", "not a utility item while banked")
 end)
+
+T.test("a gear token (armor class, not equippable, with a Use) is the player's call, not 'no clear reason'", function()
+    local game = mageWith(function(w) w:put(0, 1, 203641, 1, { tooltipBinding = "warbound" }) end,
+        function(w) w:defineItem(203641, { name = "Primalist Cloth Boots", classID = 4, subclassID = 0,
+            equipLoc = "INVTYPE_NON_EQUIP_IGNORE", itemLevel = 72, requiredLevel = 70, quality = 4, sellPrice = 5000,
+            expansionID = 9, bindType = 7, useSpell = "Create Primalist Cloth Boots" }) end)
+    local e = explain(game, 203641)
+    T.eq(e.primary.id, "gear_token")
+    T.eq(e.disposition, "review")
+    T.contains(e.evidence, "Warbound")
+end)

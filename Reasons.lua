@@ -81,6 +81,7 @@ local REASONS = {
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
     situational_gear     = { disposition = "review", label = "Max-level trinket or weapon: check before selling" },
     set_completes        = { disposition = "review", label = "Completes a set bonus: your call" },
+    gear_token           = { disposition = "review", label = "Creates gear when used: use it on a character who needs it, or sell it" },
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
@@ -638,6 +639,16 @@ local function ExplainItem(item, ctx)
         local device = item.itemSubTypeName == "Explosives and Devices" or (item.classID == 7 and item.subclassID == 2)
             or (item.classID == 15 and (item.subclassID == 0 or item.subclassID == 4))
         if gadgetUse and device then add("utility_item", "Use: " .. gadgetUse) end
+    end
+    -- Gear tokens (in game: Warbound "Primalist Cloth Boots" from the
+    -- Forbidden Reach): armor or weapon class, not equippable, with a Use
+    -- that creates the real piece. Not gear, so the gear rules don't apply;
+    -- the player picks the character.
+    if (item.classID == 2 or item.classID == 4) and not IsGear(item) and item.classID ~= 12 and P.ItemUseSpell then
+        local tokenUse = P.ItemUseSpell(item)
+        if tokenUse then
+            add("gear_token", "Use: " .. tokenUse .. (item.isWarbandBound and "; Warbound, so any of your characters can use it" or ""))
+        end
     end
     local curiosity = IsGear(item) and item.itemLevel and item.itemLevel <= 1
     if curiosity then
