@@ -208,7 +208,11 @@ local function Render()
     local item = entry.item
     local options = P.TriageOptions(item)
     local explanation = options.explanation
-    frame.title:SetText(state.scopeLabel .. ": " .. state.index .. " of " .. #state.queue)
+    -- Position by items looked at this run, so a Leave (which moves the item
+    -- to the end) still advances the count.
+    local looked = 0
+    for _ in pairs(state.done) do looked = looked + 1 end
+    frame.title:SetText(state.scopeLabel .. ": " .. math.min(looked + 1, #state.queue) .. " of " .. #state.queue)
     frame.progress:SetText("This run: " .. SummaryText())
     frame.icon:SetTexture(item.icon)
     frame.name:SetText(P.ItemDisplayName(item.name, item.link, item.itemID)
@@ -457,16 +461,18 @@ local function Build()
     frame.wowheadItem, frame.wowheadItemLabel = WowheadBox("Wowhead (Ctrl+C to copy):", frame.can)
     frame.wowheadQuest, frame.wowheadQuestLabel = WowheadBox("Quest:", frame.wowheadItemLabel)
 
+    -- The choice block is pinned to the bottom so the buttons never move
+    -- between items, however long the explanation above them is.
     frame.recommended = kit.CreateLabel(area, "", "GameFontNormal")
-    frame.recommended:SetPoint("TOPLEFT", frame.wowheadQuestLabel, "BOTTOMLEFT", 0, -10)
+    frame.recommended:SetPoint("BOTTOMLEFT", 0, 118)
     frame.previousDecision = kit.CreateLabel(area, "", "GameFontDisableSmall")
     frame.previousDecision:SetPoint("LEFT", frame.recommended, "RIGHT", 12, 0)
 
     frame.buttons = {}
     local row1 = CreateFrame("Frame", nil, area) row1:SetSize(600, 26)
-    row1:SetPoint("TOPLEFT", frame.recommended, "BOTTOMLEFT", 0, -8)
+    row1:SetPoint("BOTTOMLEFT", 0, 84)
     local row2 = CreateFrame("Frame", nil, area) row2:SetSize(600, 26)
-    row2:SetPoint("TOPLEFT", row1, "BOTTOMLEFT", 0, -6)
+    row2:SetPoint("BOTTOMLEFT", 0, 52)
     for i, choice in ipairs(CHOICE_ORDER) do
         local parent = i <= 4 and row1 or row2
         local b = kit.CreateButton(parent, CHOICE_LABEL[choice], 146, 24)
@@ -479,7 +485,7 @@ local function Build()
         frame.buttons[choice] = b
     end
     frame.confirmNote = kit.CreateLabel(area, "", "GameFontNormalSmall")
-    frame.confirmNote:SetPoint("TOPLEFT", row2, "BOTTOMLEFT", 0, -6)
+    frame.confirmNote:SetPoint("BOTTOMLEFT", 0, 32)
     frame.confirmNote:SetWidth(600) frame.confirmNote:SetJustifyH("LEFT")
 
     frame.prev = kit.CreateButton(area, "< Previous (Backspace)", 150, 22)

@@ -117,6 +117,7 @@ T.test("the screen: Leave puts the item at the end; Carry stores keep+carry; Pre
     T.contains(frame.name:GetText(), g.world.items[I.LINEN].name)
     g:click(frame.buttons.leave)
     T.contains(frame.name:GetText(), g.world.items[I.OLD_POTION].name, "next item; linen moved to the end")
+    T.contains(frame.title:GetText(), "2 of 2", "a Leave still advances the position")
     g:click(frame.buttons.carry)
     T.eq(P.GetDecision(I.OLD_POTION).note, "carry")
     T.contains(frame.name:GetText(), g.world.items[I.LINEN].name, "linen comes back at the end")
