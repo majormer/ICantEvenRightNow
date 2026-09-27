@@ -468,3 +468,23 @@ T.test("a full Warband bank says so and offers to make room", function()
     for _, c in ipairs(P.GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
     if card and (card.blocked or 0) > 0 then T.contains(P.CardSummary(card), "blocked: Warband bank full") end
 end)
+
+T.test("Warbound-until-equipped is remembered while a tooltip is loading (saved across reloads)", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(12, 1, I.OLD_SWORD, 1, { warboundUntilEquipped = true })
+    end })
+    g:openBank()
+    local function sword()
+        g:Core().ScanInventory("all", true)
+        for _, it in ipairs(g:P().GetWarbandSnapshot().items) do if it.itemID == I.OLD_SWORD then return it end end
+    end
+    T.eq(sword().bindingScope, "Warbound Until Equipped")
+    T.eq(g:db().knownBinding[I.OLD_SWORD], "wue", "saved")
+    g.world.containers[12].slots[1].tooltipLoading = true    -- the client dropped the item
+    local item = sword()
+    T.eq(item.bindingScope, "Warbound Until Equipped", "not 'BoE' while the tooltip loads")
+    T.ok(not item.bindingPending)
+end)

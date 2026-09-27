@@ -75,10 +75,17 @@ P.IsMythicKeystone = IsMythicKeystone
 -- Binding detection
 -- ===========================================================================
 
--- Confirmed bindings this session: [itemID] = "warbound" | "soulbound". The
--- client drops item data (the tooltip then reads only "Retrieving item
--- information"), so a binding seen once is reused until the tooltip is back.
-local knownBinding = {}
+-- Confirmed bindings: [itemID] = "warbound" | "soulbound" | "wue" | "boe",
+-- saved across reloads (ns.DB.knownBinding). The client drops item data (the
+-- tooltip then reads only "Retrieving item information"), so a binding seen
+-- once is reused until the tooltip is back. In game, Warband items read "BoE"
+-- instead of "Warbound until equipped" while their tooltips loaded, which
+-- moved them in and out of task lists between visits (38 vs 44).
+local function KnownBindings()
+    if not ns.DB then return {} end
+    ns.DB.knownBinding = ns.DB.knownBinding or {}
+    return ns.DB.knownBinding
+end
 
 -- The binding line of a bag item's tooltip: "warbound", "soulbound",
 -- "loading" (tooltip not loaded yet), or nil (no binding line).
@@ -167,25 +174,43 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
     if not details.isBound and not details.isWarbandBound and bindType == ITEM_BIND_ON_EQUIP
         and C_TooltipInfo and C_TooltipInfo.GetBagItem then
         local wanted = ITEM_ACCOUNTBOUND_UNTIL_EQUIP or "Warbound until equipped"
+        local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
+        local known = KnownBindings()
         local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
-        if ok and type(data) == "table" then
-            for _, line in ipairs(data.lines or {}) do
-                if line.leftText == wanted then
-                    details.bindingScope   = "Warbound Until Equipped"
-                    details.isWarbandBound = true
-                    details.accountBankAllowed = true
-                    break
+        local first = ok and type(data) == "table" and data.lines and data.lines[1] and data.lines[1].leftText
+        local wue
+        if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+            -- Tooltip not loaded: reuse what was seen before, or wait for it.
+            if itemID and known[itemID] then
+                wue = known[itemID] == "wue"
+            else
+                details.bindingPending = true
+                if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+                    pcall(C_Item.RequestLoadItemDataByID, itemID)
                 end
             end
+        elseif ok and type(data) == "table" then
+            wue = false
+            for _, line in ipairs(data.lines or {}) do
+                if line.leftText == wanted then wue = true break end
+            end
+            if itemID then known[itemID] = wue and "wue" or "boe" end
+        end
+        if wue then
+            details.bindingScope   = "Warbound Until Equipped"
+            details.isWarbandBound = true
+            details.accountBankAllowed = true
         end
     end
 
     local tooltipBinding = details.isBound and TooltipBinding(bagID, slot) or nil
     local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
+    local knownBinding = KnownBindings()
     if tooltipBinding == "warbound" or tooltipBinding == "soulbound" then
         if itemID then knownBinding[itemID] = tooltipBinding end
     elseif tooltipBinding == "loading" then
         tooltipBinding = itemID and knownBinding[itemID] or nil
+        if tooltipBinding ~= "warbound" and tooltipBinding ~= "soulbound" then tooltipBinding = nil end
         if not tooltipBinding then
             -- Not known yet: ask for the data and say so (Readiness waits,
             -- the scan retries) instead of trusting the bank check alone.
