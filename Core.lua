@@ -260,6 +260,12 @@ function Core.HandleSlashCommand(msg)
         end
     elseif cmd == "refused" then
         for _, line in ipairs(P.RefusedItemsReport((arg1 or ""):lower() == "clear")) do Print(line) end
+    elseif cmd == "export" then
+        -- Offline triage (undocumented): the classified inventory, saved on reload.
+        local count = P.ExportInventory(arg1)
+        Print("Exported " .. count .. " item(s) (" .. ((arg1 or "") ~= "" and arg1 or "all") .. "). /reload to write the saved file.")
+    elseif cmd == "decide" then
+        Print(P.DecideCommand(arg1))
     elseif cmd == "undo" then
         Print(P.PrepareUndo())
     elseif cmd == "clearerrors" then

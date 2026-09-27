@@ -259,6 +259,8 @@ end
 -- (otherwise there's nothing to scan with).
 function P.NeedsPriceCheck(item)
     if not item or not P.HasPriceSource() then return false end
+    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    if decision and decision.choice == "sell" then return false end
     if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
     if P.NotListedAtLastScan(item) then return false end
     local price = GetAuctionPrice(item)
@@ -337,6 +339,9 @@ end
 -- meaningful auction price. Uses stale prices too: better to warn than lose value.
 function P.IsValueFlagged(item, dest)
     if dest ~= "Vendor" then return false end
+    -- The player decided to sell it to a vendor with the auction price in view.
+    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    if decision and decision.choice == "sell" then return false end
     return (P.AuctionAdvice(item, true)) == "auction"
 end
 
@@ -628,6 +633,13 @@ end
 function P.IsAuctionCandidate(item)
     -- Without loaded item data the addon can't tell whether to keep it.
     if item.expansionID == nil or not item.classID then return false end
+    -- The player's decision wins: "auction" needs only a channel and a price;
+    -- any other decision takes the item out of the candidates.
+    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    if decision and decision.choice ~= "defer" then
+        if decision.choice ~= "auction" then return false end
+        return CanBeAuctioned(item) and GetAuctionPrice(item) ~= nil
+    end
     if (P.AuctionAdvice(item)) ~= "auction" then return false end
     if not P.ExplainScanned then return true end
     local explanation = P.ExplainScanned(item)

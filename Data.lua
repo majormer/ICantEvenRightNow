@@ -124,6 +124,7 @@ ns.Data.DefaultDB = {
     knownPetSpecies = {}, -- [itemID] = speciesID, remembered because the client drops pet item data (Reasons.lua)
     knownQuestItem = {}, -- [itemID] = questID, remembered because container quest info lags after a reload (Scanner.lua)
     auctionRefused = {}, -- [itemID] = { name, reason, at }: items the auction house refused to list (Transfer.lua)
+    decisions = {}, -- [itemID] = { choice, at, until_, reason, note, by }: the player's triage decisions (Triage.lua)
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once

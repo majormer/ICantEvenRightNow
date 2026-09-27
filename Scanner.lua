@@ -403,6 +403,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
     end
 
     if P.CleanupHandoffs then pcall(P.CleanupHandoffs) end
+    if P.SweepDecisions then pcall(P.SweepDecisions) end
 
     -- A background item-data retry after the addon settled must not change
     -- what's on screen by itself: flag it instead (Readiness.lua).

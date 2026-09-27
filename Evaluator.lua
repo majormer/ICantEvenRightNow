@@ -547,7 +547,16 @@ function P.ItemChannels(item)
         deny("vendor", "Never sell rule") deny("auction", "Never sell rule")
     end
 
-    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank" }) do allow(channel) end
+    -- Destroy: anything the player isn't protecting (the game's own DELETE
+    -- confirm covers uncommon and better). Use: something to learn or start.
+    if rule and rule.protect then deny("destroy", "Protected by your rule") end
+    if P.MYTHIC_KEYSTONE_ITEM_IDS and P.MYTHIC_KEYSTONE_ITEM_IDS[item.itemID] then deny("destroy", "Mythic Keystone") end
+    local kind, learned = P.GetCollectibleState and P.GetCollectibleState(item)
+    local useWhy
+    if kind and learned == false then useWhy = "learn the " .. kind
+    elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest" end
+    if useWhy then channels.use = true channels.useWhat = useWhy else deny("use", "Nothing to learn or start") end
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy" }) do allow(channel) end
     return channels
 end
 
@@ -555,8 +564,9 @@ end
 function P.ChannelsText(item)
     local channels = P.ItemChannels(item)
     local parts = {}
-    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank" }) do
-        parts[#parts + 1] = channel .. " " .. (channels[channel] and "yes" or ("no (" .. tostring(channels.why[channel]) .. ")"))
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy", "use" }) do
+        parts[#parts + 1] = channel .. " " .. (channels[channel] and ("yes" .. (channel == "use" and channels.useWhat and (" (" .. channels.useWhat .. ")") or ""))
+            or ("no (" .. tostring(channels.why[channel]) .. ")"))
     end
     return table.concat(parts, " | ")
 end

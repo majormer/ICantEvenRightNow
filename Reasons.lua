@@ -67,6 +67,14 @@ local REASONS = {
     no_use_no_market     = { disposition = "free",   label = "Nothing keeps it, and it can't be auctioned: sell it to a vendor" },
     -- rank 0.9: ahead of "current expansion" (keep, 1), a player's rule.
     deck_card            = { disposition = "free",   label = "Deck card, and you don't assemble decks: sell it", rank = 0.9 },
+    -- The player's own triage decisions (Triage.lua) outrank every rule (0.5).
+    decided_sell         = { disposition = "free",   label = "You decided: sell it to a vendor", rank = 0.5 },
+    decided_auction      = { disposition = "free",   label = "You decided: sell it at the auction house", rank = 0.5 },
+    decided_destroy      = { disposition = "free",   label = "You decided: destroy it", rank = 0.5 },
+    decided_keep         = { disposition = "keep",   label = "You decided to keep it", rank = 0.5 },
+    decided_use          = { disposition = "keep",   label = "You decided to use it", rank = 0.5 },
+    decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
+    decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -799,6 +807,23 @@ local function ExplainItem(item, ctx)
             add("no_use_no_market", channels.why.auction)
         end
     end
+    -- The player's decision (Triage.lua) comes first; a run-out defer asks again.
+    local decision = P.GetDecision and item.itemID and P.GetDecision(item.itemID)
+    if decision then
+        local when = decision.at and date and date("%Y-%m-%d", decision.at) or nil
+        local stamp = when and ("On " .. when) or "Your decision"
+        if decision.choice == "defer" then
+            if decision.due then
+                add("decision_due", "Deferred " .. (when and ("on " .. when) or "earlier") .. "; look again")
+            else
+                add("decided_defer", "Until " .. (date and date("%Y-%m-%d", decision.until_ or 0) or "later"))
+            end
+        elseif decision.choice == "keep" then
+            add("decided_keep", stamp .. (decision.reason and (": " .. decision.reason) or "") .. (decision.note and (" (" .. decision.note .. ")") or ""))
+        else
+            add("decided_" .. decision.choice, stamp .. (decision.note and (": " .. decision.note) or ""))
+        end
+    end
     if #reasons == 0 then add("unexplained") end
 
     -- Primary: keep > free > review > info.
@@ -1059,6 +1084,9 @@ end
 local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
     if P.MerchantRefused and P.MerchantRefused(item.itemID) then return false end
+    -- A decision to auction or destroy keeps the item away from the vendor.
+    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    if decision and (decision.choice == "auction" or decision.choice == "destroy") then return false end
     if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then return false end
     local explanation = P.ExplainScanned(item)
     return explanation.disposition == "free"

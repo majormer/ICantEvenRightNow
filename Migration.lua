@@ -16,7 +16,7 @@ local ADDON_NAME, ns = ...
 local P = ns.Private
 
 -- Bump when a new step is appended to STEPS.
-local SCHEMA_VERSION = 2
+local SCHEMA_VERSION = 3
 P.SCHEMA_VERSION = SCHEMA_VERSION
 
 local EXPANSION_FILTER_ALL = P.EXPANSION_FILTER_ALL
@@ -278,6 +278,11 @@ STEPS[2] = function(db, report)
         db.lastScan = nil
     end
     db.characters = db.characters or {}
+end
+
+-- Schema 3 (0.6.0): triage decisions (Triage.lua).
+STEPS[3] = function(db, report)
+    if type(db.decisions) ~= "table" then db.decisions = {} end
 end
 
 -- ---------------------------------------------------------------------------

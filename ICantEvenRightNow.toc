@@ -30,6 +30,7 @@ Filter.lua
 Scanner.lua
 Transfer.lua
 Tasks.lua
+Triage.lua
 UI.lua
 HomeUI.lua
 Value.lua
