@@ -273,6 +273,19 @@ function P.ItemTooltipFacts(item)
     return facts
 end
 
+-- The item's Use effect (spell name), or nil. Cached per item ID.
+local useSpells = {}
+function P.ItemUseSpell(item)
+    if not item or not item.itemID or not (C_Item and C_Item.GetItemSpell) then return nil end
+    local cached = useSpells[item.itemID]
+    if cached ~= nil then return cached or nil end
+    local ok, name = pcall(C_Item.GetItemSpell, item.itemID)
+    if not ok then return nil end
+    if name == nil and P.ItemDataState(item) ~= "ready" then return nil end   -- ask again once loaded
+    useSpells[item.itemID] = name or false
+    return name
+end
+
 -- Give up-and-retry: Rescan asks again for everything that failed.
 function P.RetryFailedItemData()
     for itemID, rec in pairs(records) do

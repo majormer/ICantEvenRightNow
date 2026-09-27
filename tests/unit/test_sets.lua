@@ -169,3 +169,15 @@ T.test("legendaries are your call, even when below what you wear", function()
     T.eq(e.disposition, "review")
     T.ok(not g:P().CanGoAndSellable(select(2, explain(g, 9501))), "not in the sell tasks")
 end)
+
+T.test("gear with a Use effect is your call, not outgrown gear", function()
+    local g = game(function(w)
+        w:defineItem(9502, { name = "Teleport Band", classID = 4, subclassID = 0, equipLoc = "INVTYPE_FINGER",
+            itemLevel = 17, requiredLevel = 10, bindType = 1, quality = 3, sellPrice = 100, expansionID = 2,
+            useSpell = "Teleport: Dalaran" })
+        w:put(0, 8, 9502, 1, { bound = true })
+    end)
+    local e = explain(g, 9502)
+    T.eq(e.primary.id, "use_effect")
+    T.contains(e.evidence, "Teleport: Dalaran")
+end)

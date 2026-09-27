@@ -70,6 +70,9 @@ local REASONS = {
     -- Outranks the "can go" reasons: in game eight Legion Legendaries and a
     -- BfA Legendary cloak were offered as "below what you wear".
     legendary_keepsake   = { disposition = "review", label = "Legendary: many players keep these", rank = 1.8 },
+    -- Gear with a Use effect (in game: a Kirin Tor teleport ring, a fishing
+    -- hat) isn't just outgrown gear.
+    use_effect           = { disposition = "review", label = "Has a Use effect: your call", rank = 1.8 },
     long_untouched       = { disposition = "review", label = "Untouched for over a year" },
     roles_needed         = { disposition = "review", label = "Assign character roles to see who can use this" },
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
@@ -602,6 +605,8 @@ local function ExplainItem(item, ctx)
     -- Item level 1 "gear" is a curiosity, not equipment (in game: Noble's
     -- Signet Ring, a Warbound Eversong treasure with "+1 Nobility", read as
     -- "below what you wear").
+    local useSpell = IsGear(item) and not SITUATIONAL_SLOTS[item.equipLoc or ""] and P.ItemUseSpell and P.ItemUseSpell(item)
+    if useSpell then add("use_effect", "Use: " .. useSpell) end
     local curiosity = IsGear(item) and item.itemLevel and item.itemLevel <= 1
     if curiosity then
         add("possible_keepsake", "Item level 1: usually a treasure, quest curiosity or cosmetic, not real gear")

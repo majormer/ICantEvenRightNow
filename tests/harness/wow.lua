@@ -782,6 +782,12 @@ function World:_buildEnv()
             if not def or not def.cached then return nil end
             return def.itemLevel, false, def.itemLevel
         end,
+        -- def.useSpell: the item's Use effect name.
+        GetItemSpell = function(value)
+            local def = world.items[parseItemID(value)]
+            if def and def.useSpell then return def.useSpell, 1 end
+            return nil
+        end,
         IsItemDataCachedByID = function(itemID)
             local def = world.items[itemID]
             return def and def.cached or false
