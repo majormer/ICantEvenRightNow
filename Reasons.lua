@@ -62,6 +62,7 @@ local REASONS = {
     vendor_refused       = { disposition = "free",   label = "No vendor buys it: destroy it or keep it", rank = 1.9 },
     -- Same, when it has an auction price (in game the refused soup sold for ~19s there).
     vendor_refused_auction = { disposition = "free", label = "No vendor buys it: sell it at the auction house or keep it", rank = 1.9 },
+    no_use_no_market     = { disposition = "free",   label = "Nothing keeps it, and it can't be auctioned: sell it to a vendor" },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -730,6 +731,16 @@ local function ExplainItem(item, ctx)
         add("current_expansion")
     end
 
+    -- Player's rule (2026-09-27): it was worth auctioning (it has an auction
+    -- price), it can't be auctioned after all (refused, Warbound...), nothing
+    -- keeps it, and a vendor buys it: it can go. Items without a market
+    -- price (Jeeves and the like) are not touched by this.
+    if #reasons == 0 and P.ItemChannels and P.GetAuctionPrice and P.GetAuctionPrice(item) then
+        local channels = P.ItemChannels(item)
+        if channels.vendor and not channels.auction and not item.bindingPending then
+            add("no_use_no_market", channels.why.auction)
+        end
+    end
     if #reasons == 0 then add("unexplained") end
 
     -- Primary: keep > free > review > info.
