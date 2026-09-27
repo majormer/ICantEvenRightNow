@@ -194,6 +194,7 @@ local function CollectibleState(item)
     if C_PetJournal and C_PetJournal.GetPetInfoByItemID then
         local speciesID = select(13, SafeCall(C_PetJournal.GetPetInfoByItemID, itemID))
         if speciesID then
+            if P.PetJournalReady and not P.PetJournalReady() then return "pet", nil end   -- not known yet
             local collected = SafeCall(C_PetJournal.GetNumCollectedInfo, speciesID) or 0
             return "pet", collected > 0
         end
@@ -570,7 +571,8 @@ local function ExplainItem(item, ctx)
     local kind, learned = CollectibleState(item)
     if kind then
         if learned then add("collectible_learned", "This " .. kind .. " is already in your collection")
-        else add("collectible_unlearned", "Use it to add the " .. kind .. " to your collection") end
+        elseif learned == false then add("collectible_unlearned", "Use it to add the " .. kind .. " to your collection")
+        else add("details_loading", "Waiting for your " .. kind .. " collection to load") end
     end
 
     if IsGear(item) and P.EquipmentSetsWith then

@@ -200,3 +200,19 @@ T.test("current-expansion items are kept by default; current junk can still go",
     T.eq(explain(game, I.NEW_FLASK).primary.id, "current_expansion")
     T.eq(explain(game, 7102).primary.id, "junk")
 end)
+T.test("a learned pet isn't 'not learned' while the pet journal is still loading", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 7002, 1)
+        w.collections.pets[4542] = 1
+        w.petJournalLoading = true
+    end, function(w) w:defineItem(7002, { name = "Slim", classID = 15, subclassID = 2, petSpeciesID = 4542, sellPrice = 100000 }) end)
+    local e = explain(game, 7002)
+    T.ok(e.primary.id ~= "collectible_unlearned", "not judged before the journal loads")
+    T.ok(e.disposition ~= "free" and e.disposition ~= "keep", "no verdict yet")
+    local item
+    for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7002 then item = it end end
+    T.ok(game:P().ItemDataPending(item), "Getting ready waits for the journal")
+    game.world.petJournalLoading = false
+    game.world:fire("PET_JOURNAL_LIST_UPDATE")
+    T.eq(explain(game, 7002).primary.id, "collectible_learned")
+end)

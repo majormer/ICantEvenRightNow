@@ -286,6 +286,19 @@ function P.ItemUseSpell(item)
     return name
 end
 
+-- The pet journal fills in after login: until then GetNumCollectedInfo says
+-- 0 for every species. In game a learned pet (Slim) read "not learned yet"
+-- after each reload and flipped to "Can go" on the next scan. Ready once the
+-- journal reports owned pets or PET_JOURNAL_LIST_UPDATE fires.
+local petJournalLoaded = false
+function P.PetJournalReady()
+    if petJournalLoaded then return true end
+    if not (C_PetJournal and C_PetJournal.GetNumPets) then return true end
+    local ok, _, owned = pcall(C_PetJournal.GetNumPets)
+    if ok and owned and owned > 0 then petJournalLoaded = true end
+    return petJournalLoaded
+end
+
 -- Give up-and-retry: Rescan asks again for everything that failed.
 function P.RetryFailedItemData()
     for itemID, rec in pairs(records) do
@@ -309,7 +322,17 @@ if CreateFrame then
     local frame = CreateFrame("Frame")
     frame:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     frame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
+    frame:RegisterEvent("PET_JOURNAL_LIST_UPDATE")
     frame:SetScript("OnEvent", function(_, event, itemID, success)
+        if event == "PET_JOURNAL_LIST_UPDATE" then
+            if not petJournalLoaded then
+                petJournalLoaded = true
+                P.Log("itemdata", "pet journal loaded")
+                -- After settling this is late data (flagged, not applied).
+                if P.NoteLateData then P.NoteLateData() end
+            end
+            return
+        end
         local rec = itemID and records[itemID]
         if not rec then return end
         if success then

@@ -921,7 +921,15 @@ function World:_buildEnv()
             return def.name, 0, 0, 0, "", "", false, false, "", "", 0, 0, def.petSpeciesID
         end,
         GetNumCollectedInfo = function(speciesID)
+            if world.petJournalLoading then return 0, 3 end
             return world.collections.pets[speciesID] or 0, 3
+        end,
+        GetNumPets = function()
+            local owned = 0
+            if not world.petJournalLoading then
+                for _, n in pairs(world.collections.pets) do owned = owned + n end
+            end
+            return owned, owned
         end,
     }
 
