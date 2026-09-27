@@ -261,6 +261,18 @@ T.test("Auction Candidates counts candidates in bags and in the bank", function(
     T.eq(card.ready, 2)
     T.contains(g:P().CardSummary(card), "1 in bags, 1 in the bank")
 end)
+T.test("Auction Candidates with everything in the bags points at the auction house, not a bank", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.eq(card.ready, 1)
+    local ok, needs = g:P().TaskRouteAvailable(card.task)
+    T.no(ok) T.eq(needs, "Visit the auction house")
+end)
+
 T.test("opening the auction house shows a notice for Auction Candidates", function()
     local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
         { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })

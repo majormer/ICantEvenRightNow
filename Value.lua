@@ -795,11 +795,20 @@ function P.RegisterValueTasks()
                     expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
                     hideBlocked = true, sort = "Vendor Value" }
             end
-            local inBank, inWarband = 0, 0
+            local inBank, inWarband, inBags = 0, 0, 0
             for _, item in ipairs(P.AuctionCandidateItems()) do
                 if item.scope ~= P.BAG_SCOPE then
                     if P.IsWarbandStorage(item.storageKind) then inWarband = inWarband + 1 else inBank = inBank + 1 end
+                else
+                    inBags = inBags + 1
                 end
+            end
+            -- Everything is already in the bags: the next stop is the auction
+            -- house, not a bank (the card read "Visit a bank" with 11 in bags).
+            if inBank + inWarband == 0 and inBags > 0 then
+                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
+                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                    hideBlocked = true, sort = "Vendor Value" }
             end
             return { name = "Auction Candidates",
                 source = inWarband > inBank and P.STORAGE_WARBAND_BANK or P.STORAGE_ALL_BANK_TABS, dest = "Bags",

@@ -72,6 +72,10 @@ T.test("a sell decision the vendor refuses asks again: review verdict, back in t
     T.eq(e.disposition, "review")
     T.no(P.CanGoAndSellable(scanned(g, I.OLD_SWORD)))
     T.eq(#P.BuildTriageQueue("bags"), 1, "needs a new decision")
+    g:openBank()
+    local ids = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
+    T.no(ids[I.OLD_SWORD], "not offered for deposit while the question is open")
     local frame = P.ShowTriage("bags")
     T.contains(frame.previousDecision:GetText(), "not possible")
 end)
