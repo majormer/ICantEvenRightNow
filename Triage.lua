@@ -72,13 +72,23 @@ end
 
 -- Items that left the account (sold, listed, destroyed) drop their outward
 -- decision; keep/use/defer stay in case the item comes back.
+-- An item is "gone" only when two scans at least this far apart both miss it.
+-- Right after a bank pull the moved stacks are in neither snapshot for a few
+-- seconds (the bank scan no longer has them, the bag slots are still locked),
+-- and one sweep in that window dropped 40 destroy decisions (2026-09-28).
+local MISSING_GRACE_SECONDS = 120
+
 function P.SweepDecisions()
     if not (ns.DB and ns.DB.decisions and P.CountAcrossAccount) then return 0 end
-    local dropped = 0
+    local dropped, now = 0, Now()
     for itemID, record in pairs(ns.DB.decisions) do
         if record.choice == "sell" or record.choice == "auction" or record.choice == "destroy" then
             local total = P.CountAcrossAccount(itemID)
-            if (total or 0) == 0 then
+            if (total or 0) > 0 then
+                record.missingSince = nil
+            elseif not record.missingSince then
+                record.missingSince = now
+            elseif now - record.missingSince >= MISSING_GRACE_SECONDS then
                 ns.DB.decisions[itemID] = nil
                 dropped = dropped + 1
             end

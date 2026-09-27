@@ -118,14 +118,27 @@ T.test("a deferred item is quiet until the date, then asks again", function()
     T.eq(e.disposition, "review")
 end)
 
-T.test("decisions to sell/auction/destroy are dropped once the item is gone; keep stays", function()
+T.test("decisions to sell/auction/destroy are dropped once the item is gone for two scans two minutes apart; keep stays", function()
     local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) w:put(0, 2, I.LINEN, 20) end)
     local P = g:P()
     P.SetDecision(I.OLD_SWORD, "sell")
     P.SetDecision(I.LINEN, "keep")
-    g.world.containers[0].slots[1] = nil   -- sold
+    local sword = g.world.containers[0].slots[1]
+    g.world.containers[0].slots[1] = nil   -- in transit (or sold)
     g:Core().ScanInventory("bags", true)
-    T.eq(P.GetDecision(I.OLD_SWORD), nil, "swept")
+    T.eq(P.GetDecision(I.OLD_SWORD).choice, "sell", "one missing scan is not enough: a pull in progress looks the same")
+    -- It comes back (the move settled): the clock resets.
+    g.world.containers[0].slots[1] = sword
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.GetDecision(I.OLD_SWORD).missingSince, nil)
+    g.world.containers[0].slots[1] = nil   -- sold for real
+    g:Core().ScanInventory("bags", true)
+    g.world:advance(60)
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.GetDecision(I.OLD_SWORD).choice, "sell", "still within the grace period")
+    g.world:advance(90)
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.GetDecision(I.OLD_SWORD), nil, "swept after two minutes gone")
     T.eq(P.GetDecision(I.LINEN).choice, "keep")
 end)
 
