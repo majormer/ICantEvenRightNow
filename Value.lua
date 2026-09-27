@@ -180,8 +180,15 @@ local function GetAuctionPrice(item)
     if not item or not item.itemID then return nil end
     local result
     for _, candidate in ipairs({ AuctionatorPrice(item) or false, TSMPrice(item) or false, StoredPrice(item) or false }) do
-        if candidate and (not result or (candidate.ageDays or 1) < (result.ageDays or 1)) then
-            result = candidate
+        if candidate then
+            -- A confirmed price beats an unconfirmed one of the same day: in
+            -- game a median typed in by hand lost to Auctionator's "far above
+            -- usual" listing from the same day and the item stayed blocked.
+            local better = not result
+                or (candidate.ageDays or 1) < (result.ageDays or 1)
+                or (result.unconfirmed and not candidate.unconfirmed
+                    and math.floor(candidate.ageDays or 1) <= math.floor(result.ageDays or 1))
+            if better then result = candidate end
         end
     end
     if not result then return nil end

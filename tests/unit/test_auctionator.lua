@@ -72,6 +72,8 @@ local function installAuctionator(w, opts)
     function database:GetPrice(key)
         local id = tonumber(key:match("^g:(%d+):")) or tonumber(key)
         if key:match("^g:") and (opts.exact or {})[id] == false then return nil end
+        -- opts.basePrices: the price across every item level (the "<id>" key).
+        if not key:match("^g:") and (opts.basePrices or {})[id] then return opts.basePrices[id] end
         return (opts.prices or {})[id]
     end
     function database:GetPriceAge(key)
@@ -115,6 +117,21 @@ T.test("gear priced from the base item is labelled approximate", function()
     local sword = scanned(g, I.OLD_SWORD)
     T.eq((g:P().GetItemValue(sword)), (sword.sellPrice or 0) * (sword.count or 1))
     T.ok(not g:P().IsAuctionCandidate(sword))
+end)
+
+T.test("a confirmed price of the same day beats Auctionator's unconfirmed one", function()
+    -- Auctionator: one hopeful listing at 934g today against a 50g base price.
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end,
+        { prices = { [I.OLD_SWORD] = 9340000 }, basePrices = { [I.OLD_SWORD] = 500000 }, ages = { [I.OLD_SWORD] = 0 } })
+    local P = g:P()
+    local price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.ok(price.unconfirmed, "far above the usual price")
+    -- A price entered by hand today (the Undermine median) wins.
+    g:db().prices = g:db().prices or {}
+    g:db().prices["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 1225500, at = g.env.time() }
+    price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.eq(price.price, 1225500) T.no(price.unconfirmed)
+    T.ok(P.ListingPrice(scanned(g, I.OLD_SWORD)), "can be listed")
 end)
 
 T.test("exact prices and non-gear are not labelled approximate", function()
