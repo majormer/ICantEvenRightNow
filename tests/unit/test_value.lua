@@ -216,3 +216,53 @@ T.test("unpriced tradeable items: scan at the auction house before selling them"
     end
     T.contains(g:UI().inventoryStatus, "price them at the auction house first")
 end)
+
+local function bootsGame(prices, ages, stored)
+    local g = game(function(w)
+        w:defineItem(8960, { name = "Tradeable Boots", classID = 4, subclassID = 4, equipLoc = "INVTYPE_FEET",
+            itemLevel = 100, requiredLevel = 10, bindType = 2, quality = 3, sellPrice = 5000, expansionID = 11,
+            appearanceSourceID = 896001 })
+        w.collections.appearances[896001] = true
+        w:put(0, 1, 8960, 1)
+    end, withAuctionator(prices, ages))
+    local P = g:P()
+    P.SetCharacterRole(P.currentCharacterKey, "main")
+    if stored then stored(g) end
+    g:openVendor()
+    g:advance(9)
+    g:slash("")
+    return g, P
+end
+
+T.test("price first: a sell task with stale-priced auctionable items suggests pricing them", function()
+    local g, P = bootsGame({ [8960] = 100 }, { [8960] = 3 })
+    P.OpenTask("Sell Items That Can Go")
+    local frame = g:UI().priceFirstFrame
+    T.ok(frame and frame:IsShown(), "asked")
+    T.contains(frame.text:GetText(), "1 item here could sell at the auction house")
+    T.contains(frame.text:GetText(), "Tradeable Boots")
+    T.contains(frame.text:GetText(), "Auctionator's Full Scan")
+    g:click(frame.sellAnyway)
+    T.no(frame:IsShown())
+    P.OpenTask("Sell Items That Can Go")
+    T.no(frame:IsShown(), "not again this session")
+end)
+
+T.test("price first: a price from today, from any source, is enough", function()
+    local g, P = bootsGame({ [8960] = 100 }, { [8960] = 0 })
+    P.OpenTask("Sell Items That Can Go")
+    T.ok(not g:UI().priceFirstFrame or not g:UI().priceFirstFrame:IsShown(), "Auctionator price from today")
+end)
+
+T.test("prices: the freshest source wins, including the addon's own lookups", function()
+    local g, P = bootsGame({ [8960] = 100 }, { [8960] = 30 }, function(g)
+        g:db().prices = g:db().prices or {}
+        g:db().prices["i:8960:" .. g.env.GetRealmName()] = { price = 900, at = g.env.time() }
+    end)
+    local boots = scanned(g, 8960)
+    local price = P.GetAuctionPrice(boots)
+    T.eq(price.source, "your scan")
+    T.eq(price.price, 900)
+    P.OpenTask("Sell Items That Can Go")
+    T.ok(not g:UI().priceFirstFrame or not g:UI().priceFirstFrame:IsShown(), "own lookup from today counts")
+end)

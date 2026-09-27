@@ -141,6 +141,82 @@ P.RegisterHomeNotice(function()
 end)
 
 -- ---------------------------------------------------------------------------
+-- Price first (player's rule): before a sell task, if auctionable items in it
+-- have no price from the last day from any source, suggest pricing them.
+-- "Sell anyway" stops asking for the rest of the session.
+-- ---------------------------------------------------------------------------
+
+local priceFirstSnoozed = false
+
+local function EnsurePriceFirstFrame()
+    if UI.priceFirstFrame then return UI.priceFirstFrame end
+    local kit = Kit()
+    local parent = UI.frame or UIParent
+    local frame = CreateFrame("Frame", "ICantEvenRightNowPriceFirst", parent, "BackdropTemplate")
+    frame:SetSize(460, 150)
+    frame:SetPoint("CENTER", parent, "CENTER", 0, 40)
+    frame:SetFrameStrata("DIALOG")
+    frame:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8", edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
+    frame:SetBackdropColor(0.08, 0.06, 0.02, 0.96)
+    frame:SetBackdropBorderColor(0.8, 0.62, 0.18, 1)
+    frame.text = kit.CreateLabel(frame, "", "GameFontHighlight")
+    frame.text:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -14)
+    frame.text:SetWidth(432)
+    frame.text:SetJustifyH("LEFT")
+    frame.sellAnyway = kit.CreateButton(frame, "Sell anyway", 120, 24, "primary")
+    frame.sellAnyway:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -14, 12)
+    frame.sellAnyway:SetScript("OnClick", function()
+        priceFirstSnoozed = true
+        P.Log("task", "price first: sell anyway (not asking again this session)")
+        frame:Hide()
+    end)
+    frame.back = kit.CreateButton(frame, "Back to Home", 120, 24)
+    frame.back:SetPoint("RIGHT", frame.sellAnyway, "LEFT", -8, 0)
+    frame.back:SetScript("OnClick", function()
+        frame:Hide()
+        Kit().SetTab("Home")
+    end)
+    frame:Hide()
+    UI.priceFirstFrame = frame
+    return frame
+end
+
+-- How to get recent prices with what's installed.
+local function PriceFirstHow()
+    if Auctionator and Auctionator.API then
+        return "At an auction house, run Auctionator's Full Scan"
+            .. ((P.HasAuctionator and P.HasAuctionator()) and ", or use \"Check Prices in Auctionator\" for just your items." or ".")
+    elseif TSM_API then
+        return "Update TSM's auction data (the TSM desktop app), or check them at an auction house."
+    end
+    return "At an auction house, use \"Price My Items\"."
+end
+
+-- Called when a task opens.
+function P.MaybePromptPriceFirst(task)
+    if priceFirstSnoozed or not (P.HasPriceSource and P.HasPriceSource()) or not P.NeedsRecentPrice then return false end
+    local _, dest = P.GetTaskRoute(task)
+    if dest ~= "Vendor" then return false end
+    local names = {}
+    local count = 0
+    for _, plan in ipairs(P.GetTaskPlans(task)) do
+        if plan.movable and P.NeedsRecentPrice(plan.item) then
+            count = count + 1
+            if #names < 3 then names[#names + 1] = plan.item.name or ("Item " .. plan.item.itemID) end
+        end
+    end
+    if count == 0 then return false end
+    P.Log("task", "price first: %d item(s) in %s have no auction price from the last day", count, task.name)
+    local frame = EnsurePriceFirstFrame()
+    frame.text:SetText("Price first? " .. count .. " item" .. (count == 1 and "" or "s")
+        .. " here could sell at the auction house and " .. (count == 1 and "has" or "have")
+        .. " no price from the last day (" .. table.concat(names, ", ") .. (count > #names and ", ..." or "") .. ").\n\n"
+        .. PriceFirstHow())
+    frame:Show()
+    return true
+end
+
+-- ---------------------------------------------------------------------------
 -- Home tab
 -- ---------------------------------------------------------------------------
 

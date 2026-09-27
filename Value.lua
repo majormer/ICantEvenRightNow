@@ -170,9 +170,17 @@ function P.HasPriceSource()
 end
 
 -- Best available auction price for an item: { price, source, ageDays, fresh }.
+-- The freshest source wins (player's rule: any recent source counts,
+-- including the addon's own lookups). TSM reports no age; its market data
+-- counts as about a day old. On a tie the earlier source wins.
 local function GetAuctionPrice(item)
     if not item or not item.itemID then return nil end
-    local result = AuctionatorPrice(item) or TSMPrice(item) or StoredPrice(item)
+    local result
+    for _, candidate in ipairs({ AuctionatorPrice(item) or false, TSMPrice(item) or false, StoredPrice(item) or false }) do
+        if candidate and (not result or (candidate.ageDays or 1) < (result.ageDays or 1)) then
+            result = candidate
+        end
+    end
     if not result then return nil end
     local settings = Settings()
     local limit = IsCommodity(item) and settings.freshCommodity or settings.freshItem
@@ -244,6 +252,16 @@ function P.NeedsPriceCheck(item)
     if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
     local price = GetAuctionPrice(item)
     return not price or not price.fresh
+end
+
+-- Before a sell task: auctionable items whose best price (any source) is
+-- missing or older than PRICE_FIRST_DAYS (player's rule, 2026-09-26).
+local PRICE_FIRST_DAYS = 1
+P.PRICE_FIRST_DAYS = PRICE_FIRST_DAYS
+function P.NeedsRecentPrice(item)
+    if not item or (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or (price.ageDays or 1) > PRICE_FIRST_DAYS
 end
 
 -- Vendor protection (V3): true when selling to a vendor would give up a

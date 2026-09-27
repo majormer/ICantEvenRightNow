@@ -762,6 +762,7 @@ function P.OpenTask(name)
     UI.activeTaskPredicate = task.predicate
     if P.IsPreselectEnabled() and not task.filterOnly then P.PreselectTask(task) end
     P.UIKit.SetTab("Transfer")
+    if P.MaybePromptPriceFirst then pcall(P.MaybePromptPriceFirst, task) end
     return true
 end
 
