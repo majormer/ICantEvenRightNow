@@ -418,3 +418,49 @@ T.test("bound items: a tooltip that's still loading reuses the known binding, or
     T.eq(byID[8903].bindingScope, "Warbound")
     T.ok(not byID[8903].bindingPending)
 end)
+
+T.test("Warband space counts slots that moves are still landing in", function()
+    local g = T.game({ player = P_MAIN, asyncMoves = true, moveLatency = 5, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 3)
+        w:put(0, 1, I.LINEN, 20)
+        w:put(0, 2, I.OLD_SWORD, 1)
+    end })
+    g:db().ui.tipsEnabled = false
+    g:openBank()
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_WARBAND_ROUTED
+    P.ResetTabFilters("Transfer")
+    g:Core().RefreshUI()
+    for _, plan in ipairs(UI.transferVisible) do if plan.movable then UI.transferSelected[plan.key] = true end end
+    g.world:withHardwareEvent(function() g:Core().ExecuteTransferSelected() end)
+    g:Core().RefreshUI()
+    local notice = UI.frame.panels.Transfer.contextNotice
+    T.contains(notice:GetText(), "Tab 1 1 free (2 items still landing)")
+    g:advance(8)
+    T.contains(notice:GetText(), "Tab 1 1 free")
+    T.notContains(notice:GetText(), "landing")
+end)
+
+T.test("a full Warband bank says so and offers to make room", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 1)
+        w:put(12, 1, I.OLD_SWORD, 1)     -- the only tab is full
+        w:put(0, 1, I.LINEN, 20)
+    end })
+    g:openBank()
+    g:slash("transfer")
+    local UI, P = g:UI(), g:P()
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_WARBAND_ROUTED
+    P.ResetTabFilters("Transfer")
+    P.SetFilterHideBlocked("Transfer", true)   -- "Actionable", as tasks open
+    g:Core().RefreshUI()
+    local panel = UI.frame.panels.Transfer
+    T.contains(panel.empty:GetText(), "The Warband bank is full")
+    T.contains(panel.empty:GetText(), "1 of 5 bought")
+    T.eq(panel.emptyAction:GetText(), "Pull Warband Items That Can Go")
+end)

@@ -1840,6 +1840,8 @@ local function BuildTransferTab(parent)
             Core.RefreshUI()
         elseif self.mode == "home" then
             Core.ShowHomeUI()
+        elseif self.mode == "task" and self.taskName then
+            P.OpenTask(self.taskName)
         end
     end)
     parent.emptyAction:Hide()
@@ -2149,11 +2151,18 @@ function Core.RefreshTransferUncached()
         end
         if not noticeText then
             local parts = {}
+            local landing = 0
             for _, tab in ipairs(P.GetWarbandTabs()) do
                 local free = CContainer.GetContainerNumFreeSlots and CContainer.GetContainerNumFreeSlots(tab.bagID) or nil
+                local incoming = P.SlotsLanding and P.SlotsLanding(tab.bagID) or 0
+                landing = landing + incoming
+                if free then free = math.max(0, free - incoming) end
                 parts[#parts + 1] = P.WarbandTabName(tab) .. " " .. tostring(free or "?") .. " free"
             end
-            if #parts > 0 then SetContextNotice(panel.contextNotice, "Warband space: " .. table.concat(parts, ", ")) end
+            if #parts > 0 then
+                SetContextNotice(panel.contextNotice, "Warband space: " .. table.concat(parts, ", ")
+                    .. (landing > 0 and (" (" .. landing .. " item" .. (landing == 1 and "" or "s") .. " still landing)") or ""))
+            end
         end
     end
     panel.warbandFallback:SetText("Use general tabs for " .. fullAssigned .. " item" .. (fullAssigned == 1 and "" or "s"))
@@ -2220,9 +2229,31 @@ function Core.RefreshTransferUncached()
         emptyActionMode = "clear"
         emptyActionText = "Clear filters"
     elseif #visible == 0 and filters.hideBlocked then
-        emptyMsg = "All matching items are currently blocked."
-        emptyActionMode = "blocked"
-        emptyActionText = "Show blocked items"
+        -- Say why (the most common reason), and the way out when the
+        -- Warband bank is full (in game it only said "currently blocked").
+        local reasons, top = {}, nil
+        for _, plan in ipairs(matched) do
+            if plan.blocked then
+                reasons[plan.blocked] = (reasons[plan.blocked] or 0) + 1
+                if not top or reasons[plan.blocked] > reasons[top] then top = plan.blocked end
+            end
+        end
+        local toWarband = P.IsWarbandStorage and P.IsWarbandStorage(dest)
+        local warbandFull = top and toWarband and (top:find("No empty slots", 1, true)
+            or (P.WARBAND_ASSIGNED_FULL and top:sub(1, #P.WARBAND_ASSIGNED_FULL) == P.WARBAND_ASSIGNED_FULL))
+        if warbandFull then
+            local bought = P.WarbandTabsPurchased and P.WarbandTabsPurchased()
+            emptyMsg = "The Warband bank is full. Make room by pulling out items that can go"
+                .. ((bought and bought < 5) and (", or buy another Warband tab at a banker (" .. bought .. " of 5 bought).") or ".")
+            emptyActionMode = "task"
+            emptyActionText = "Pull Warband Items That Can Go"
+            panel.emptyAction.taskName = "Pull Warband Items That Can Go"
+        else
+            emptyMsg = "All " .. #matched .. " matching item" .. (#matched == 1 and " is" or "s are") .. " blocked"
+                .. (top and (": " .. top) or "") .. "."
+            emptyActionMode = "blocked"
+            emptyActionText = "Show blocked items"
+        end
     else
         emptyMsg = "No transfer candidates."
     end

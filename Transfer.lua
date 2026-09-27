@@ -488,14 +488,45 @@ local SLOT_RESERVATION_SECONDS = 2
 local reservedTargetSlots = {}
 local reservationGeneration = 0
 
+-- A target slot stays reserved until its item has arrived (or 30 s). In game
+-- 32 Warband deposits took longer than the old fixed 2 s, so the space
+-- summary showed a tab as having room that was about to be filled.
+local RESERVATION_LIMIT = 30
+local function ReleaseArrivedSlots()
+    local now = GetTime()
+    for key, info in pairs(reservedTargetSlots) do
+        local arrived = type(info) == "table" and CContainer.GetContainerItemID(info.bag, info.slot) ~= nil
+        if arrived or type(info) ~= "table" or now - info.at >= RESERVATION_LIMIT then
+            reservedTargetSlots[key] = nil
+        end
+    end
+    return next(reservedTargetSlots) ~= nil
+end
+
 local function HoldReservedSlotsUntilSettled()
     reservationGeneration = reservationGeneration + 1
     local generation = reservationGeneration
-    C_Timer.After(SLOT_RESERVATION_SECONDS, function()
-        if generation == reservationGeneration then
-            wipe(reservedTargetSlots)
+    local function check()
+        if generation ~= reservationGeneration then return end
+        if ReleaseArrivedSlots() then
+            C_Timer.After(SLOT_RESERVATION_SECONDS, check)
+        elseif UI.frame and UI.frame:IsShown() then
+            -- The player's moves have settled: show the real space once.
+            Core.RefreshUI()
         end
-    end)
+    end
+    C_Timer.After(SLOT_RESERVATION_SECONDS, check)
+end
+
+-- Slots in a bag claimed by moves that haven't arrived yet.
+function P.SlotsLanding(bagID)
+    local count = 0
+    for _, info in pairs(reservedTargetSlots) do
+        if type(info) == "table" and info.bag == bagID and not CContainer.GetContainerItemID(info.bag, info.slot) then
+            count = count + 1
+        end
+    end
+    return count
 end
 
 -- ===========================================================================
@@ -773,7 +804,7 @@ local function ExecuteTransferMove(item, dest, takenSlots)
         ClearCursor()
         return false, "Target slot rejected item"
     end
-    takenSlots[toKey] = true
+    takenSlots[toKey] = { bag = toBag, slot = toSlot, at = GetTime() }
     return true, nil
 end
 
