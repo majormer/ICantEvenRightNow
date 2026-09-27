@@ -312,3 +312,24 @@ T.test("troll prices: anything at 25,000g or more is unconfirmed", function()
     local P = g:P()
     T.ok(P.GetAuctionPrice(scanned(g, 8971)).unconfirmed)
 end)
+
+T.test("auction candidates in the Warband bank are counted there and can be reviewed", function()
+    local g = game(function(w)
+        w:put(12, 1, I.VALUABLE_ORE, 20)
+    end, withAuctionator({ [I.VALUABLE_ORE] = 90000 }, { [I.VALUABLE_ORE] = 0 }))
+    local P = g:P()
+    P.SetCharacterRole(P.currentCharacterKey, "main")
+    g:openBank()
+    g:advance(9)
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.contains(P.CardSummary(card), "1 in the Warband bank")
+    g:slash("")
+    P.OpenTask("Auction Candidates")
+    local found = false
+    for _, plan in ipairs(g:UI().transferVisible or {}) do
+        if plan.item.itemID == I.VALUABLE_ORE then found = true end
+    end
+    T.ok(found, "the Warband bank's candidate is in the review list")
+    T.eq(g:UI().transferSource, P.STORAGE_WARBAND_BANK)
+end)

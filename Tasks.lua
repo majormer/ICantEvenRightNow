@@ -90,7 +90,9 @@ local function GetAllTasks()
     end
     for _, task in ipairs(EXTRA_TASKS) do
         if not task.isAvailable or task.isAvailable() then
-            table.insert(tasks, { name = task.name, kind = "extra", preset = task.preset,
+            -- presetFor: a task can pick its route now (e.g. which bank holds its items).
+            table.insert(tasks, { name = task.name, kind = "extra",
+                preset = task.presetFor and task.presetFor() or task.preset,
                 description = task.description, predicate = task.predicate, count = task.count, open = task.open,
                 secondary = task.secondary, valueMode = task.valueMode })
         end

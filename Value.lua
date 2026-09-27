@@ -752,23 +752,45 @@ function P.RegisterValueTasks()
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
         predicate = function(item) return P.IsAuctionCandidate(item) end,
+        -- Review the bank that holds the most candidates (in game all 21 were
+        -- counted while the review only covered the character bank: the
+        -- Warband bank's axe could never be pulled).
+        presetFor = function()
+            local inBank, inWarband = 0, 0
+            for _, item in ipairs(P.AuctionCandidateItems()) do
+                if item.scope ~= P.BAG_SCOPE then
+                    if P.IsWarbandStorage(item.storageKind) then inWarband = inWarband + 1 else inBank = inBank + 1 end
+                end
+            end
+            return { name = "Auction Candidates",
+                source = inWarband > inBank and P.STORAGE_WARBAND_BANK or P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+                expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                hideBlocked = true, sort = "Vendor Value" }
+        end,
         valueMode = "auction",
         isAvailable = function() return P.HasPriceSource() end,
         -- Counts candidates everywhere this character can post from: bags
         -- are ready to post; bank items need withdrawing first (the review list).
         count = function()
-            local inBags, inBank, value, unconfirmed = 0, 0, 0, 0
+            local inBags, inBank, inWarband, value, unconfirmed = 0, 0, 0, 0, 0
             for _, item in ipairs(P.AuctionCandidateItems()) do
-                if item.scope == P.BAG_SCOPE then inBags = inBags + 1 else inBank = inBank + 1 end
+                if item.scope == P.BAG_SCOPE then
+                    inBags = inBags + 1
+                elseif P.IsWarbandStorage(item.storageKind) then
+                    inWarband = inWarband + 1
+                else
+                    inBank = inBank + 1
+                end
                 value = value + (P.GetItemValue(item) or 0)
                 local price = P.GetAuctionPrice(item)
                 if price and price.unconfirmed then unconfirmed = unconfirmed + 1 end
             end
-            local total = inBags + inBank
+            local total = inBags + inBank + inWarband
             if total == 0 then return 0, nil, 0, "Nothing worth auctioning right now" end
             local parts = {}
             if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
             if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
+            if inWarband > 0 then parts[#parts + 1] = inWarband .. " in the Warband bank" end
             return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction"
                 .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")"
         end,
