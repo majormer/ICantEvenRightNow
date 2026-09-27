@@ -33,6 +33,7 @@ Tasks.lua
 Triage.lua
 UI.lua
 HomeUI.lua
+TriageUI.lua
 Value.lua
 Onboarding.lua
 Integrations.lua

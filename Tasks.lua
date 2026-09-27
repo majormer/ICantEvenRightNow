@@ -93,6 +93,14 @@ local TASK_EXTRAS = {
             return P.ExplainScanned(item).disposition == "keep"
         end,
     },
+    ["Move Materials to Warband"] = {
+        description = "Materials your crafters use, from the character bank into the Warband bank where they can reach them.",
+        predicate = function(item)
+            if item.classID ~= 7 or not IsShareable(item) then return false end
+            if not P.ExplainScanned then return true end
+            return P.ExplainScanned(item).disposition == "keep"
+        end,
+    },
     ["Consolidate Warbound Gear"] = {
         description = "Warbound gear from the character bank into the Warband bank.",
         -- Gear only (in game it listed Warbound lumber and tokens; Deposit

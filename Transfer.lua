@@ -394,6 +394,10 @@ local function GetTransferBlockReason(item, source, dest)
         if not channels.auction then return channels.why.auction end
         local price, why = P.ListingPrice(item)
         if not price then return why end
+    elseif dest == P.STORAGE_DESTROY then
+        if item.scope ~= BAG_SCOPE then return "Only items in your bags can be destroyed" end
+        local channels = P.ItemChannels(item)
+        if not channels.destroy then return channels.why.destroy end
     elseif P.IsWarbandStorage(dest) then
         local channels = P.ItemChannels(item)
         if not channels.warbandBank then return channels.why.warbandBank end
@@ -417,7 +421,7 @@ local function GetTransferBlockReason(item, source, dest)
         end
         local route, why = P.RouteToWarbandTab(item)
         if not route then return why end
-    elseif dest ~= "Bags" and dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and item.scope ~= BAG_SCOPE then
+    elseif dest ~= "Bags" and dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and dest ~= P.STORAGE_DESTROY and item.scope ~= BAG_SCOPE then
         for _, bagID in ipairs(GetStorageBagIDs(dest)) do
             if bagID == item.bagID then
                 return "Already in " .. GetStorageDisplayName(dest)
@@ -429,7 +433,7 @@ local function GetTransferBlockReason(item, source, dest)
         if not HasRoomIn(NORMAL_BAG_IDS, item) then
             return "No empty bag slots"
         end
-    elseif dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE then
+    elseif dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and dest ~= P.STORAGE_DESTROY then
         local bagIDs, route = GetTargetBagIDs(item, dest)
         if not HasRoomIn(bagIDs, item) then
             if route and route.assigned and #route.fallbackBagIDs > 0 and not UI.warbandFallback
@@ -968,6 +972,20 @@ local function ExecuteTransferMove(item, dest, takenSlots)
         return PostAuction(item)
     end
 
+    -- Destroy: pick up, confirm the cursor holds it, delete. DeleteCursorItem
+    -- needs a hardware event and takes one item per click (verified
+    -- 2026-09-27); the game's own DELETE popup covers uncommon and better.
+    if dest == P.STORAGE_DESTROY then
+        if not (CContainer.PickupContainerItem and DeleteCursorItem) then return false, "Destroy API unavailable" end
+        CContainer.PickupContainerItem(item.bagID, item.slot)
+        if GetCursorInfo() ~= "item" then return false, "Could not pick up item" end
+        local ok, err = pcall(DeleteCursorItem)
+        if not ok then ClearCursor() return false, "The game refused: " .. tostring(err) end
+        P.Log("transfer", "destroy %s x%s (%s %s:%s)", tostring(item.name), tostring(item.count or 1),
+            tostring(item.itemID), tostring(item.bagID), tostring(item.slot))
+        return true, nil
+    end
+
     if not CContainer.PickupContainerItem then
         return false, "Container pickup API unavailable"
     end
@@ -1009,7 +1027,7 @@ local function UndoStack()
 end
 
 local function RecordUndo(source, dest, movedItems)
-    if dest == "Vendor" or dest == P.STORAGE_AUCTION_HOUSE or #movedItems == 0 then return end
+    if dest == "Vendor" or dest == P.STORAGE_AUCTION_HOUSE or dest == P.STORAGE_DESTROY or #movedItems == 0 then return end
     local counts, order = {}, {}
     for _, item in ipairs(movedItems) do
         if not counts[item.itemID] then table.insert(order, item.itemID) end
@@ -1048,13 +1066,15 @@ function Core.ExecuteTransferOne(plan)
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
         UI.inventoryStatus = dest == "Vendor" and "Selling 1 item..."
-            or dest == P.STORAGE_AUCTION_HOUSE and "Listed 1 item" or "Moved 1 item"
+            or dest == P.STORAGE_AUCTION_HOUSE and "Listed 1 item" or dest == P.STORAGE_DESTROY and "Destroyed 1 item" or "Moved 1 item"
         Core.RefreshUI()
         if dest == "Vendor" then
             WatchSales({ item })
         elseif dest == P.STORAGE_AUCTION_HOUSE then
             listingWatch = listingWatch or { items = {}, errors = {} }
             WatchListings({ item })
+        elseif dest == P.STORAGE_DESTROY then
+            Print("Destroyed: " .. ItemLabel(item) .. (((item.quality or 0) >= 2) and " (confirm the game's prompt if it appears)." or "."))
         else
             Print("Transferred: " .. ItemLabel(item))
         end
@@ -1077,6 +1097,9 @@ P.VENDOR_BATCH_SIZE = VENDOR_BATCH_SIZE
 -- The game accepts one auction per click; the rest stay selected.
 local LISTING_BATCH_SIZE = 1
 P.LISTING_BATCH_SIZE = LISTING_BATCH_SIZE
+-- And one destroyed item per click.
+local DESTROY_BATCH_SIZE = 1
+P.DESTROY_BATCH_SIZE = DESTROY_BATCH_SIZE
 
 -- Grey (junk) items don't need buyback protection, so they don't count toward
 -- the 12 and are sold first; the buyback then still holds this click's
@@ -1121,6 +1144,7 @@ function Core.ExecuteTransferSelected()
     for _, plan in ipairs(plans) do
         local capped = dest == "Vendor" and not IsJunk(plan.item) and protectedSold >= VENDOR_BATCH_SIZE
             or dest == P.STORAGE_AUCTION_HOUSE and listed >= LISTING_BATCH_SIZE
+            or dest == P.STORAGE_DESTROY and listed >= DESTROY_BATCH_SIZE
         if UI.transferSelected[plan.key] and capped then
             remaining = remaining + 1
         elseif UI.transferSelected[plan.key] then
@@ -1165,7 +1189,8 @@ function Core.ExecuteTransferSelected()
         HoldReservedSlotsUntilSettled()
     end
     if moved > 0 or blocked > 0 then
-        local action = dest == "Vendor" and "sent to the vendor" or dest == P.STORAGE_AUCTION_HOUSE and "posted (checking the auction house's answer)" or "moved"
+        local action = dest == "Vendor" and "sent to the vendor" or dest == P.STORAGE_AUCTION_HOUSE and "posted (checking the auction house's answer)"
+        or dest == P.STORAGE_DESTROY and "destroyed" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
             .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
@@ -1179,11 +1204,15 @@ function Core.ExecuteTransferSelected()
     elseif dest == P.STORAGE_AUCTION_HOUSE then
         WatchListings(movedItems)
         if blocked > 0 then Print(blocked .. " blocked.") end
+    elseif dest == P.STORAGE_DESTROY then
+        Print("Destroyed " .. moved .. (blocked > 0 and (", " .. blocked .. " blocked") or "") .. ".")
     else
         Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
     end
     if remaining > 0 and dest == P.STORAGE_AUCTION_HOUSE then
         Print(remaining .. " more selected. Click List again for the next one (the game allows one auction per click).")
+    elseif remaining > 0 and dest == P.STORAGE_DESTROY then
+        Print(remaining .. " more selected. Click Destroy again for the next one (the game allows one per click).")
     elseif remaining > 0 then
         Print(remaining .. " more selected. Click Sell again for the next batch; the vendor can buy back your last "
             .. VENDOR_BATCH_SIZE .. " sales.")

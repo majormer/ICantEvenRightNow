@@ -545,6 +545,8 @@ local function BuildTransferRowDetail(plan, source, dest)
         local price, info = P.ListingPrice(item)
         status = "Ready to list at " .. FormatMoney(price or 0) .. ((item.count or 1) > 1 and " each" or "")
             .. (info and (" (" .. P.FormatPriceSource(info) .. ")") or "")
+    elseif dest == P.STORAGE_DESTROY then
+        status = "Ready to destroy (you decided)" .. (((item.quality or 0) >= 2) and "; the game asks you to confirm" or "")
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
     elseif dest == P.STORAGE_WARBAND_ROUTED then
@@ -1421,10 +1423,29 @@ local function BuildSettingsTab(parent)
         { "Auction mail reminder", "Auction returns and sale gold wait in the mail, which is deleted",
           "after 30 days. Warns " .. (P.MAIL_WARN_DAYS or 10) .. " days ahead for any character",
           "marked \"Auctions\" on the Characters tab (set automatically at an auction house)." }, tips)
+    local askValuable = AddCheck("triageAskBeforeSellingValuable", "Justify every item: ask before selling what's worth more at auction",
+        { "Justify every item", "On the triage screen, Sell asks once when the auction house",
+          "would pay much more." }, mailReminder)
+    parent.triageDefer = CreateFrame("EditBox", nil, parent, "InputBoxTemplate")
+    parent.triageDefer:SetSize(40, 20)
+    parent.triageDefer:SetPoint("TOPLEFT", askValuable, "BOTTOMLEFT", 6, -6)
+    parent.triageDefer:SetAutoFocus(false)
+    parent.triageDefer:SetNumeric(true)
+    parent.triageDefer:SetScript("OnEnterPressed", function(self)
+        local days = tonumber(self:GetText())
+        if days and days > 0 then ns.DB.ui.triageDeferDays = days end
+        self:ClearFocus()
+        Core.RefreshUI()
+    end)
+    parent.triageDefer:SetScript("OnEscapePressed", function(self) self:ClearFocus() Core.RefreshSettings() end)
+    parent.triageDeferLabel = CreateLabel(parent, "days: Defer asks again after this many days (Enter to save)", "GameFontHighlightSmall")
+    parent.triageDeferLabel:SetPoint("LEFT", parent.triageDefer, "RIGHT", 6, 0)
     local logging = AddCheck("enhancedLogging", "Enhanced logging (for troubleshooting)",
         { "Enhanced logging", "Records scans, context changes, tasks, moves, sales, and errors",
           "into your saved data (last " .. (P.LOG_MAX_LINES or 2000) .. " lines).",
           "View with /icanteven log; clear with /icanteven log clear." }, mailReminder)
+    logging:ClearAllPoints()
+    logging:SetPoint("TOPLEFT", parent.triageDefer, "BOTTOMLEFT", -6, -6)
     logging:SetScript("OnClick", function(self)
         P.SetLogging(self:GetChecked())
         Core.RefreshUI()
@@ -2054,7 +2075,7 @@ function Core.RefreshTransferUncached()
 
     SetDropdownText(panel.sourceDropdown, GetStorageDisplayName(source))
     SetDropdownText(panel.destDropdown, GetStorageDisplayName(dest))
-    panel.swapRoute:SetEnabled(dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and not ns.DB.context.inCombat)
+    panel.swapRoute:SetEnabled(dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and dest ~= P.STORAGE_DESTROY and not ns.DB.context.inCombat)
 
     local taskName = UI.activeQuickWorkflowName or UI.activeSavedFilterName
     panel.taskTitle:SetText(taskName and (taskName .. (UI.activeTaskModified and " (modified)" or "")) or "Custom transfer")
@@ -2297,6 +2318,8 @@ function Core.RefreshTransferUncached()
     elseif dest == P.STORAGE_AUCTION_HOUSE then
         -- One auction per click (the game's rule); the rest stay selected.
         actionLabel = selectedCount > 1 and ("List 1 of " .. selectedCount) or "List 1"
+    elseif dest == P.STORAGE_DESTROY then
+        actionLabel = selectedCount > 1 and ("Destroy 1 of " .. selectedCount) or "Destroy 1"
     elseif dest == "Bags" then
         actionLabel = "Withdraw " .. selectedCount
     elseif source == "Bags" then
@@ -2386,6 +2409,8 @@ function Core.RefreshTransferUncached()
                 actionText = "Sell"
             elseif dest == P.STORAGE_AUCTION_HOUSE then
                 actionText = "List"
+            elseif dest == P.STORAGE_DESTROY then
+                actionText = "Destroy"
             elseif dest == "Bags" then
                 actionText = "Withdraw"
             elseif source == "Bags" then
@@ -2398,7 +2423,8 @@ function Core.RefreshTransferUncached()
             row.action:SetScript("OnClick", function()
                 -- Acts on every stack in the row; vendor sales stop at one buyback batch.
                 local limit = (dest == "Vendor" and not P.IsVendorJunk(item)) and (P.VENDOR_BATCH_SIZE or 12)
-                    or dest == P.STORAGE_AUCTION_HOUSE and (P.LISTING_BATCH_SIZE or 1) or #members
+                    or dest == P.STORAGE_AUCTION_HOUSE and (P.LISTING_BATCH_SIZE or 1)
+                    or dest == P.STORAGE_DESTROY and (P.DESTROY_BATCH_SIZE or 1) or #members
                 for index = 1, math.min(limit, #members) do
                     Core.ExecuteTransferOne(members[index])
                 end
@@ -2569,10 +2595,13 @@ function Core.RefreshSettings()
     for _, check in ipairs(panel.workflowChecks or {}) do
         local value = ns.DB.ui[check.settingKey]
         if check.settingKey == "groupIdenticalRows" or check.settingKey == "whereTooltip"
-            or check.settingKey == "tipsEnabled" then
+            or check.settingKey == "tipsEnabled" or check.settingKey == "triageAskBeforeSellingValuable" then
             value = value ~= false
         end
         check:SetChecked(value and true or false)
+    end
+    if panel.triageDefer and not panel.triageDefer:HasFocus() then
+        panel.triageDefer:SetText(tostring(P.TriageDeferDays and P.TriageDeferDays() or 30))
     end
     if panel.noticeMode then
         local labels = { notice = "Show a small notice", open = "Open the console", off = "Do nothing" }

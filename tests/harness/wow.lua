@@ -917,6 +917,15 @@ function World:_buildEnv()
                 world.collections.mounts[mountID] and true or false, mountID
         end,
     }
+    G.DeleteCursorItem = function()
+        local cur = world.cursor
+        if not cur then return end
+        world.destroyed = world.destroyed or {}
+        table.insert(world.destroyed, { itemID = cur.stack.itemID, count = cur.stack.count })
+        local container = world.containers[cur.fromBag]
+        if container and container.slots[cur.fromSlot] == cur.stack then container.slots[cur.fromSlot] = nil end
+        world.cursor = nil
+    end
     G.C_PetJournal = {
         GetPetInfoByItemID = function(itemID)
             local def = world.items[itemID]

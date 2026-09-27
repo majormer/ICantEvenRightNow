@@ -1084,6 +1084,14 @@ function P.LossText(item, explanation)
 end
 
 -- Items the "can go" tasks act on: free to go and sellable at a vendor.
+-- Decided to destroy: pulled from a bank like anything that can go, then
+-- destroyed from the bags one click at a time.
+local function DecidedToDestroy(item)
+    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    return decision ~= nil and decision.choice == "destroy"
+end
+P.DecidedToDestroy = DecidedToDestroy
+
 local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
     if P.MerchantRefused and P.MerchantRefused(item.itemID) then return false end
@@ -1105,7 +1113,7 @@ function P.RegisterReasonTasks()
         preset = { name = "Pull Items That Can Go", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
-        predicate = CanGoAndSellable,
+        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) end,
     })
     -- The same for the Warband bank: in game it held 32 "Can go" stacks while
     -- the character-bank task (which doesn't read the Warband bank) showed 3.
@@ -1115,7 +1123,15 @@ function P.RegisterReasonTasks()
         preset = { name = "Pull Warband Items That Can Go", source = P.STORAGE_WARBAND_BANK, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
-        predicate = CanGoAndSellable,
+        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) end,
+    })
+    P.RegisterTask({
+        name = "Destroy Decided Items",
+        description = "Items you decided to destroy, from your bags, one click each. The game asks you to confirm uncommon or better.",
+        preset = { name = "Destroy Decided Items", source = "Bags", dest = P.STORAGE_DESTROY,
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = true, sort = "Name" },
+        predicate = DecidedToDestroy,
     })
     P.RegisterTask({
         name = "Sell Items That Can Go",
