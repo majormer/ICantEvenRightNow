@@ -186,7 +186,13 @@ local function EvaluateTask(task)
             local item = plan.item
             local stackValue = (item.sellPrice or 0) * (item.count or 1)
             if task.valueMode == "auction" and P.GetItemValue then stackValue = (P.GetItemValue(item)) end
-            if plan.movable then
+            -- Selling something worth far more at auction isn't "ready" (in
+            -- game Sell Old Consumables counted a 25s item worth ~24g at auction).
+            local worthMore = plan.movable and plan.dest == "Vendor" and P.IsValueFlagged
+                and P.IsValueFlagged(item, "Vendor")
+            if worthMore then
+                card.worthMore = (card.worthMore or 0) + 1
+            elseif plan.movable then
                 card.ready = card.ready + 1
                 card.value = card.value + stackValue
             elseif CONTEXT_BLOCKS[plan.blocked or ""] then
@@ -295,13 +301,17 @@ function P.CardSummary(card)
     local money = card.value > 0
         and (" (" .. (card.valueMode == "auction" and "~" or "") .. P.FormatMoney(card.value)
             .. (card.valueMode == "auction" and " at auction" or "") .. ")") or ""
+    local worthMore = (card.worthMore or 0) > 0
+        and (card.worthMore .. " worth more at auction") or nil
     if card.ready > 0 then
         local extra = card.waiting > 0 and (", " .. card.waiting .. " more elsewhere") or ""
-        return card.ready .. " ready" .. money .. extra
+        return card.ready .. " ready" .. money .. extra .. (worthMore and (", " .. worthMore) or "")
     elseif card.waiting > 0 then
         return card.waiting .. " waiting: " .. (card.needs or "change location")
     elseif (card.blocked or 0) > 0 then
         return card.blocked .. " blocked: " .. tostring(card.blockedReason)
+    elseif worthMore then
+        return worthMore .. ": see Auction Candidates"
     end
     return "Nothing to do right now"
 end

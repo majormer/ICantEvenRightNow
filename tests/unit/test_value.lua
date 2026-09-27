@@ -159,3 +159,19 @@ T.test("tooltip value lines: auction, disenchant with enchanter, account count",
     T.contains(lines, "Disenchant: ~40g 0s (Ench, Enchanter)")
     T.contains(lines, "On your account: 2")
 end)
+
+T.test("sell cards don't count items worth far more at auction as ready", function()
+    local g = game(function(w)
+        w:put(0, 1, I.OLD_POTION, 5)
+        w:put(0, 2, I.OLD_POTION, 1)
+    end, withAuctionator({ [I.OLD_POTION] = 250000 }, { [I.OLD_POTION] = 1 }))
+    local P = g:P()
+    P.SetCharacterRole(P.currentCharacterKey, "main")
+    g:openVendor()
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Sell Old Consumables" then card = c end end
+    T.ok(card, "card exists")
+    T.eq(card.ready, 0, "not ready to sell")
+    T.eq(card.worthMore, 2)
+    T.contains(P.CardSummary(card), "worth more at auction")
+end)
