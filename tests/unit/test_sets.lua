@@ -133,3 +133,16 @@ T.test("sets: Home asks about a replaced class set; Keep for now silences it unt
     T.ok(notice(), "asked again after the upgrade")
     T.contains(explain(g, 9001).evidence, "You kept it for now at 308; you now wear 315")
 end)
+
+T.test("upgradable gear whose track can't reach what you wear can go", function()
+    local g = game(function(w)
+        plate(w, 9303, { name = "Veteran Casque", equipLoc = "INVTYPE_WRIST", itemLevel = 279,
+            tooltipLines = { "Upgrade Level: Veteran 1/6" } })
+        w:put(0, 5, 9303, 1, { bound = true })
+    end)
+    local e = explain(g, 9303)
+    T.eq(e.primary.id, "outgrown_no_upgrade")
+    T.contains(e.evidence, "even fully upgraded (Veteran 1/6) it would reach about 299")
+    -- Hero 2/6 at 300 could reach 316, past the 305 worn: still your call.
+    T.eq(explain(g, 9302).primary.id, "outgrown_gear")
+end)

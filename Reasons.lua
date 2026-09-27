@@ -466,6 +466,27 @@ local function HeldSetSlots(char, setID)
     return count
 end
 
+-- The highest item level an upgradable item could reach. Midnight tracks
+-- step about +3 per rank (Method: Champion 292-308, Hero 305-321, Myth
+-- 318-334); +4 per remaining rank errs toward "it could still catch up".
+local UPGRADE_STEP = 4
+local function UpgradeCeiling(item, facts)
+    if not (item.itemLevel and facts.upgradeCur and facts.upgradeMax) then return nil end
+    return item.itemLevel + (facts.upgradeMax - facts.upgradeCur) * UPGRADE_STEP
+end
+
+-- Could upgrading the item make it at least as good as what any wearer has?
+-- (Player's rule: a track that can't get past what you wear doesn't count.)
+local function CanOutgrowWearers(item, facts, users)
+    local ceiling = UpgradeCeiling(item, facts)
+    if not ceiling then return true end
+    for _, char in ipairs(users) do
+        local worn = EquippedLevelFor(char, item)
+        if not worn or ceiling > worn then return true end
+    end
+    return false
+end
+
 -- Set rules for gear someone can wear but that isn't an upgrade. Returns a
 -- reason id and evidence, or nil when sets don't decide it.
 local function SetVerdict(item, setID, facts, users)
@@ -476,7 +497,7 @@ local function SetVerdict(item, setID, facts, users)
         -- Already active: this piece adds nothing new at the lowest bonus.
         if sets[setID] and sets[setID].active and worn >= min then min = worn + 1 end
         -- A class set replaced by another class set the character wears.
-        if facts.classes and not facts.upgradable then
+        if facts.classes and (not facts.upgradable or not CanOutgrowWearers(item, facts, { char })) then
             for otherID, other in pairs(sets) do
                 if otherID ~= setID and other.classSet and (other.active or other.count >= (other.min or 2)) then
                     return "set_replaced", (char.name or "?") .. " wears " .. other.count .. " pieces of "
@@ -593,14 +614,17 @@ local function ExplainItem(item, ctx)
                     -- spec, role or content fit can matter more (player's point).
                     add("situational_gear", "Wearable by " .. Names(users, "name")
                         .. "; trinkets and weapons can matter for a spec, role, or dungeon vs. raid")
-                elseif facts.state == "ready" and not facts.upgradable
-                    and not SITUATIONAL_SLOTS[item.equipLoc or ""] then
+                elseif facts.state == "ready" and not SITUATIONAL_SLOTS[item.equipLoc or ""]
+                    and (not facts.upgradable or not CanOutgrowWearers(item, facts, users)) then
                     -- (Trinkets and weapons stay the player's call at any level.)
                     -- Worse than what everyone wears and it can't get better
                     -- (no upgrade track): it can go (player's rule).
+                    local ceiling = facts.upgradable and UpgradeCeiling(item, facts)
                     add("outgrown_no_upgrade", (keptForNow or "") .. "Wearable by " .. Names(users, "name")
-                        .. ", but below what they wear" .. (facts.upgradeTrack and " and fully upgraded" or "")
-                        .. ", and it can't be upgraded")
+                        .. ", but below what they wear"
+                        .. (ceiling and ("; even fully upgraded (" .. facts.upgradeTrack .. " " .. facts.upgradeCur .. "/"
+                            .. facts.upgradeMax .. ") it would reach about " .. ceiling)
+                            or ", and it can't be upgraded"))
                 else
                     -- Wearable but worse, and it can still be upgraded (or its
                     -- tooltip isn't in yet): the player decides.
