@@ -60,6 +60,8 @@ local REASONS = {
     outgrown_no_upgrade  = { disposition = "free",   label = "Below what you wear, and it can't be upgraded" },
     -- Outranks the other free reasons: selling isn't an option, so say what is.
     vendor_refused       = { disposition = "free",   label = "No vendor buys it: destroy it or keep it", rank = 1.9 },
+    -- Same, when it has an auction price (in game the refused soup sold for ~19s there).
+    vendor_refused_auction = { disposition = "free", label = "No vendor buys it: sell it at the auction house or keep it", rank = 1.9 },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -573,8 +575,14 @@ local function ExplainItem(item, ctx)
 
     local refused = P.MerchantRefused and P.MerchantRefused(item.itemID)
     if refused then
-        add("vendor_refused", "A vendor refused it" .. (refused.at and date and (" on " .. date("%Y-%m-%d", refused.at)) or "")
-            .. ". To destroy it: drag it out of your bag, drop it on the game world, and confirm.")
+        local when = "A vendor refused it" .. (refused.at and date and (" on " .. date("%Y-%m-%d", refused.at)) or "") .. ". "
+        local price = P.CanBeAuctioned and P.CanBeAuctioned(item) and P.GetAuctionPrice and P.GetAuctionPrice(item)
+        if price and not price.unconfirmed then
+            add("vendor_refused_auction", when .. "It sells for about " .. P.FormatMoney(price.price)
+                .. " at the auction house (" .. P.FormatPriceSource(price) .. ").")
+        else
+            add("vendor_refused", when .. "To destroy it: drag it out of your bag, drop it on the game world, and confirm.")
+        end
     end
 
     local detailsState = IsGear(item) and AnyRolesAssigned() and P.GearDetailsState(item) or nil
@@ -882,12 +890,16 @@ function P.LossText(item, explanation)
     if ids.collectible_learned then parts[#parts + 1] = "It stays in your collection." end
     if ids.quest_done then parts[#parts + 1] = "The quest is already done." end
     local value = (item.sellPrice or 0) * (item.count or 1)
+    -- A vendor price no vendor pays isn't what letting it go costs.
+    if ids.vendor_refused or ids.vendor_refused_auction then value = 0 end
     if P.GetItemValue then
         local best, source = P.GetItemValue(item)
         if best and best > value and source ~= "vendor" then
             parts[#parts + 1] = "Worth about " .. P.FormatMoney(best) .. " (" .. source .. ")."
         elseif value > 0 then
             parts[#parts + 1] = "Worth " .. P.FormatMoney(value) .. " at a vendor."
+        elseif ids.vendor_refused then
+            parts[#parts + 1] = "Vendors won't buy it."
         end
     elseif value > 0 then
         parts[#parts + 1] = "Worth " .. P.FormatMoney(value) .. " at a vendor."

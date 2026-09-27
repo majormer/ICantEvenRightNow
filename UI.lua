@@ -935,6 +935,7 @@ local function CreateRowRuleMenu(parent, width, options)
     menu:Hide()
 
     menu.buttons = {}
+    menu.options = options
     for index, option in ipairs(options) do
         local button = CreateButton(menu, option.text, (width or 100) - 8, 20)
         button:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 22)
@@ -953,6 +954,20 @@ end
 local function ToggleRowRuleMenu(row, item)
     if not row.ruleMenu then return end
     row.ruleMenu.item = item
+    -- Options that don't apply to this item are left out (in game "Keep for
+    -- now (ask when I upgrade)" was offered for a crafting reagent).
+    local shown = 0
+    for index, button in ipairs(row.ruleMenu.buttons) do
+        local option = row.ruleMenu.options[index]
+        local applies = not option.gearOnly or (P.IsGearItem and P.IsGearItem(item))
+        button:SetShown(applies)
+        if applies then
+            shown = shown + 1
+            button:ClearAllPoints()
+            button:SetPoint("TOPLEFT", row.ruleMenu, "TOPLEFT", 4, -4 - (shown - 1) * 22)
+        end
+    end
+    row.ruleMenu:SetHeight(shown * 22 + 8)
     row.ruleMenu:ClearAllPoints()
     row.ruleMenu:SetPoint("TOPRIGHT", row.rule, "BOTTOMRIGHT", 0, -2)
     row.ruleMenu:SetShown(not row.ruleMenu:IsShown())
@@ -1878,7 +1893,7 @@ local function BuildTransferTab(parent)
             { text = "Keep for an alt", ruleType = "keep:alt" },
             { text = "Keep for an event", ruleType = "keep:event" },
             { text = "Investment (90 days)", ruleType = "keep:investment" },
-            { text = "Keep for now (ask when I upgrade)", ruleType = "keep:fornow" },
+            { text = "Keep for now (ask when I upgrade)", ruleType = "keep:fornow", gearOnly = true },
             { text = "Send to an alt...", ruleType = "handoff" },
         })
         parent.rows[i] = row

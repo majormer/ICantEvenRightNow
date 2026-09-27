@@ -95,3 +95,31 @@ T.test("'Pull Items That Can Go' brings free bank items to the bags", function()
     T.eq(g.world:findItem(I.JUNK)[1].bagID < 6, true, "junk now in bags")
     T.eq(g.world:findItem(I.NEW_FLASK)[1].bagID, 6, "flask stays in the bank")
 end)
+
+T.test("the rule menu offers 'Keep for now' only for gear", function()
+    local g = game(function(w)
+        w:put(0, 1, I.JUNK, 3)
+        w:put(0, 2, I.BOUND_HELM, 1, { bound = true })
+    end)
+    g:openVendor()
+    g:slash("transfer")
+    local UI = g:UI()
+    UI.transferSource, UI.transferDest = "Bags", "Vendor"
+    g:Core().RefreshUI()
+    local function fornowShownFor(itemID)
+        for _, row in ipairs(UI.frame.panels.Transfer.rows) do
+            if row:IsShown() and row.plan and row.plan.item.itemID == itemID then
+                g:click(row.rule)
+                for index, option in ipairs(row.ruleMenu.options) do
+                    if option.ruleType == "keep:fornow" then
+                        local shown = row.ruleMenu.buttons[index]:IsShown()
+                        row.ruleMenu:Hide()
+                        return shown
+                    end
+                end
+            end
+        end
+    end
+    T.eq(fornowShownFor(I.JUNK), false, "not for junk")
+    T.eq(fornowShownFor(I.BOUND_HELM), true, "offered for gear")
+end)

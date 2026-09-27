@@ -234,3 +234,24 @@ T.test("custom transfer starts clean; 'show all' lifts a task's hidden rule", fu
     g:click(panel.emptyAction)
     T.ok(listed(8804), "the ring is listed after 'Show all items'")
 end)
+
+T.test("a refused item with an auction price suggests the auction house; letting it go isn't a vendor price", function()
+    local g = refusingGame()
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    sellAll(g)
+    g.world:advance(3)
+    local P = g:P()
+    local soup
+    for _, item in ipairs(P.GetScanList("bags")) do if item.itemID == 8801 then soup = item end end
+    local explanation = P.ExplainScanned(soup)
+    T.eq(explanation.primary.id, "vendor_refused")
+    T.notContains(P.LossText(soup, explanation) or "", "at a vendor")
+    T.contains(P.LossText(soup, explanation) or "", "Vendors won't buy it")
+    -- With an auction price it points to the auction house instead.
+    g:db().prices = { ["c:8801"] = { price = 1900, at = g.env.time() } }
+    explanation = P.ExplainScanned(soup)
+    T.eq(explanation.primary.id, "vendor_refused_auction")
+    T.contains(explanation.label, "sell it at the auction house")
+    T.contains(explanation.evidence, "about")
+end)
