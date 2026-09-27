@@ -196,7 +196,7 @@ function World:put(bagID, slot, itemID, count, opts)
     container.slots[slot] = {
         itemID = itemID, count = count or 1, locked = opts.locked or false,
         bound = opts.bound or false, wue = opts.warboundUntilEquipped or false, apiHidesWue = opts.apiHidesWue,
-        tooltipBinding = opts.tooltipBinding,
+        tooltipBinding = opts.tooltipBinding, tooltipLoading = opts.tooltipLoading,
         questActive = opts.questActive,
     }
     return container.slots[slot]
@@ -458,6 +458,8 @@ function World:_buildEnv()
             local c = world.containers[bagID]
             local stack = c and c.slots[slot]
             if not stack then return nil end
+            -- stack.tooltipLoading: the client dropped the item's data (seen in game).
+            if stack.tooltipLoading then return { lines = { { leftText = "Retrieving item information" } } } end
             local lines = { { leftText = (world.items[stack.itemID] or {}).name or "?" } }
             if stack.wue then table.insert(lines, { leftText = "Warbound until equipped" }) end
             -- stack.tooltipBinding: the binding line the tooltip shows ("Warbound", "Soulbound").

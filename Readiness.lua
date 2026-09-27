@@ -30,6 +30,7 @@ local function PendingReason(item)
     if state == "loading" then return "item details" end
     if state ~= "ready" then return nil end
     if item.classID == nil then return "the next scan" end
+    if item.bindingPending then return "binding" end
     if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
         and P.GearDetailsState and P.GearDetailsState(item) == "pending" then
         return "stats"

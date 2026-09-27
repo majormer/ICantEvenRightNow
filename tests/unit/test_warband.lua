@@ -388,3 +388,33 @@ T.test("bound items: the tooltip's binding line wins over a flickering bank chec
     T.eq(byID[8902].bindingScope, "Soulbound")
     T.ok(not byID[8902].accountBankAllowed)
 end)
+
+T.test("bound items: a tooltip that's still loading reuses the known binding, or waits", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:defineItem(8901, { name = "Loot Gadget", classID = 0, quality = 3, sellPrice = 100, expansionID = 10,
+            bindType = 1, accountBankAllowed = false })
+        w:put(0, 1, 8901, 1, { bound = true, tooltipBinding = "Warbound" })
+        w:defineItem(8903, { name = "Unseen Gadget", classID = 0, quality = 3, sellPrice = 100, expansionID = 10,
+            bindType = 1, accountBankAllowed = false })
+        w:put(0, 2, 8903, 1, { bound = true, tooltipBinding = "Warbound", tooltipLoading = true })
+    end })
+    local function scanned()
+        g:Core().ScanInventory("bags", true)
+        local byID = {}
+        for _, it in ipairs(g:P().GetScanList("bags")) do byID[it.itemID] = it end
+        return byID
+    end
+    local byID = scanned()
+    T.eq(byID[8901].bindingScope, "Warbound")
+    T.ok(byID[8903].bindingPending, "binding not known yet: pending, not guessed")
+    T.ok((g:P().ItemDataPending(byID[8903])), "getting ready waits for it")
+    -- The client drops the first item's data: the known binding is reused.
+    g.world.containers[0].slots[1].tooltipLoading = true
+    g.world.containers[0].slots[2].tooltipLoading = false
+    byID = scanned()
+    T.eq(byID[8901].bindingScope, "Warbound", "reused while the tooltip loads")
+    T.eq(byID[8903].bindingScope, "Warbound")
+    T.ok(not byID[8903].bindingPending)
+end)

@@ -143,6 +143,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 end
             end
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
+            if bindingDetails.bindingPending then missingData = true end
             -- Quest status belongs to the character that owns the item, so it is
             -- captured now (other characters' snapshots are read later).
             local questInfo = CContainer.GetContainerItemQuestInfo
@@ -178,6 +179,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 isWarbandBound     = bindingDetails.isWarbandBound,
                 accountBankAllowed = bindingDetails.accountBankAllowed,
                 bindingScope       = bindingDetails.bindingScope,
+                bindingPending     = bindingDetails.bindingPending,
                 isQuestItem        = questInfo and questInfo.isQuestItem or false,
                 questID            = questID,
                 questActive        = questInfo and questInfo.isActive or false,

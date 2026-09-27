@@ -75,7 +75,13 @@ P.IsMythicKeystone = IsMythicKeystone
 -- Binding detection
 -- ===========================================================================
 
--- The binding line of a bag item's tooltip: "warbound", "soulbound", or nil.
+-- Confirmed bindings this session: [itemID] = "warbound" | "soulbound". The
+-- client drops item data (the tooltip then reads only "Retrieving item
+-- information"), so a binding seen once is reused until the tooltip is back.
+local knownBinding = {}
+
+-- The binding line of a bag item's tooltip: "warbound", "soulbound",
+-- "loading" (tooltip not loaded yet), or nil (no binding line).
 -- It decides Warbound vs Soulbound for bound items: in game
 -- C_Bank.IsItemAllowedInBankType flipped for the same bag item between reads
 -- (L00T RAID-R Mini showed Soulbound while its tooltip said Warbound, and
@@ -84,6 +90,10 @@ local function TooltipBinding(bagID, slot)
     if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then return nil end
     local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
     if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local first = data.lines[1] and data.lines[1].leftText
+    if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+        return "loading"
+    end
     local warbound = {
         [ITEM_ACCOUNTBOUND or "Warbound"] = true,
         [ITEM_BNETACCOUNTBOUND or "Warbound"] = true,
@@ -171,6 +181,20 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
     end
 
     local tooltipBinding = details.isBound and TooltipBinding(bagID, slot) or nil
+    local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
+    if tooltipBinding == "warbound" or tooltipBinding == "soulbound" then
+        if itemID then knownBinding[itemID] = tooltipBinding end
+    elseif tooltipBinding == "loading" then
+        tooltipBinding = itemID and knownBinding[itemID] or nil
+        if not tooltipBinding then
+            -- Not known yet: ask for the data and say so (Readiness waits,
+            -- the scan retries) instead of trusting the bank check alone.
+            details.bindingPending = true
+            if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+                pcall(C_Item.RequestLoadItemDataByID, itemID)
+            end
+        end
+    end
     if details.isBound and tooltipBinding == "warbound" then
         details.bindingScope   = "Warbound"
         details.isSoulbound    = false
