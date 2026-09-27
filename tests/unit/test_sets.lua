@@ -146,3 +146,14 @@ T.test("upgradable gear whose track can't reach what you wear can go", function(
     -- Hero 2/6 at 300 could reach 316, past the 305 worn: still your call.
     T.eq(explain(g, 9302).primary.id, "outgrown_gear")
 end)
+
+T.test("item level 1 'gear' is a possible keepsake, not outgrown gear", function()
+    local g = game(function(w)
+        w:defineItem(9401, { name = "Signet Curiosity", classID = 4, subclassID = 0, equipLoc = "INVTYPE_FINGER",
+            itemLevel = 1, requiredLevel = 0, bindType = 8, quality = 1, sellPrice = 0, expansionID = 11 })
+        w:put(0, 6, 9401, 1)
+    end)
+    local e = explain(g, 9401)
+    T.eq(e.primary.id, "possible_keepsake")
+    T.eq(e.disposition, "review")
+end)

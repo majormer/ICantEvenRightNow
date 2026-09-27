@@ -595,7 +595,15 @@ local function ExplainItem(item, ctx)
         add("details_unavailable")
     end
 
-    if IsGear(item) and not gearPending then
+    -- Item level 1 "gear" is a curiosity, not equipment (in game: Noble's
+    -- Signet Ring, a Warbound Eversong treasure with "+1 Nobility", read as
+    -- "below what you wear").
+    local curiosity = IsGear(item) and item.itemLevel and item.itemLevel <= 1
+    if curiosity then
+        add("possible_keepsake", "Item level 1: usually a treasure, quest curiosity or cosmetic, not real gear")
+    end
+
+    if IsGear(item) and not gearPending and not curiosity then
         local collected = AppearanceCollected(item)
         if collected == false then
             add("appearance_uncollected", "Equip it once to collect the appearance; then it can go")
