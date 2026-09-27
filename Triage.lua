@@ -220,18 +220,18 @@ local pasteBox
 function P.ShowDecisionPasteBox()
     if not CreateFrame then return nil end
     if not pasteBox then
-        local frame = CreateFrame("Frame", "ICantEvenDecisionPasteBox", UIParent, "BackdropTemplate")
+        local frame = CreateFrame("Frame", "ICantEvenDecisionPasteBox", UIParent)
         frame:SetSize(560, 360)
+        -- A plain dark background: BackdropTemplate drew nothing in game.
+        local bg = frame:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        if bg.SetColorTexture then bg:SetColorTexture(0.05, 0.05, 0.05, 0.95) end
         frame:SetPoint("CENTER")
         frame:SetFrameStrata("DIALOG")
         frame:SetMovable(true) frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
         frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-        if frame.SetBackdrop then
-            frame:SetBackdrop({ bgFile = "Interface\DialogFrame\UI-DialogBox-Background", edgeFile = "Interface\DialogFrame\UI-DialogBox-Border",
-                tile = true, tileSize = 32, edgeSize = 32, insets = { left = 11, right = 12, top = 12, bottom = 11 } })
-        end
         local title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
         title:SetPoint("TOP", 0, -16)
         title:SetText("Paste decisions (one per line: itemID choice [note]), then Apply")
@@ -242,9 +242,14 @@ function P.ShowDecisionPasteBox()
         edit:SetMultiLine(true)
         edit:SetFontObject(ChatFontNormal)
         edit:SetWidth(490)
+        edit:SetHeight(270)   -- a multiline box has no height until it has text; give it one so clicks land
         edit:SetAutoFocus(false)
         edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
         scroll:SetScrollChild(edit)
+        -- A click anywhere in the box focuses the edit box (then Ctrl+V pastes).
+        scroll:EnableMouse(true)
+        scroll:SetScript("OnMouseDown", function() edit:SetFocus() end)
+        frame:SetScript("OnMouseDown", function() edit:SetFocus() end)
         frame.edit = edit
         local status = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
         status:SetPoint("BOTTOMLEFT", 20, 22)
