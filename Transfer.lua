@@ -367,7 +367,7 @@ local function GetTransferBlockReason(item, source, dest)
     if ns.DB.context.inCombat then return "In combat" end
     if source == dest then return "Source and destination are the same" end
     if dest == "Vendor" and P.MerchantRefused and P.MerchantRefused(item.itemID) then
-        return "This merchant won't buy it"
+        return "Vendors won't buy this item"
     end
 
     local needsBank = NeedsBankStorage(source) or NeedsBankStorage(dest)
@@ -562,25 +562,50 @@ end
 -- The server can refuse a sale after UseContainerItem returns: in game a
 -- traveling vendor answered "The merchant doesn't want that item." (UI error
 -- 42) and the items stayed in the bags while the addon reported them sold.
--- So each sale is checked a moment later (slot emptied, gold earned), the
--- report says what really happened, and refused items are blocked for the
--- rest of the visit (another merchant may buy them).
+-- So each sale is checked a moment later (slot emptied, gold earned) and the
+-- report says what really happened. Refused items are remembered in saved
+-- data and blocked at every vendor: the refusal belongs to the item (players
+-- report the same for items like Lucky Duck at any vendor; no API tells, the
+-- item info still shows a sell price). /icanteven refused [clear] reviews them.
 -- ===========================================================================
 local SALE_CHECK_DELAY = 1.5
 local SALE_CHECK_TRIES = 4
-local refusedByMerchant = {}   -- [itemID] = reason, until the merchant closes
 local saleWatch = nil          -- { items, errors, moneyBefore, tries }
 
-function P.MerchantRefused(itemID) return itemID and refusedByMerchant[itemID] end
+local function RefusedStore()
+    ns.DB.vendorRefused = ns.DB.vendorRefused or {}
+    return ns.DB.vendorRefused
+end
+
+-- The saved refusal for an item ({ name, reason, at }), or nil.
+function P.MerchantRefused(itemID)
+    return itemID and ns.DB and RefusedStore()[itemID] or nil
+end
+
+-- Lines describing the remembered refusals; `clear` forgets them.
+function P.RefusedItemsReport(clear)
+    local store = RefusedStore()
+    local lines = {}
+    for itemID, entry in pairs(store) do
+        lines[#lines + 1] = "  " .. tostring(entry.name or ("Item " .. itemID)) .. " (" .. itemID .. "): "
+            .. tostring(entry.reason or "refused")
+            .. (entry.at and date and (", " .. date("%Y-%m-%d", entry.at)) or "")
+    end
+    table.sort(lines)
+    if clear then
+        ns.DB.vendorRefused = {}
+        return { #lines .. " remembered refusal(s) cleared: vendors will be offered them again." }
+    end
+    if #lines == 0 then return { "No items remembered as refused by vendors." } end
+    table.insert(lines, 1, #lines .. " item(s) vendors refused to buy (not offered for sale; /icanteven refused clear to retry):")
+    return lines
+end
 
 if CreateFrame then
     local saleFrame = CreateFrame("Frame")
     saleFrame:RegisterEvent("UI_ERROR_MESSAGE")
-    saleFrame:RegisterEvent("MERCHANT_CLOSED")
-    saleFrame:SetScript("OnEvent", function(_, event, _, message)
-        if event == "MERCHANT_CLOSED" then
-            refusedByMerchant = {}
-        elseif saleWatch and type(message) == "string" then
+    saleFrame:SetScript("OnEvent", function(_, _, _, message)
+        if saleWatch and type(message) == "string" then
             table.insert(saleWatch.errors, message)
         end
     end)
@@ -621,7 +646,8 @@ CheckSales = function()
         reason and (" (" .. reason .. ")") or "")
     local names = {}
     for _, item in ipairs(refused) do
-        refusedByMerchant[item.itemID] = reason or "The merchant didn't buy it"
+        RefusedStore()[item.itemID] = { name = item.name, reason = reason or "The merchant didn't buy it",
+            at = time and time() or 0 }
         pendingFromSlots[P.LocationKey(item)] = nil
         P.Log("transfer", "refused by the merchant: %s (%s %s:%s)", tostring(item.name), tostring(item.itemID),
             tostring(item.bagID), tostring(item.slot))

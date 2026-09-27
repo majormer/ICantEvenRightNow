@@ -120,6 +120,7 @@ ns.Data.DefaultDB = {
         auctionMailReminder = true,  -- Warn before auction mail on any character is deleted (Mail.lua)
     },
     debugLog = { lines = {}, nextIndex = 1, count = 0 }, -- Enhanced logging ring buffer (Log.lua)
+    vendorRefused = {}, -- [itemID] = { name, reason, at }: items vendors refused to buy (Transfer.lua)
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
     savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once

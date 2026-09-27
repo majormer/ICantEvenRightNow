@@ -42,6 +42,7 @@ The last 2,000 lines are kept in `ICantEvenRightNowDB.debugLog` (saved on reload
 | `/icanteven why [all]` | Why items are held, grouped by reason |
 | `/icanteven diag` | Version and basic environment (with debug mode on) |
 | `/icanteven log [on\|off\|clear\|count]` | Enhanced log (see above) |
+| `/icanteven refused [clear]` | Items vendors refused to buy (remembered, not offered for sale) |
 
 ## Known failure patterns
 
@@ -67,7 +68,7 @@ Check `/icanteven ctx`. Known false signals, all removed:
 
 ### "The merchant refused N" / sold items come back
 
-Some merchants won't buy some items (in testing, a traveling vendor on a mount refused Strong Sniffin' Soup for Niffen and Soul Sigil II with "The merchant doesn't want that item."). The addon checks every sale a moment after the click: the report says how many really sold, what was earned, and which items the merchant refused and why. Refused items are blocked ("This merchant won't buy it") until the merchant window closes; try another vendor.
+Some merchants won't buy some items (in testing, a traveling vendor on a mount refused Strong Sniffin' Soup for Niffen and Soul Sigil II with "The merchant doesn't want that item."). The addon checks every sale a moment after the click: the report says how many really sold, what was earned, and which items the merchant refused and why. Some items show a vendor price but no vendor will buy them (players report the same for items like Lucky Duck and Winter Veil Socks; nothing in the item's data says so). The addon remembers each refusal in saved data and marks the item "Vendors won't buy this item" everywhere. `/icanteven refused` lists them; `/icanteven refused clear` forgets them so vendors are offered them again.
 
 ### Items vanish at a vendor before you click anything
 

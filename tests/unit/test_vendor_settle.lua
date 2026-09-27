@@ -113,7 +113,7 @@ T.test("sales are confirmed: items the merchant refuses aren't reported as sold"
     T.eq(#g.world.sold, 2)
 end)
 
-T.test("an item the merchant refused is blocked for the visit, then allowed again", function()
+T.test("an item a vendor refused is remembered and not offered again, until cleared", function()
     local g = refusingGame()
     g:openVendor()
     g:Core().ShowHomeUI()
@@ -125,10 +125,16 @@ T.test("an item the merchant refused is blocked for the visit, then allowed agai
     for _, plan in ipairs(UI.transferPlansAll or UI.transferVisible or {}) do
         if plan.item.itemID == 8801 then soup = plan end
     end
-    T.ok(P.MerchantRefused(8801), "remembered for this visit")
+    T.ok(P.MerchantRefused(8801), "remembered")
     if soup then T.ok(not soup.movable, "not offered for sale again") end
     g:closeVendor()
-    T.ok(not P.MerchantRefused(8801), "another merchant may buy it")
+    T.ok(P.MerchantRefused(8801), "still remembered after the vendor closes")
+    T.ok(g:db().vendorRefused[8801], "in saved data (survives a reload)")
+    local mark = g:logMark()
+    g:slash("refused")
+    T.contains(g:printed(mark), "Niffen Soup (8801)")
+    g:slash("refused clear")
+    T.ok(not P.MerchantRefused(8801), "cleared on request")
 end)
 
 T.test("a clean sale reports what was earned", function()

@@ -258,6 +258,8 @@ function Core.HandleSlashCommand(msg)
                 .. " line(s) saved (/icanteven log on|off|clear|<count>).")
             for _, line in ipairs(lines) do Print(line) end
         end
+    elseif cmd == "refused" then
+        for _, line in ipairs(P.RefusedItemsReport((arg1 or ""):lower() == "clear")) do Print(line) end
     elseif cmd == "undo" then
         Print(P.PrepareUndo())
     elseif cmd == "clearerrors" then

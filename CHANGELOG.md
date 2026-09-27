@@ -46,7 +46,7 @@ Release note rules:
 
 ### Improved
 
-- **Sales are confirmed.** After you click Sell, the addon checks what the vendor actually bought and reports it ("Sold 7 of 9 (250g 64s). The merchant refused 2: ..."). Items a merchant refuses are marked "This merchant won't buy it" until you close the vendor, instead of being reported as sold.
+- **Sales are confirmed.** After you click Sell, the addon checks what the vendor actually bought and reports it ("Sold 7 of 9 (250g 64s). The merchant refused 2: ..."). Some items show a vendor price that no vendor pays; once refused, they're remembered and marked "Vendors won't buy this item" instead of being offered again (`/icanteven refused` lists them).
 
 - Identical stacks share one row, and an optional compact mode shows 9 rows per screen.
 - Items worth noticeably more at auction are flagged when selling to a vendor and are never pre-selected for vendor sales.
