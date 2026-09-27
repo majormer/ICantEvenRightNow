@@ -384,7 +384,12 @@ function World:sell(bagID, slot)
     -- def.vendorRefuses: this merchant won't take it (seen in game at a
     -- traveling vendor): the item stays, and the server reports UI error 42.
     if def.vendorRefuses then
-        self:fire("UI_ERROR_MESSAGE", 42, "The merchant doesn't want that item.")
+        -- world.throttleErrors: like the client, identical errors in one
+        -- burst reach addons once (one message for a whole refused batch).
+        if not (self.throttleErrors and self._lastErrorAt == self.now) then
+            self:fire("UI_ERROR_MESSAGE", 42, "The merchant doesn't want that item.")
+            self._lastErrorAt = self.now
+        end
         return
     end
     -- def.vendorBusy: a temporary failure (seen in game mid-batch).

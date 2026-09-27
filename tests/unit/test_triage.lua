@@ -61,6 +61,21 @@ T.test("decide sell: the item can go to a vendor whatever its auction price, no 
     T.ok(P.CanGoAndSellable(sword))
 end)
 
+T.test("a sell decision the vendor refuses asks again: review verdict, back in the triage queue", function()
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end)
+    local P = g:P()
+    P.SetDecision(I.OLD_SWORD, "sell")
+    g:db().vendorRefused = { [I.OLD_SWORD] = { name = "Old Sword", reason = "The merchant doesn't want that item.", at = 1 } }
+    g:Core().ScanInventory("bags", true)
+    local e = P.ExplainScanned(scanned(g, I.OLD_SWORD))
+    T.eq(e.primary.id, "decision_blocked") T.contains(e.evidence, "vendors won't buy it")
+    T.eq(e.disposition, "review")
+    T.no(P.CanGoAndSellable(scanned(g, I.OLD_SWORD)))
+    T.eq(#P.BuildTriageQueue("bags"), 1, "needs a new decision")
+    local frame = P.ShowTriage("bags")
+    T.contains(frame.previousDecision:GetText(), "not possible")
+end)
+
 T.test("decide auction: a candidate despite a keep reason; never offered to the vendor", function()
     local g = game(function(w) w:put(0, 1, I.NEW_FLASK, 5) end)   -- current expansion: kept by default
     local P = g:P()

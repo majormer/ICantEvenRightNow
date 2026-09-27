@@ -53,6 +53,7 @@ function P.BuildTriageQueue(scope, includeDecided)
                 if item.itemID then
                     local decision = P.GetDecision(item.itemID)
                     local live = decision and not decision.due
+                        and not (P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision))
                     if includeDecided or not live then
                         local key = where .. ":" .. item.itemID
                         local entry = byID[key]
@@ -257,8 +258,10 @@ local function Render()
     frame.recommended:SetText(options.recommended and ("Recommended: " .. CHOICE_LABEL[options.recommended]
         ) or "Your call: nothing recommended")
     local decision = entry.decision
+    local blocked = decision and P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision)
     frame.previousDecision:SetText(decision and ("Current decision: " .. decision.choice
-        .. (decision.at and date and (" on " .. date("%Y-%m-%d", decision.at)) or "")) or "")
+        .. (decision.at and date and (" on " .. date("%Y-%m-%d", decision.at)) or "")
+        .. (blocked and (" (not possible: " .. blocked .. ")") or "")) or "")
     for i, choice in ipairs(CHOICE_ORDER) do
         local button = frame.buttons[choice]
         local enabled = options[choice] and true or false

@@ -70,6 +70,21 @@ function P.GetDecision(itemID)
     return record
 end
 
+-- A decision the game has refused: sell when a merchant won't buy it, auction
+-- when the auction house refused it. Returns the reason text, or nil.
+function P.DecisionBlocked(itemID, record)
+    record = record or P.GetDecision(itemID)
+    if not record then return nil end
+    if record.choice == "sell" and P.MerchantRefused and P.MerchantRefused(itemID) then
+        return "vendors won't buy it"
+    end
+    if record.choice == "auction" and P.AuctionRefused and P.AuctionRefused(itemID) then
+        local refusal = P.AuctionRefused(itemID)
+        return "the auction house refused it" .. (refusal and refusal.reason and (": " .. tostring(refusal.reason)) or "")
+    end
+    return nil
+end
+
 -- Items that left the account (sold, listed, destroyed) drop their outward
 -- decision; keep/use/defer stay in case the item comes back.
 -- An item is "gone" only when two scans at least this far apart both miss it.

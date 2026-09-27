@@ -727,9 +727,12 @@ CheckSales = function()
     local earnedText = earned and earned > 0 and (" (" .. MoneyText(earned) .. ")") or ""
     P.Log("transfer", "confirmed: %d sold, %d not sold, earned %s%s", #sold, #refused, tostring(earned),
         reason and (" (" .. table.concat(watch.errors, "; ") .. ")") or "")
-    -- A refusal is only remembered when every unsold item is explained by
-    -- the merchant's refusal and nothing else went wrong in this click.
-    local certain = #refused > 0 and (watch.refusals or 0) >= #refused and (watch.otherErrors or 0) == 0
+    -- A refusal is only remembered when the merchant's refusal was heard and
+    -- nothing else went wrong in this click. One message is enough: the
+    -- client reports identical errors once per burst (in game 8 Legion
+    -- legendaries were refused with a single "doesn't want" message, twice,
+    -- and were offered a third time; 2026-09-28).
+    local certain = #refused > 0 and (watch.refusals or 0) >= 1 and (watch.otherErrors or 0) == 0
     if #refused > 0 and not certain then
         local names = {}
         for _, item in ipairs(refused) do

@@ -167,6 +167,24 @@ T.test("an item no vendor buys says so: destroy it or keep it", function()
     T.ok(not P.CanGoAndSellable(soup), "not in the sell tasks any more")
 end)
 
+T.test("one refusal message for a whole batch remembers every refused item", function()
+    local g = T.game({ player = PLAYER, setup = F.setup(function(w)
+        for id = 8811, 8813 do
+            w:defineItem(id, { name = "Refused Soup " .. id, classID = 0, subclassID = 5, quality = 1, sellPrice = 1875,
+                expansionID = 9, maxStack = 20, vendorRefuses = true })
+            w:put(0, id - 8810, id, 1)
+        end
+    end) })
+    g.world.throttleErrors = true
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    local mark = g:logMark()
+    sellAll(g)
+    g.world:advance(3)
+    T.contains(g:printed(mark), "refused 3")
+    for id = 8811, 8813 do T.ok(g:P().MerchantRefused(id), "remembered " .. id) end
+end)
+
 T.test("a temporary sale error ('That object is busy') isn't remembered as a refusal", function()
     local g = T.game({ player = PLAYER, setup = F.setup(function(w)
         w:put(0, 1, I.JUNK, 1)

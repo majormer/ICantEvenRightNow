@@ -77,6 +77,7 @@ local REASONS = {
     decided_use          = { disposition = "keep",   label = "You decided to use it", rank = 0.5 },
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
+    decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -847,7 +848,10 @@ local function ExplainItem(item, ctx)
     if decision then
         local when = decision.at and date and date("%Y-%m-%d", decision.at) or nil
         local stamp = when and ("On " .. when) or "Your decision"
-        if decision.choice == "defer" then
+        local blocked = P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision)
+        if blocked then
+            add("decision_blocked", "You chose " .. decision.choice .. ", but " .. blocked .. ". Destroy it, or keep it.")
+        elseif decision.choice == "defer" then
             if decision.due then
                 add("decision_due", "Deferred " .. (when and ("on " .. when) or "earlier") .. "; look again")
             else
