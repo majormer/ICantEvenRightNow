@@ -237,7 +237,10 @@ function P.ShowDecisionPasteBox()
         bg:SetAllPoints()
         if bg.SetColorTexture then bg:SetColorTexture(0.05, 0.05, 0.05, 0.95) end
         frame:SetPoint("CENTER")
-        frame:SetFrameStrata("DIALOG")
+        -- Above the console (a DIALOG frame sat behind it, 2026-09-28).
+        frame:SetFrameStrata("FULLSCREEN_DIALOG")
+        if frame.SetToplevel then frame:SetToplevel(true) end
+        frame:SetFrameLevel((UIParent and UIParent:GetFrameLevel() or 0) + 60)
         frame:SetMovable(true) frame:EnableMouse(true)
         frame:RegisterForDrag("LeftButton")
         frame:SetScript("OnDragStart", frame.StartMoving)
