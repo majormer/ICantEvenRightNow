@@ -235,6 +235,17 @@ function P.AuctionAdvice(item, allowUncertain)
     return "vendor", "Auction gain under " .. P.FormatMoney(Settings().minGain)
 end
 
+-- Scan first (player's rule, 2026-09-26): a tradeable green-or-better item
+-- with no recent auction price shouldn't go to a vendor before an auction
+-- house scan says what it's worth. Only when a price source is installed
+-- (otherwise there's nothing to scan with).
+function P.NeedsPriceCheck(item)
+    if not item or not P.HasPriceSource() then return false end
+    if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or not price.fresh
+end
+
 -- Vendor protection (V3): true when selling to a vendor would give up a
 -- meaningful auction price. Uses stale prices too: better to warn than lose value.
 function P.IsValueFlagged(item, dest)

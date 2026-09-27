@@ -534,6 +534,8 @@ local function BuildTransferRowDetail(plan, source, dest)
         if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then
             local net = P.GetItemValue(item)
             status = status .. "  -  worth ~" .. FormatMoney(net) .. " at auction"
+        elseif P.NeedsPriceCheck and P.NeedsPriceCheck(item) then
+            status = status .. "  -  no recent auction price: scan at the auction house first"
         end
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
@@ -1898,10 +1900,23 @@ local function BuildTransferTab(parent)
     parent.selectAll:SetParent(parent.footer)
     parent.selectAll:SetPoint("RIGHT", parent.clearSel, "LEFT", -8, 0)
     parent.selectAll:SetScript("OnClick", function()
+        -- At a vendor, items that may be worth more at auction (or haven't
+        -- been priced yet) stay unselected; the player can still tick them.
+        local skipped = 0
         for _, plan in ipairs(UI.transferVisible or {}) do
             if plan.movable then
-                UI.transferSelected[plan.key] = true
+                local item = plan.item
+                local hold = plan.dest == "Vendor" and ((P.IsValueFlagged and P.IsValueFlagged(item, "Vendor"))
+                    or (P.NeedsPriceCheck and P.NeedsPriceCheck(item)))
+                if hold then
+                    skipped = skipped + 1
+                else
+                    UI.transferSelected[plan.key] = true
+                end
             end
+        end
+        if skipped > 0 then
+            UI.inventoryStatus = skipped .. " left unselected: price them at the auction house first"
         end
         Core.RefreshUI()
     end)

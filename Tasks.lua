@@ -190,8 +190,12 @@ local function EvaluateTask(task)
             -- game Sell Old Consumables counted a 25s item worth ~24g at auction).
             local worthMore = plan.movable and plan.dest == "Vendor" and P.IsValueFlagged
                 and P.IsValueFlagged(item, "Vendor")
+            local needsPrice = not worthMore and plan.movable and plan.dest == "Vendor" and P.NeedsPriceCheck
+                and P.NeedsPriceCheck(item)
             if worthMore then
                 card.worthMore = (card.worthMore or 0) + 1
+            elseif needsPrice then
+                card.needsPrice = (card.needsPrice or 0) + 1
             elseif plan.movable then
                 card.ready = card.ready + 1
                 card.value = card.value + stackValue
@@ -305,6 +309,9 @@ function P.CardSummary(card)
             .. (card.valueMode == "auction" and " at auction" or "") .. ")") or ""
     local worthMore = (card.worthMore or 0) > 0
         and (card.worthMore .. " worth more at auction") or nil
+    local needsPrice = (card.needsPrice or 0) > 0
+        and (card.needsPrice .. " to price at the auction house first") or nil
+    if needsPrice then worthMore = worthMore and (worthMore .. ", " .. needsPrice) or needsPrice end
     if card.ready > 0 then
         local extra = card.waiting > 0 and (", " .. card.waiting .. " more elsewhere") or ""
         return card.ready .. " ready" .. money .. extra .. (worthMore and (", " .. worthMore) or "")
@@ -313,7 +320,7 @@ function P.CardSummary(card)
     elseif (card.blocked or 0) > 0 then
         return card.blocked .. " blocked: " .. tostring(card.blockedReason)
     elseif worthMore then
-        return worthMore .. ": see Auction Candidates"
+        return worthMore .. ((card.worthMore or 0) > 0 and ": see Auction Candidates" or "")
     end
     return "Nothing to do right now"
 end
@@ -331,6 +338,7 @@ function P.PreselectTask(task)
         if safe and P.ExplainItem then
             local explanation = P.ExplainItem(plan.item, {})
             if P.IsValueFlagged and P.IsValueFlagged(plan.item, plan.dest) then safe = false end
+            if plan.dest == "Vendor" and P.NeedsPriceCheck and P.NeedsPriceCheck(plan.item) then safe = false end
             -- Selling: only items that can clearly go. "Your call" items
             -- (situational trinkets, outgrown gear) are never pre-selected.
             if plan.dest == "Vendor" and explanation.disposition ~= "free" then safe = false end

@@ -188,3 +188,31 @@ T.test("at a vendor with nothing to sell, no notice (not an auction task)", func
     local notice = g:UI().contextNoticeFrame
     T.ok(not notice or not notice:IsShown(), "no notice")
 end)
+
+T.test("unpriced tradeable items: scan at the auction house before selling them", function()
+    local g = game(function(w)
+        w:defineItem(8950, { name = "Unpriced Boots", classID = 4, subclassID = 4, equipLoc = "INVTYPE_FEET",
+            itemLevel = 100, requiredLevel = 10, bindType = 2, quality = 3, sellPrice = 5000, expansionID = 11,
+            appearanceSourceID = 895001 })
+        w.collections.appearances[895001] = true
+        w:put(0, 1, 8950, 1)
+        w:put(0, 2, I.JUNK, 3)
+    end, withAuctionator({}, {}))
+    local P = g:P()
+    P.SetCharacterRole(P.currentCharacterKey, "main")
+    local boots = scanned(g, 8950)
+    T.ok(P.NeedsPriceCheck(boots), "no price yet")
+    g:openVendor()
+    g:advance(9)
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Sell Items That Can Go" then card = c end end
+    T.contains(P.CardSummary(card), "1 to price at the auction house first")
+    g:slash("")
+    P.OpenTask("Sell Items That Can Go")
+    g:click(g:UI().frame.panels.Transfer.selectAll)
+    for _, plan in ipairs(g:UI().transferVisible) do
+        if plan.item.itemID == 8950 then T.no(g:UI().transferSelected[plan.key], "left unselected") end
+        if plan.item.itemID == I.JUNK then T.ok(g:UI().transferSelected[plan.key], "junk still selected") end
+    end
+    T.contains(g:UI().inventoryStatus, "price them at the auction house first")
+end)

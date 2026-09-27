@@ -48,6 +48,7 @@ Release note rules:
 
 ### Improved
 
+- **Price first, then sell.** With Auctionator or TSM installed, tradeable green-or-better items with no recent auction price are marked "scan at the auction house first", aren't counted as ready to sell, and aren't picked by Select Movable at a vendor.
 - **Sales are confirmed.** After you click Sell, the addon checks what the vendor actually bought and reports it ("Sold 7 of 9 (250g 64s). The merchant refused 2: ..."). Some items show a vendor price that no vendor pays; once refused, they're remembered and marked "Vendors won't buy this item" instead of being offered again (`/icanteven refused` lists them).
 
 - Identical stacks share one row, and an optional compact mode shows 9 rows per screen.
