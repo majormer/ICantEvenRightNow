@@ -577,9 +577,26 @@ local function RefusedStore()
     return ns.DB.vendorRefused
 end
 
--- The saved refusal for an item ({ name, reason, at }), or nil.
+-- Only the merchant's own refusal is remembered. Other errors are
+-- temporary: in game, 2 of 12 sales in one click failed with "That object is
+-- busy." and were wrongly saved as refused (fixed 2026-09-26).
+local VENDOR_REFUSAL_ERROR = 42   -- UI_ERROR_MESSAGE errorType (ERR_VENDOR_DOESNT_BUY)
+local function IsRefusalMessage(message)
+    if type(message) ~= "string" then return false end
+    if ERR_VENDOR_DOESNT_BUY and message == ERR_VENDOR_DOESNT_BUY then return true end
+    return message:find("doesn't want", 1, true) ~= nil
+end
+
+-- The saved refusal for an item ({ name, reason, at }), or nil. Entries
+-- saved for another reason (the "busy" bug) are dropped.
 function P.MerchantRefused(itemID)
-    return itemID and ns.DB and RefusedStore()[itemID] or nil
+    if not (itemID and ns.DB) then return nil end
+    local entry = RefusedStore()[itemID]
+    if entry and not IsRefusalMessage(entry.reason) then
+        RefusedStore()[itemID] = nil
+        return nil
+    end
+    return entry
 end
 
 -- Lines describing the remembered refusals; `clear` forgets them.
@@ -604,9 +621,15 @@ end
 if CreateFrame then
     local saleFrame = CreateFrame("Frame")
     saleFrame:RegisterEvent("UI_ERROR_MESSAGE")
-    saleFrame:SetScript("OnEvent", function(_, _, _, message)
+    saleFrame:SetScript("OnEvent", function(_, _, errorType, message)
         if saleWatch and type(message) == "string" then
             table.insert(saleWatch.errors, message)
+            if errorType == VENDOR_REFUSAL_ERROR or IsRefusalMessage(message) then
+                saleWatch.refusals = (saleWatch.refusals or 0) + 1
+            else
+                saleWatch.otherErrors = (saleWatch.otherErrors or 0) + 1
+                saleWatch.otherReason = message
+            end
         end
     end)
 end
@@ -642,8 +665,27 @@ CheckSales = function()
     local reason = watch.errors[#watch.errors]
     local earned = GetMoney and watch.moneyBefore and (GetMoney() - watch.moneyBefore) or nil
     local earnedText = earned and earned > 0 and (" (" .. MoneyText(earned) .. ")") or ""
-    P.Log("transfer", "confirmed: %d sold, %d refused, earned %s%s", #sold, #refused, tostring(earned),
-        reason and (" (" .. reason .. ")") or "")
+    P.Log("transfer", "confirmed: %d sold, %d not sold, earned %s%s", #sold, #refused, tostring(earned),
+        reason and (" (" .. table.concat(watch.errors, "; ") .. ")") or "")
+    -- A refusal is only remembered when every unsold item is explained by
+    -- the merchant's refusal and nothing else went wrong in this click.
+    local certain = #refused > 0 and (watch.refusals or 0) >= #refused and (watch.otherErrors or 0) == 0
+    if #refused > 0 and not certain then
+        local names = {}
+        for _, item in ipairs(refused) do
+            pendingFromSlots[P.LocationKey(item)] = nil
+            P.Log("transfer", "not sold (try again): %s (%s %s:%s)", tostring(item.name), tostring(item.itemID),
+                tostring(item.bagID), tostring(item.slot))
+            if #names < 3 then names[#names + 1] = ItemLabel(item) end
+        end
+        UI.inventoryStatus = #sold .. " sold, " .. #refused .. " not sold: click Sell to try again"
+        Print("Sold " .. #sold .. " of " .. #watch.items .. earnedText .. ". Not sold: " .. table.concat(names, ", ")
+            .. (#refused > #names and ", ..." or "") .. " (" .. (watch.otherReason or reason or "no answer from the vendor")
+            .. "). Select them and click Sell to try again.")
+        Core.ScanInventory("bags", true)
+        return
+    end
+    reason = reason and IsRefusalMessage(reason) and reason or (ERR_VENDOR_DOESNT_BUY or "The merchant doesn't want that item.")
     local names = {}
     for _, item in ipairs(refused) do
         RefusedStore()[item.itemID] = { name = item.name, reason = reason or "The merchant didn't buy it",

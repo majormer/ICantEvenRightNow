@@ -381,6 +381,11 @@ function World:sell(bagID, slot)
         self:fire("UI_ERROR_MESSAGE", 42, "The merchant doesn't want that item.")
         return
     end
+    -- def.vendorBusy: a temporary failure (seen in game mid-batch).
+    if def.vendorBusy then
+        self:fire("UI_ERROR_MESSAGE", 51, "That object is busy.")
+        return
+    end
     if self.asyncMoves and not stack.selling then
         -- Like the server: the stack stays in the slot, locked, until the
         -- sale settles, and a bag update fires meanwhile.
