@@ -845,7 +845,10 @@ local QUICK_WORKFLOWS = {
     },
     {
         name = "Consolidate Warbound Gear",
-        source = STORAGE_PRIVATE_BANK, dest = STORAGE_WARBAND_BANK,
+        -- Bank (All Tabs) covers character bank tabs and the legacy bank; the
+        -- Private Bank source isn't offered once tabs exist (in game the task
+        -- opened "(modified)" with its source reset to Bags).
+        source = STORAGE_ALL_BANK_TABS, dest = STORAGE_WARBAND_BANK,
         expansion = EXPANSION_FILTER_ALL, bind = BIND_FILTER_WARBAND,
         type = "All", slot = "All", armorType = ARMOR_FILTER_ALL, upgrade = "All",
         hideBlocked = true, sort = "Name",

@@ -294,3 +294,20 @@ T.test("Deposit Old Items keeps items for a quest in progress in the bags", func
     for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do names[plan.item.itemID] = true end
     T.ok(names[I.QUEST_START], "a quest not started yet can be banked (your call)")
 end)
+
+T.test("Consolidate Warbound Gear reads the character bank tabs and leaves out gear that can go", function()
+    local game = bagGame(function(w)
+        w:put(6, 1, I.OLD_SWORD, 1, { warboundUntilEquipped = true })   -- character bank: kept for an alt
+        w:put(6, 2, I.BOUND_HELM, 1, { tooltipBinding = "warbound" })   -- character bank: appearance collected, can go
+        w.collections.appearances[70002] = true
+    end)
+    game:P().SetCharacterRole("Main-R", "main")
+    game:openBank()
+    local P = game:P()
+    local task = P.FindTask("Consolidate Warbound Gear")
+    T.eq((P.GetTaskRoute(task)), P.STORAGE_ALL_BANK_TABS)
+    local ids = {}
+    for _, plan in ipairs(P.GetTaskPlans(task)) do ids[plan.item.itemID] = plan.item end
+    T.ok(ids[I.OLD_SWORD], "Warbound-until-equipped gear kept for an alt is consolidated")
+    T.no(ids[I.BOUND_HELM], "gear that can go is pulled to sell, not consolidated")
+end)

@@ -47,23 +47,25 @@ local function IsShareable(item)
 end
 P.IsShareableItem = IsShareable
 
+-- Items headed out of storage don't get banked: auction candidates (in game,
+-- right after pulling them this offered to deposit them again), "Can go"
+-- items (Pull Items That Can Go takes them back out), and items for a quest
+-- in progress (offered for the bank once).
+local function IsHeadedOut(item)
+    if P.IsAuctionCandidate and P.IsAuctionCandidate(item) then return true end
+    if not P.ExplainScanned then return false end
+    local explanation = P.ExplainScanned(item)
+    for _, reason in ipairs(explanation.reasons or {}) do
+        if reason.id == "quest_active" then return true end
+    end
+    return explanation.disposition == "free"
+end
+P.IsHeadedOut = IsHeadedOut
+
 local TASK_EXTRAS = {
     ["Deposit Old Items"] = {
         description = "Old-expansion items from your bags into the bank.",
-        -- Not items headed out: in game, right after pulling auction
-        -- candidates this offered to deposit them again (and "Can go" items
-        -- that Pull Items That Can Go takes back out).
-        -- Items for a quest in progress stay in the bags too (in game this
-        -- offered to bank one).
-        predicate = function(item)
-            if P.IsAuctionCandidate and P.IsAuctionCandidate(item) then return false end
-            if not P.ExplainScanned then return true end
-            local explanation = P.ExplainScanned(item)
-            for _, reason in ipairs(explanation.reasons or {}) do
-                if reason.id == "quest_active" then return false end
-            end
-            return explanation.disposition ~= "free"
-        end,
+        predicate = function(item) return not IsHeadedOut(item) end,
     },
     ["Pull Bank Upgrades"] = { description = "Gear in the bank that beats what you're wearing." },
     ["Pull Auctionable BoEs"] = { description = "Bind-on-equip gear to list on the auction house." },
@@ -79,7 +81,11 @@ local TASK_EXTRAS = {
             return P.ExplainScanned(item).disposition == "keep"
         end,
     },
-    ["Consolidate Warbound Gear"] = { description = "Warbound gear from the character bank into the Warband bank." },
+    ["Consolidate Warbound Gear"] = {
+        description = "Warbound gear from the character bank into the Warband bank.",
+        -- In game this offered 46 "Can go" pieces for the Warband bank.
+        predicate = function(item) return not IsHeadedOut(item) end,
+    },
 }
 
 -- Other modules (Reasons, Value, Warband queue) register extra built-in tasks.
