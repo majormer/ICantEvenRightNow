@@ -249,7 +249,7 @@ local function Render()
     SetWowhead(frame.wowheadQuest, item.questID and P.WowheadQuestURL(item.questID) or nil)
     frame.wowheadQuestLabel:SetShown(item.questID ~= nil)
     frame.recommended:SetText(options.recommended and ("Recommended: " .. CHOICE_LABEL[options.recommended]
-        .. "  (Enter)") or "Your call: nothing recommended")
+        ) or "Your call: nothing recommended")
     local decision = entry.decision
     frame.previousDecision:SetText(decision and ("Current decision: " .. decision.choice
         .. (decision.at and date and (" on " .. date("%Y-%m-%d", decision.at)) or "")) or "")
@@ -354,10 +354,6 @@ local function OnKey(_, key)
     local handled = true
     local n = tonumber(key)
     if n and CHOICE_ORDER[n] then Choose(CHOICE_ORDER[n], true)
-    elseif key == "ENTER" then
-        local entry = CurrentEntry()
-        local rec = entry and P.TriageOptions(entry.item).recommended
-        if rec then Choose(rec, true) end
     elseif key == "BACKSPACE" then Previous()
     elseif key == "ESCAPE" then Stop()
     else handled = false end
@@ -381,8 +377,13 @@ local function Build()
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    -- Enter is deliberately not a choice: it also opens chat, and a reload
+    -- typed with the screen open recorded two Keeps (2026-09-27).
     frame:EnableKeyboard(true)
     frame:SetScript("OnKeyDown", OnKey)
+    -- Escape closes it like any game window; a close from anywhere ends the run.
+    if UISpecialFrames and tinsert then tinsert(UISpecialFrames, "ICantEvenTriageFrame") end
+    frame:SetScript("OnHide", function() if state.scope ~= nil then Stop() end end)
     frame.windowTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.windowTitle:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
     frame.windowTitle:SetText("Justify every item")
@@ -484,7 +485,7 @@ local function Build()
     frame.prev = kit.CreateButton(area, "< Previous (Backspace)", 150, 22)
     frame.prev:SetPoint("BOTTOMLEFT", 0, 0)
     frame.prev:SetScript("OnClick", Previous)
-    frame.keys = kit.CreateLabel(area, "Keys: 1-8 choose, Enter = recommended, Esc = stop", "GameFontDisableSmall")
+    frame.keys = kit.CreateLabel(area, "Keys: 1-8 choose, Backspace = previous, Esc = stop", "GameFontDisableSmall")
     frame.keys:SetPoint("BOTTOMRIGHT", 0, 4)
 
     -- Summary

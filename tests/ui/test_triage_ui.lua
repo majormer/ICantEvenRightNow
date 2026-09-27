@@ -134,6 +134,18 @@ T.test("the screen is a bordered window like the console; its title-bar close st
     T.ok(frame:GetHeight() >= 460, "tall enough for content below the title bar")
     g:click(frame.CloseButton)
     T.no(frame:IsShown())
+    local listed = false
+    for _, name in ipairs(g.env.UISpecialFrames) do if name == "ICantEvenTriageFrame" then listed = true end end
+    T.ok(listed, "Escape closes it like any game window")
+    -- Enter records nothing: it is also the chat key.
+    frame = P.ShowTriage("bags")
+    frame:GetScript("OnKeyDown")(frame, "ENTER")
+    T.eq(P.GetDecision(I.LINEN), nil, "Enter is not a choice")
+    T.ok(frame:IsShown())
+    -- Hiding it from outside (Escape) ends the run.
+    frame:Hide()
+    frame = P.ShowTriage()
+    T.contains(frame.title:GetText(), "Justify every item", "reopened without a scope: the run ended, pick again")
 end)
 
 T.test("Home card 'Justify every item' counts what's left and opens the screen", function()
