@@ -83,8 +83,12 @@ local TASK_EXTRAS = {
     },
     ["Consolidate Warbound Gear"] = {
         description = "Warbound gear from the character bank into the Warband bank.",
-        -- In game this offered 46 "Can go" pieces for the Warband bank.
-        predicate = function(item) return not IsHeadedOut(item) end,
+        -- Gear only (in game it listed Warbound lumber and tokens; Deposit
+        -- to Warband covers materials), and nothing headed out (it offered
+        -- 46 "Can go" pieces for the Warband bank).
+        predicate = function(item)
+            return (item.classID == 2 or item.classID == 4) and not IsHeadedOut(item)
+        end,
     },
 }
 
