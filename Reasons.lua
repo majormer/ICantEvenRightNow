@@ -72,6 +72,7 @@ local REASONS = {
     decided_auction      = { disposition = "free",   label = "You decided: sell it at the auction house", rank = 0.5 },
     decided_destroy      = { disposition = "free",   label = "You decided: destroy it", rank = 0.5 },
     decided_keep         = { disposition = "keep",   label = "You decided to keep it", rank = 0.5 },
+    decided_carry        = { disposition = "keep",   label = "You decided to carry it: stays in your bags", rank = 0.5, bags = true },
     decided_use          = { disposition = "keep",   label = "You decided to use it", rank = 0.5 },
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
@@ -818,6 +819,8 @@ local function ExplainItem(item, ctx)
             else
                 add("decided_defer", "Until " .. (date and date("%Y-%m-%d", decision.until_ or 0) or "later"))
             end
+        elseif decision.choice == "keep" and (decision.reason == "carry" or decision.note == "carry") then
+            add("decided_carry", stamp)
         elseif decision.choice == "keep" then
             add("decided_keep", stamp .. (decision.reason and (": " .. decision.reason) or "") .. (decision.note and (" (" .. decision.note .. ")") or ""))
         else

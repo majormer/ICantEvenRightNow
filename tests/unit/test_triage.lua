@@ -184,3 +184,14 @@ T.test("migration to schema 3 adds the decisions table to an old save", function
     T.eq(g:db().schemaVersion, g:P().SCHEMA_VERSION)
     T.eq(type(g:db().decisions), "table")
 end)
+
+T.test("decide keep with the note 'carry' keeps the item out of every deposit task", function()
+    local g = game(function(w) w:put(0, 1, I.LINEN, 20) w:put(0, 2, I.OLD_POTION, 5) end)
+    local P = g:P()
+    g:slash("decide " .. I.LINEN .. " keep carry")
+    g:openBank()
+    local ids = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
+    T.no(ids[I.LINEN], "carried: not deposited")
+    T.eq(P.ExplainScanned(scanned(g, I.LINEN)).primary.id, "decided_carry")
+end)
