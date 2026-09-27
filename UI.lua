@@ -541,6 +541,10 @@ local function BuildTransferRowDetail(plan, source, dest)
             status = status .. "  -  not listed at the auction house (full scan "
                 .. (days < 1 and "today" or (days .. " day" .. (days == 1 and "" or "s") .. " ago")) .. ")"
         end
+    elseif dest == P.STORAGE_AUCTION_HOUSE then
+        local price, info = P.ListingPrice(item)
+        status = "Ready to list at " .. FormatMoney(price or 0) .. ((item.count or 1) > 1 and " each" or "")
+            .. (info and (" (" .. P.FormatPriceSource(info) .. ")") or "")
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
     elseif dest == P.STORAGE_WARBAND_ROUTED then
@@ -2034,6 +2038,8 @@ function Core.RefreshTransferUncached()
     local noticeText
     if dest == "Vendor" and not ns.DB.context.vendorOpen then
         noticeText = "Vendor is not open: sell actions are unavailable."
+    elseif dest == P.STORAGE_AUCTION_HOUSE and not ns.DB.context.auctionHouseOpen then
+        noticeText = "Auction house is not open: listing is unavailable."
     elseif needsBank and not IsBankContextDetected() then
         noticeText = "Bank is not open: transfer actions are unavailable."
     end
@@ -2048,7 +2054,7 @@ function Core.RefreshTransferUncached()
 
     SetDropdownText(panel.sourceDropdown, GetStorageDisplayName(source))
     SetDropdownText(panel.destDropdown, GetStorageDisplayName(dest))
-    panel.swapRoute:SetEnabled(dest ~= "Vendor" and not ns.DB.context.inCombat)
+    panel.swapRoute:SetEnabled(dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and not ns.DB.context.inCombat)
 
     local taskName = UI.activeQuickWorkflowName or UI.activeSavedFilterName
     panel.taskTitle:SetText(taskName and (taskName .. (UI.activeTaskModified and " (modified)" or "")) or "Custom transfer")
@@ -2288,6 +2294,9 @@ function Core.RefreshTransferUncached()
         actionLabel = "Sell " .. (selectedCount - selectedNonJunk + batch) .. " of " .. selectedCount
     elseif dest == "Vendor" then
         actionLabel = "Sell " .. selectedCount .. " (" .. FormatMoney(selectedVendorValue) .. ")"
+    elseif dest == P.STORAGE_AUCTION_HOUSE then
+        -- One auction per click (the game's rule); the rest stay selected.
+        actionLabel = selectedCount > 1 and ("List 1 of " .. selectedCount) or "List 1"
     elseif dest == "Bags" then
         actionLabel = "Withdraw " .. selectedCount
     elseif source == "Bags" then
@@ -2375,6 +2384,8 @@ function Core.RefreshTransferUncached()
             local actionText
             if dest == "Vendor" then
                 actionText = "Sell"
+            elseif dest == P.STORAGE_AUCTION_HOUSE then
+                actionText = "List"
             elseif dest == "Bags" then
                 actionText = "Withdraw"
             elseif source == "Bags" then
@@ -2386,7 +2397,8 @@ function Core.RefreshTransferUncached()
             row.action:SetEnabled(plan.movable and not (P.IsSettling and P.IsSettling()))
             row.action:SetScript("OnClick", function()
                 -- Acts on every stack in the row; vendor sales stop at one buyback batch.
-                local limit = (dest == "Vendor" and not P.IsVendorJunk(item)) and (P.VENDOR_BATCH_SIZE or 12) or #members
+                local limit = (dest == "Vendor" and not P.IsVendorJunk(item)) and (P.VENDOR_BATCH_SIZE or 12)
+                    or dest == P.STORAGE_AUCTION_HOUSE and (P.LISTING_BATCH_SIZE or 1) or #members
                 for index = 1, math.min(limit, #members) do
                     Core.ExecuteTransferOne(members[index])
                 end
@@ -2419,6 +2431,11 @@ function Core.RefreshTransferUncached()
                 if dest == "Vendor" then
                     local stackValue = (item.sellPrice or 0) * (item.count or 1)
                     GameTooltip:AddLine("Vendor value: " .. FormatMoney(stackValue), 1, 1, 1)
+                elseif dest == P.STORAGE_AUCTION_HOUSE then
+                    local price, info = P.ListingPrice(item)
+                    if price then
+                        GameTooltip:AddLine("Listing price: " .. FormatMoney(price) .. " each (" .. P.FormatPriceSource(info) .. ")", 1, 1, 1)
+                    end
                 end
                 if plan.blocked then
                     GameTooltip:AddLine("Blocked: " .. plan.blocked, 1, 0.35, 0.35)

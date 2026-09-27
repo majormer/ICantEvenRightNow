@@ -286,17 +286,18 @@ T.test("at the AH the notice runs Check in Auctionator; bank-only tasks don't op
     T.eq(notice.open:GetText(), "Check in Auctionator")
     g:click(notice.open)
     T.eq(#g.world.auctionator.searches, 1, "search started from the notice")
-    -- Opening the bank-route task away from a bank stays on Home with a hint.
-    local mark = g:logMark()
-    T.no(g:P().OpenTask("Auction Candidates"))
-    T.contains(g:printed(mark), "visit a bank to review these items")
+    -- At the auction house the task reviews the bags for listing (one button;
+    -- before 2026-09-27 it refused with "visit a bank").
+    T.ok(g:P().OpenTask("Auction Candidates"))
+    T.eq(g:UI().transferSource, "Bags")
+    T.eq(g:UI().transferDest, g:P().STORAGE_AUCTION_HOUSE)
     g:slash("")
     local widget
     for _, w in ipairs(g:UI().frame.panels.Home.cards) do
         if w:IsShown() and w.card and w.card.name == "Auction Candidates" then widget = w end
     end
-    T.eq(widget.open:GetText(), "Visit a bank")
-    T.no(widget.open:IsEnabled())
+    T.eq(widget.open:GetText(), "Review")
+    T.ok(widget.open:IsEnabled())
     T.ok(widget.secondary:IsShown() and widget.secondary:IsEnabled(), "Auctionator action still available")
 end)
 T.test("items whose link lookup fails are still named, classified, and searchable", function()

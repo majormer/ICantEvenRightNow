@@ -13,6 +13,8 @@ Release note rules:
 
 ### Added
 
+- **List at the auction house with one button.** At the auction house, Auction Candidates reviews what's in your bags and lists it: each row shows the price it will post at (the freshest known price undercut by 1%, at most 5g, never below the vendor price), and "List 1 of N" posts the next selected item for 24 hours. The game allows one auction per click, so the rest stay selected; click again. Items with no price, or a price far above their usual one, are blocked with the reason so you set those yourself.
+
 - **Set bonuses and upgrade tracks.** Gear that's in a set or can be upgraded is judged with that in mind. A piece that would complete a set bonus is your call, with the trade spelled out ("completes Voidlight Bindings (2); costs 16 item levels in that slot"). An old class set replaced by the one you wear, with no upgrade path, can go, and Home asks about it. Gear below what you wear that can't be upgraded can go (trinkets and weapons stay your call). New keep choice "Keep for now": the addon asks again once you wear something better in that slot.
 
 - **Getting ready, then stable results.** After a reload, or when a bank, vendor or auction house opens, the addon waits for item details first and says "Getting ready... checking N items". Counts, the notice and actions appear once, complete, instead of changing while you watch. Details that arrive later are flagged ("Rescan to include them") rather than changing the screen. The bank or vendor notice says "Getting ready..." right away, and task lists show no rows until they're complete. Gear whose details never load is marked "Item details didn't load" instead of being judged on a guess.

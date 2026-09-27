@@ -19,6 +19,7 @@ local SCRATCH_TAB = "__taskCount"
 local CONTEXT_BLOCKS = {
     ["Bank is not open"] = "Visit a bank",
     ["Vendor is not open"] = "Visit a vendor",
+    ["Auction house is not open"] = "Visit the auction house",
     ["In combat"] = "Leave combat",
 }
 
@@ -161,6 +162,9 @@ function P.TaskRouteAvailable(task)
     end
     if dest == "Vendor" and not context.vendorOpen then
         return false, "Visit a vendor"
+    end
+    if dest == P.STORAGE_AUCTION_HOUSE and not context.auctionHouseOpen then
+        return false, "Visit the auction house"
     end
     return true
 end

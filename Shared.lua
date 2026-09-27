@@ -31,6 +31,8 @@ P.WARBAND_TAB_PREFIX    = "WarbandTab:"
 -- Destination that sends each item to the Warband tab whose own Blizzard
 -- "assign to" settings match it (Warband.lua).
 P.STORAGE_WARBAND_ROUTED = "Warband (by tab settings)"
+-- Destination at the auction house: list the item (one auction per click).
+P.STORAGE_AUCTION_HOUSE = "Auction House"
 
 -- ---------------------------------------------------------------------------
 -- Scope constants (used in scanned item records)
@@ -378,7 +380,7 @@ end
 
 -- True for every storage kind that needs the bank to be open.
 local function NeedsBankStorage(storage)
-    if storage == nil or storage == "Bags" or storage == "Vendor" then return false end
+    if storage == nil or storage == "Bags" or storage == "Vendor" or storage == "Auction House" then return false end
     return storage == STORAGE_PRIVATE_BANK or storage == STORAGE_REAGENT_BANK
         or storage == STORAGE_WARBAND_BANK or storage == STORAGE_ALL_BANK_TABS
         or storage == STORAGE_WARBAND_ROUTED or IsWarbandTabStorage(storage)
@@ -415,6 +417,7 @@ local function GetStorageDisplayName(storageKind)
     if storageKind == STORAGE_WARBAND_BANK  then return "Warband Bank" end
     if storageKind == STORAGE_ALL_BANK_TABS then return STORAGE_ALL_BANK_TABS end
     if storageKind == "Vendor"              then return "Vendor" end
+    if storageKind == "Auction House"       then return "Auction House" end
     if storageKind == STORAGE_WARBAND_ROUTED then return STORAGE_WARBAND_ROUTED end
     if IsWarbandTabStorage(storageKind) then
         local bagID = tonumber(storageKind:sub(#WARBAND_TAB_PREFIX + 1))
@@ -639,6 +642,9 @@ local function GetTransferDestOptions()
     local vendorOpen = ns.DB and ns.DB.context and ns.DB.context.vendorOpen
     if vendorOpen then
         table.insert(opts, { text = "Vendor", value = "Vendor" })
+    end
+    if ns.DB and ns.DB.context and ns.DB.context.auctionHouseOpen then
+        table.insert(opts, { text = "Auction House", value = "Auction House" })
     end
     return opts
 end

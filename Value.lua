@@ -341,6 +341,27 @@ function P.IsValueFlagged(item, dest)
     return (P.AuctionAdvice(item, true)) == "auction"
 end
 
+-- The price to list at: the freshest trusted price, undercut by 1% (at most
+-- 5g), in whole silver (PostItem silently fails on copper) and never below
+-- the vendor price. Nil with a reason when the addon shouldn't pick it (no
+-- price, or one far above the item's usual price).
+-- Player's rule (2026-09-27): listing is one button, not a walk through
+-- Auctionator; the game only allows one auction per click.
+local LISTING_UNDERCUT = 0.01
+local LISTING_UNDERCUT_CAP = 50000   -- 5g
+P.LISTING_DURATION = 2               -- 24 hours (1 = 12 h, 3 = 48 h)
+function P.ListingPrice(item)
+    local price = GetAuctionPrice(item)
+    if not price then return nil, "No auction price known" end
+    if price.unconfirmed then return nil, "Price unconfirmed (far above this item's usual price): set it yourself" end
+    local undercut = math.min(math.floor(price.price * LISTING_UNDERCUT), LISTING_UNDERCUT_CAP)
+    local unit = math.floor((price.price - undercut) / 100) * 100
+    local floor = math.ceil(((item.sellPrice or 0) + 1) / 100) * 100
+    if unit < floor then unit = floor end
+    if unit <= 0 then return nil, "No auction price known" end
+    return unit, price
+end
+
 -- Best value of an item for reports: auction (net) when it beats vendor.
 -- Unconfirmed prices (see AuctionatorGearPrice) are not counted as value.
 function P.GetItemValue(item)
@@ -747,7 +768,7 @@ function P.RegisterValueTasks()
     if not P.RegisterTask then return end
     P.RegisterTask({
         name = "Auction Candidates",
-        description = "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags.",
+        description = "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags; at the auction house it lists them.",
         preset = { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
@@ -756,6 +777,12 @@ function P.RegisterValueTasks()
         -- counted while the review only covered the character bank: the
         -- Warband bank's axe could never be pulled).
         presetFor = function()
+            -- At the auction house the review lists what's in the bags.
+            if ns.DB.context.auctionHouseOpen then
+                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
+                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                    hideBlocked = true, sort = "Vendor Value" }
+            end
             local inBank, inWarband = 0, 0
             for _, item in ipairs(P.AuctionCandidateItems()) do
                 if item.scope ~= P.BAG_SCOPE then

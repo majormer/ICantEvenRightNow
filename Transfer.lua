@@ -387,6 +387,16 @@ local function GetTransferBlockReason(item, source, dest)
     if dest == "Vendor" then
         if not ns.DB.context.vendorOpen then return "Vendor is not open" end
         if not IsVendorSellable(item) then return "Not vendor-sellable" end
+    elseif dest == P.STORAGE_AUCTION_HOUSE then
+        if not ns.DB.context.auctionHouseOpen then return "Auction house is not open" end
+        if item.scope ~= BAG_SCOPE then return "Only items in your bags can be listed" end
+        if item.isBound or item.isSoulbound then return "Bound: can't be auctioned" end
+        if C_AuctionHouse and C_AuctionHouse.IsSellItemValid and ItemLocation then
+            local ok, valid = pcall(C_AuctionHouse.IsSellItemValid, ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot))
+            if ok and not valid then return "Can't be auctioned" end
+        end
+        local price, why = P.ListingPrice(item)
+        if not price then return why end
     elseif P.IsWarbandStorage(dest) and item.accountBankAllowed == false then
         return "Not eligible for Warband Bank"
     end
@@ -394,7 +404,7 @@ local function GetTransferBlockReason(item, source, dest)
     if item.rule then
         if item.rule.protect then return "Protected by item rule" end
         if item.rule.ignore then return "Ignored by item rule" end
-        if item.rule.neverSell and dest == "Vendor" then return "Never sell rule" end
+        if item.rule.neverSell and (dest == "Vendor" or dest == P.STORAGE_AUCTION_HOUSE) then return "Never sell rule" end
     end
 
     for _, reason in ipairs(item.blockedReasons or {}) do
@@ -409,7 +419,7 @@ local function GetTransferBlockReason(item, source, dest)
         end
         local route, why = P.RouteToWarbandTab(item)
         if not route then return why end
-    elseif dest ~= "Bags" and dest ~= "Vendor" and item.scope ~= BAG_SCOPE then
+    elseif dest ~= "Bags" and dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE and item.scope ~= BAG_SCOPE then
         for _, bagID in ipairs(GetStorageBagIDs(dest)) do
             if bagID == item.bagID then
                 return "Already in " .. GetStorageDisplayName(dest)
@@ -421,7 +431,7 @@ local function GetTransferBlockReason(item, source, dest)
         if not HasRoomIn(NORMAL_BAG_IDS, item) then
             return "No empty bag slots"
         end
-    elseif dest ~= "Vendor" then
+    elseif dest ~= "Vendor" and dest ~= P.STORAGE_AUCTION_HOUSE then
         local bagIDs, route = GetTargetBagIDs(item, dest)
         if not HasRoomIn(bagIDs, item) then
             if route and route.assigned and #route.fallbackBagIDs > 0 and not UI.warbandFallback
@@ -767,6 +777,38 @@ local function WatchSales(items)
     end
 end
 
+-- Post one auction from a click (PostItem / PostCommodity need a hardware
+-- event and can't run from /run; verified on warcraft.wiki.gg 2026-09-27).
+-- Commodities list the whole stack at a unit price; items list one.
+local function PostAuction(item)
+    if not (C_AuctionHouse and C_AuctionHouse.PostItem and ItemLocation) then
+        return false, "Auction house API unavailable"
+    end
+    local price = P.ListingPrice(item)
+    if not price then return false, "No listing price" end
+    local location = ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot)
+    local duration = P.LISTING_DURATION or 2
+    local commodityValue = Enum and Enum.ItemCommodityStatus and Enum.ItemCommodityStatus.Commodity or 2
+    local okStatus, status = pcall(C_AuctionHouse.GetItemCommodityStatus, location)
+    local commodity = okStatus and status == commodityValue
+    local ok, needsConfirmation
+    if commodity then
+        ok, needsConfirmation = pcall(C_AuctionHouse.PostCommodity, location, duration, item.count or 1, price)
+        if ok and needsConfirmation and C_AuctionHouse.ConfirmPostCommodity then
+            ok = pcall(C_AuctionHouse.ConfirmPostCommodity, location, duration, item.count or 1, price)
+        end
+    else
+        ok, needsConfirmation = pcall(C_AuctionHouse.PostItem, location, duration, 1, nil, price)
+        if ok and needsConfirmation and C_AuctionHouse.ConfirmPostItem then
+            ok = pcall(C_AuctionHouse.ConfirmPostItem, location, duration, 1, nil, price)
+        end
+    end
+    if not ok then return false, "The game refused the listing: " .. tostring(needsConfirmation) end
+    P.Log("auction", "listed %s x%s at %s each (%s)", tostring(item.name), tostring(item.count or 1),
+        P.FormatMoney(price), commodity and "commodity" or "item")
+    return true, nil
+end
+
 local function ExecuteTransferMove(item, dest, takenSlots)
     local slotProblem = VerifySourceSlot(item)
     if slotProblem then
@@ -779,6 +821,10 @@ local function ExecuteTransferMove(item, dest, takenSlots)
             return true, nil
         end
         return false, "UseContainerItem API unavailable"
+    end
+
+    if dest == P.STORAGE_AUCTION_HOUSE then
+        return PostAuction(item)
     end
 
     if not CContainer.PickupContainerItem then
@@ -822,7 +868,7 @@ local function UndoStack()
 end
 
 local function RecordUndo(source, dest, movedItems)
-    if dest == "Vendor" or #movedItems == 0 then return end
+    if dest == "Vendor" or dest == P.STORAGE_AUCTION_HOUSE or #movedItems == 0 then return end
     local counts, order = {}, {}
     for _, item in ipairs(movedItems) do
         if not counts[item.itemID] then table.insert(order, item.itemID) end
@@ -860,10 +906,13 @@ function Core.ExecuteTransferOne(plan)
         HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
-        UI.inventoryStatus = dest == "Vendor" and "Selling 1 item..." or "Moved 1 item"
+        UI.inventoryStatus = dest == "Vendor" and "Selling 1 item..."
+            or dest == P.STORAGE_AUCTION_HOUSE and "Listed 1 item" or "Moved 1 item"
         Core.RefreshUI()
         if dest == "Vendor" then
             WatchSales({ item })
+        elseif dest == P.STORAGE_AUCTION_HOUSE then
+            Print("Listed: " .. ItemLabel(item) .. " at " .. P.FormatMoney((P.ListingPrice(item))) .. " each.")
         else
             Print("Transferred: " .. ItemLabel(item))
         end
@@ -883,6 +932,9 @@ end
 -- 12 per click means every sale from one click can still be bought back.
 local VENDOR_BATCH_SIZE = 12
 P.VENDOR_BATCH_SIZE = VENDOR_BATCH_SIZE
+-- The game accepts one auction per click; the rest stay selected.
+local LISTING_BATCH_SIZE = 1
+P.LISTING_BATCH_SIZE = LISTING_BATCH_SIZE
 
 -- Grey (junk) items don't need buyback protection, so they don't count toward
 -- the 12 and are sold first; the buyback then still holds this click's
@@ -921,8 +973,10 @@ function Core.ExecuteTransferSelected()
         plans = VendorOrder(plans)
         BeginSales(GetMoney and GetMoney() or nil)
     end
+    local listed = 0
     for _, plan in ipairs(plans) do
         local capped = dest == "Vendor" and not IsJunk(plan.item) and protectedSold >= VENDOR_BATCH_SIZE
+            or dest == P.STORAGE_AUCTION_HOUSE and listed >= LISTING_BATCH_SIZE
         if UI.transferSelected[plan.key] and capped then
             remaining = remaining + 1
         elseif UI.transferSelected[plan.key] then
@@ -941,6 +995,7 @@ function Core.ExecuteTransferSelected()
                     movedKeys[item.key] = true
                     table.insert(movedItems, item)
                     moved = moved + 1
+                    listed = listed + 1
                     if not IsJunk(item) then protectedSold = protectedSold + 1 end
                 else
                     blockReason = err or "failed"
@@ -966,7 +1021,7 @@ function Core.ExecuteTransferSelected()
         HoldReservedSlotsUntilSettled()
     end
     if moved > 0 or blocked > 0 then
-        local action = dest == "Vendor" and "sent to the vendor" or "moved"
+        local action = dest == "Vendor" and "sent to the vendor" or dest == P.STORAGE_AUCTION_HOUSE and "listed" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
             .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
@@ -977,10 +1032,16 @@ function Core.ExecuteTransferSelected()
     Core.RefreshUI()
     if dest == "Vendor" then
         Print("Selling " .. moved .. (blocked > 0 and (", " .. blocked .. " blocked") or "") .. "; checking the vendor's answer...")
+    elseif dest == P.STORAGE_AUCTION_HOUSE then
+        local last = movedItems[1]
+        Print("Listed " .. moved .. (last and (": " .. ItemLabel(last) .. " at " .. P.FormatMoney((P.ListingPrice(last))) .. " each") or "")
+            .. (blocked > 0 and ("; " .. blocked .. " blocked") or "") .. ".")
     else
         Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
     end
-    if remaining > 0 then
+    if remaining > 0 and dest == P.STORAGE_AUCTION_HOUSE then
+        Print(remaining .. " more selected. Click List again for the next one (the game allows one auction per click).")
+    elseif remaining > 0 then
         Print(remaining .. " more selected. Click Sell again for the next batch; the vendor can buy back your last "
             .. VENDOR_BATCH_SIZE .. " sales.")
     end

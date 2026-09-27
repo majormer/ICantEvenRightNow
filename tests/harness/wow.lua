@@ -19,6 +19,7 @@ local ENUM = {
         AccountBankTab_4 = 15, AccountBankTab_5 = 16,
     },
     BankType = { Character = 0, Guild = 1, Account = 2 },
+    ItemCommodityStatus = { Unknown = 0, Item = 1, Commodity = 2 },
     ItemBind = {
         None = 0, OnAcquire = 1, OnEquip = 2, OnUse = 3, Quest = 4,
         Unused1 = 5, Unused2 = 6, ToWoWAccount = 7, ToBnetAccount = 8, ToBnetAccountUntilEquipped = 9,
@@ -936,8 +937,30 @@ function World:_buildEnv()
     }
 
     -- Auction house (minimal; price lookups are faked per test)
+    local function postAuction(location, duration, quantity, unitPrice)
+        local stack = stackFor(location)
+        assert(stack, "no item at the location")
+        assert(unitPrice % 100 == 0, "PostItem silently fails on copper")
+        world.posted = world.posted or {}
+        table.insert(world.posted, { itemID = stack.itemID, quantity = quantity, unitPrice = unitPrice, duration = duration })
+        world.containers[location.bagID].slots[location.slotIndex] = nil
+        world:fire("AUCTION_HOUSE_AUCTION_CREATED", #world.posted)
+        return world.postNeedsConfirmation or false
+    end
     G.C_AuctionHouse = {
         IsThrottledMessageSystemReady = function() return true end,
+        GetItemCommodityStatus = function(location)
+            local stack = stackFor(location)
+            local def = stack and world.items[stack.itemID]
+            if not def then return 0 end
+            return def.maxStack > 1 and 2 or 1
+        end,
+        CalculateItemDeposit = function() return 100 end,
+        CalculateCommodityDeposit = function() return 100 end,
+        PostItem = function(location, duration, quantity, bid, buyout) return postAuction(location, duration, quantity, buyout) end,
+        PostCommodity = function(location, duration, quantity, unitPrice) return postAuction(location, duration, quantity, unitPrice) end,
+        ConfirmPostItem = function() end,
+        ConfirmPostCommodity = function() end,
         IsSellItemValid = function(location)
             local stack = stackFor(location)
             if not stack then return false end
