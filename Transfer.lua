@@ -392,7 +392,6 @@ local function GetTransferBlockReason(item, source, dest)
         if item.scope ~= BAG_SCOPE then return "Only items in your bags can be listed" end
         local channels = P.ItemChannels(item)
         if not channels.auction then return channels.why.auction end
-        if P.AuctionSellValid(item) == false then return "Can't be auctioned" end
         local price, why = P.ListingPrice(item)
         if not price then return why end
     elseif P.IsWarbandStorage(dest) then
@@ -792,9 +791,10 @@ local function WatchSales(items)
 end
 
 -- The game's own answer on whether a bag item can be posted (nil when the
--- API isn't there). Right after the auction house opens it says no for
--- everything for a moment (in game: "All 30 matching items are blocked"),
--- so Readiness waits for it instead of showing that verdict.
+-- API isn't there). Diagnostics only: in game it said no for every item
+-- whose data the client hadn't loaded yet (85 items after a reload) and yes
+-- for a Warbound item the game then refused. The channels model decides;
+-- the game's answer after posting is the confirmation.
 function P.AuctionSellValid(item)
     if not (C_AuctionHouse and C_AuctionHouse.IsSellItemValid and ItemLocation) then return nil end
     if item.scope ~= BAG_SCOPE or not item.bagID or not item.slot then return nil end
