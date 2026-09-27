@@ -87,3 +87,58 @@ T.test("at a vendor the notice suggests selling, not auction candidates", functi
     local _, dest = g:P().GetTaskRoute(card.task)
     T.eq(dest, "Vendor")
 end)
+
+-- A merchant that refuses an item (in game: "The merchant doesn't want that item.").
+local function refusingGame()
+    return T.game({ player = PLAYER, setup = F.setup(function(w)
+        for slot = 1, 2 do w:put(0, slot, I.JUNK, 1) end
+        w:defineItem(8801, { name = "Niffen Soup", classID = 0, subclassID = 5, quality = 1, sellPrice = 1875,
+            expansionID = 9, maxStack = 20, vendorRefuses = true })
+        w:put(0, 3, 8801, 1)
+    end) })
+end
+
+T.test("sales are confirmed: items the merchant refuses aren't reported as sold", function()
+    local g = refusingGame()
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    local mark = g:logMark()
+    sellAll(g)
+    g.world:advance(3)
+    local chat = g:printed(mark)
+    T.contains(chat, "Sold 2 of 3")
+    T.contains(chat, "The merchant refused 1: Niffen Soup")
+    T.contains(chat, "doesn't want that item")
+    T.notContains(chat, "3 sold")
+    T.eq(#g.world.sold, 2)
+end)
+
+T.test("an item the merchant refused is blocked for the visit, then allowed again", function()
+    local g = refusingGame()
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    sellAll(g)
+    g.world:advance(3)
+    local P, UI = g:P(), g:UI()
+    P.OpenTask("Sell Items That Can Go")
+    local soup
+    for _, plan in ipairs(UI.transferPlansAll or UI.transferVisible or {}) do
+        if plan.item.itemID == 8801 then soup = plan end
+    end
+    T.ok(P.MerchantRefused(8801), "remembered for this visit")
+    if soup then T.ok(not soup.movable, "not offered for sale again") end
+    g:closeVendor()
+    T.ok(not P.MerchantRefused(8801), "another merchant may buy it")
+end)
+
+T.test("a clean sale reports what was earned", function()
+    local g = T.game({ player = PLAYER, setup = F.setup(function(w) w:put(0, 1, I.JUNK, 1) end) })
+    g:openVendor()
+    g:Core().ShowHomeUI()
+    local mark = g:logMark()
+    sellAll(g)
+    T.contains(g:printed(mark), "checking the vendor's answer")
+    g.world:advance(3)
+    T.contains(g:printed(mark), "Sold 1")
+    T.notContains(g:printed(mark), "refused")
+end)

@@ -373,6 +373,12 @@ function World:sell(bagID, slot)
         table.insert(self.log, "UI_ERROR: That item cannot be sold.")
         return
     end
+    -- def.vendorRefuses: this merchant won't take it (seen in game at a
+    -- traveling vendor): the item stays, and the server reports UI error 42.
+    if def.vendorRefuses then
+        self:fire("UI_ERROR_MESSAGE", 42, "The merchant doesn't want that item.")
+        return
+    end
     if self.asyncMoves and not stack.selling then
         -- Like the server: the stack stays in the slot, locked, until the
         -- sale settles, and a bag update fires meanwhile.

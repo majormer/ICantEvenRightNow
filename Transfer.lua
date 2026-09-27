@@ -366,6 +366,9 @@ P.WARBAND_ASSIGNED_FULL = WARBAND_ASSIGNED_FULL
 local function GetTransferBlockReason(item, source, dest)
     if ns.DB.context.inCombat then return "In combat" end
     if source == dest then return "Source and destination are the same" end
+    if dest == "Vendor" and P.MerchantRefused and P.MerchantRefused(item.itemID) then
+        return "This merchant won't buy it"
+    end
 
     local needsBank = NeedsBankStorage(source) or NeedsBankStorage(dest)
     if needsBank and not ns.DB.context.bankOpen then
@@ -550,6 +553,117 @@ function P.IsPendingFromSlot(item, isLocked)
     return true
 end
 
+local function ItemLabel(item)
+    return item.name or ("Item " .. item.itemID)
+end
+
+-- ===========================================================================
+-- Sale confirmation
+-- The server can refuse a sale after UseContainerItem returns: in game a
+-- traveling vendor answered "The merchant doesn't want that item." (UI error
+-- 42) and the items stayed in the bags while the addon reported them sold.
+-- So each sale is checked a moment later (slot emptied, gold earned), the
+-- report says what really happened, and refused items are blocked for the
+-- rest of the visit (another merchant may buy them).
+-- ===========================================================================
+local SALE_CHECK_DELAY = 1.5
+local SALE_CHECK_TRIES = 4
+local refusedByMerchant = {}   -- [itemID] = reason, until the merchant closes
+local saleWatch = nil          -- { items, errors, moneyBefore, tries }
+
+function P.MerchantRefused(itemID) return itemID and refusedByMerchant[itemID] end
+
+if CreateFrame then
+    local saleFrame = CreateFrame("Frame")
+    saleFrame:RegisterEvent("UI_ERROR_MESSAGE")
+    saleFrame:RegisterEvent("MERCHANT_CLOSED")
+    saleFrame:SetScript("OnEvent", function(_, event, _, message)
+        if event == "MERCHANT_CLOSED" then
+            refusedByMerchant = {}
+        elseif saleWatch and type(message) == "string" then
+            table.insert(saleWatch.errors, message)
+        end
+    end)
+end
+
+local function MoneyText(copper)
+    if not copper then return nil end
+    return GetCoinTextureString and GetCoinTextureString(copper)
+        or (math.floor(copper / 10000) .. "g " .. math.floor(copper / 100) % 100 .. "s")
+end
+
+local CheckSales
+CheckSales = function()
+    local watch = saleWatch
+    if not watch then return end
+    local sold, refused, waiting = {}, {}, false
+    for _, item in ipairs(watch.items) do
+        local id = CContainer.GetContainerItemID(item.bagID, item.slot)
+        local info = CContainer.GetContainerItemInfo(item.bagID, item.slot)
+        if id == item.itemID and info and info.isLocked then
+            waiting = true
+        elseif id == item.itemID then
+            table.insert(refused, item)
+        else
+            table.insert(sold, item)
+        end
+    end
+    if waiting and watch.tries < SALE_CHECK_TRIES then
+        watch.tries = watch.tries + 1
+        C_Timer.After(SALE_CHECK_DELAY, CheckSales)
+        return
+    end
+    saleWatch = nil
+    local reason = watch.errors[#watch.errors]
+    local earned = GetMoney and watch.moneyBefore and (GetMoney() - watch.moneyBefore) or nil
+    local earnedText = earned and earned > 0 and (" (" .. MoneyText(earned) .. ")") or ""
+    P.Log("transfer", "confirmed: %d sold, %d refused, earned %s%s", #sold, #refused, tostring(earned),
+        reason and (" (" .. reason .. ")") or "")
+    local names = {}
+    for _, item in ipairs(refused) do
+        refusedByMerchant[item.itemID] = reason or "The merchant didn't buy it"
+        pendingFromSlots[P.LocationKey(item)] = nil
+        P.Log("transfer", "refused by the merchant: %s (%s %s:%s)", tostring(item.name), tostring(item.itemID),
+            tostring(item.bagID), tostring(item.slot))
+        if #names < 3 then names[#names + 1] = ItemLabel(item) end
+    end
+    if #refused > 0 then
+        UI.inventoryStatus = #sold .. " sold, " .. #refused .. " refused by the merchant"
+        Print("Sold " .. #sold .. " of " .. #watch.items .. earnedText
+            .. ". The merchant refused " .. #refused .. ": " .. table.concat(names, ", ")
+            .. (#refused > #names and ", ..." or "") .. (reason and (" (" .. reason .. ")") or "") .. ".")
+        -- They are back in the bags: show that (the result of the player's click).
+        Core.ScanInventory("bags", true)
+    else
+        UI.inventoryStatus = "Sold " .. #sold .. earnedText
+        Print("Sold " .. #sold .. earnedText .. ".")
+        if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+    end
+end
+
+-- Start listening before the first sale (the merchant's error can arrive
+-- before the click's loop ends). `moneyBefore`: gold before the click.
+local function BeginSales(moneyBefore)
+    if not saleWatch then
+        saleWatch = { items = {}, errors = {}, moneyBefore = moneyBefore, tries = 0 }
+    end
+end
+
+-- Check the sales sent since BeginSales shortly.
+local function WatchSales(items)
+    local watch = saleWatch
+    if not watch then return end
+    for _, item in ipairs(items) do table.insert(watch.items, item) end
+    if #watch.items == 0 or not C_Timer then
+        saleWatch = nil
+        return
+    end
+    if not watch.scheduled then
+        watch.scheduled = true
+        C_Timer.After(SALE_CHECK_DELAY, CheckSales)
+    end
+end
+
 local function ExecuteTransferMove(item, dest, takenSlots)
     local slotProblem = VerifySourceSlot(item)
     if slotProblem then
@@ -589,10 +703,6 @@ local function ExecuteTransferMove(item, dest, takenSlots)
     end
     takenSlots[toKey] = true
     return true, nil
-end
-
-local function ItemLabel(item)
-    return item.name or ("Item " .. item.itemID)
 end
 
 -- ===========================================================================
@@ -635,6 +745,7 @@ function Core.ExecuteTransferOne(plan)
         Print("Cannot transfer " .. ItemLabel(item) .. ": " .. blocked)
         return
     end
+    if dest == "Vendor" then BeginSales(GetMoney and GetMoney() or nil) end
     local moved, err = ExecuteTransferMove(item, dest, reservedTargetSlots)
     P.Log("transfer", "%s %s x%s (%s %s:%s) -> %s: %s (row button)", dest == "Vendor" and "sell" or "move",
         item.name, item.count or 1, item.itemID, item.bagID, item.slot, dest,
@@ -646,11 +757,16 @@ function Core.ExecuteTransferOne(plan)
         HoldReservedSlotsUntilSettled()
         UI.transferSelected[plan.key] = nil
         RemoveMovedItemsFromScan({ [item.key] = true })
-        UI.inventoryStatus = dest == "Vendor" and "Sold 1 item" or "Moved 1 item"
+        UI.inventoryStatus = dest == "Vendor" and "Selling 1 item..." or "Moved 1 item"
         Core.RefreshUI()
-        Print((dest == "Vendor" and "Sold: " or "Transferred: ") .. ItemLabel(item))
+        if dest == "Vendor" then
+            WatchSales({ item })
+        else
+            Print("Transferred: " .. ItemLabel(item))
+        end
         Core.ScheduleRescanAfterMove()
     else
+        if dest == "Vendor" then WatchSales({}) end   -- nothing sent: stop listening
         UI.inventoryStatus = "Failed: " .. (err or "unknown error")
         Core.RefreshUI()
         Print("Transfer failed: " .. ItemLabel(item) .. ": " .. (err or "unknown error"))
@@ -698,7 +814,10 @@ function Core.ExecuteTransferSelected()
     local protectedSold = 0
     local movedItems = {}
     local plans = UI.transferVisible or {}
-    if dest == "Vendor" then plans = VendorOrder(plans) end
+    if dest == "Vendor" then
+        plans = VendorOrder(plans)
+        BeginSales(GetMoney and GetMoney() or nil)
+    end
     for _, plan in ipairs(plans) do
         local capped = dest == "Vendor" and not IsJunk(plan.item) and protectedSold >= VENDOR_BATCH_SIZE
         if UI.transferSelected[plan.key] and capped then
@@ -744,14 +863,20 @@ function Core.ExecuteTransferSelected()
         HoldReservedSlotsUntilSettled()
     end
     if moved > 0 or blocked > 0 then
-        local action = dest == "Vendor" and "sold" or "moved"
+        local action = dest == "Vendor" and "sent to the vendor" or "moved"
         UI.inventoryStatus = moved .. " " .. action .. ", " .. blocked .. " blocked"
             .. (remaining > 0 and (", " .. remaining .. " still selected") or "")
     end
+    -- Sales are confirmed a moment later (the merchant can refuse them).
+    if dest == "Vendor" then WatchSales(movedItems) end
     P.Log("transfer", "done %s -> %s: %d %s, %d blocked, %d still selected", source, dest, moved,
         dest == "Vendor" and "sold" or "moved", blocked, remaining)
     Core.RefreshUI()
-    Print("Transfer complete: " .. moved .. " " .. (dest == "Vendor" and "sold" or "moved") .. ", " .. blocked .. " blocked.")
+    if dest == "Vendor" then
+        Print("Selling " .. moved .. (blocked > 0 and (", " .. blocked .. " blocked") or "") .. "; checking the vendor's answer...")
+    else
+        Print("Transfer complete: " .. moved .. " moved, " .. blocked .. " blocked.")
+    end
     if remaining > 0 then
         Print(remaining .. " more selected. Click Sell again for the next batch; the vendor can buy back your last "
             .. VENDOR_BATCH_SIZE .. " sales.")

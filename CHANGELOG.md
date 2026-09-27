@@ -46,6 +46,8 @@ Release note rules:
 
 ### Improved
 
+- **Sales are confirmed.** After you click Sell, the addon checks what the vendor actually bought and reports it ("Sold 7 of 9 (250g 64s). The merchant refused 2: ..."). Items a merchant refuses are marked "This merchant won't buy it" until you close the vendor, instead of being reported as sold.
+
 - Identical stacks share one row, and an optional compact mode shows 9 rows per screen.
 - Items worth noticeably more at auction are flagged when selling to a vendor and are never pre-selected for vendor sales.
 - The Transfer view names the task you opened and shows "(modified)" after you change it; "Save as task" saves the current setup as a Home card.

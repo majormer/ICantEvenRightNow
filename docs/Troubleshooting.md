@@ -65,6 +65,10 @@ Check `/icanteven ctx`. Known false signals, all removed:
 - A child frame keeps its own shown flag while its parent is hidden (`BankPanelCopperButton`). Use `IsVisible`, not `IsShown`.
 - Broad name patterns such as `bank` match unrelated frames.
 
+### "The merchant refused N" / sold items come back
+
+Some merchants won't buy some items (in testing, a traveling vendor on a mount refused Strong Sniffin' Soup for Niffen and Soul Sigil II with "The merchant doesn't want that item."). The addon checks every sale a moment after the click: the report says how many really sold, what was earned, and which items the merchant refused and why. Refused items are blocked ("This merchant won't buy it") until the merchant window closes; try another vendor.
+
 ### Items vanish at a vendor before you click anything
 
 Another addon sold them (seen with the "Vendor" addon). This addon only sells selected items from a Sell click, at most 12 per click. Check the Buyback tab, and disable auto-sell in other addons while testing.
