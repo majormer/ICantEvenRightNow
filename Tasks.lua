@@ -278,7 +278,9 @@ function P.GetTopReadyCard()
                 best = card
             end
         end
-        if best then return best end
+        -- Nothing to sell: no notice (an auction or bank task isn't what a
+        -- vendor visit is for; in game Auction Candidates showed again).
+        return best
     end
     for _, card in ipairs(cards) do
         if card.ready > 0 then return card end

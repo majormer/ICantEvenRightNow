@@ -175,3 +175,16 @@ T.test("sell cards don't count items worth far more at auction as ready", functi
     T.eq(card.worthMore, 2)
     T.contains(P.CardSummary(card), "worth more at auction")
 end)
+
+T.test("at a vendor with nothing to sell, no notice (not an auction task)", function()
+    local g = game(function(w)
+        w:put(0, 1, I.OLD_POTION, 5)
+    end, withAuctionator({ [I.OLD_POTION] = 250000 }, { [I.OLD_POTION] = 1 }))
+    local P = g:P()
+    P.SetCharacterRole(P.currentCharacterKey, "main")
+    g:openVendor()
+    g:advance(9)
+    T.eq(P.GetTopReadyCard(), nil)
+    local notice = g:UI().contextNoticeFrame
+    T.ok(not notice or not notice:IsShown(), "no notice")
+end)
