@@ -12,7 +12,7 @@ local UI = P.UI
 local BAG_SCOPE  = P.BAG_SCOPE
 local BANK_SCOPE = P.BANK_SCOPE
 
-local CARD_WIDTH, CARD_HEIGHT = 398, 100
+local CARD_WIDTH, CARD_HEIGHT = 398, 112   -- two description lines (player's request 2026-09-27)
 local CARD_GAP = 10
 local CARDS_PER_PAGE = 6
 local CARDS_TOP = -112
@@ -245,11 +245,15 @@ local function CreateCard(parent, index)
     card.summary:SetWidth(CARD_WIDTH - 24)
     card.summary:SetWordWrap(false)
 
-    -- One full-width line; the whole description is in the card's tooltip.
+    -- Two wrapped lines; the whole description is still in the card's tooltip.
     card.description = kit.CreateLabel(card, "", "GameFontDisableSmall")
     card.description:SetPoint("TOPLEFT", card.summary, "BOTTOMLEFT", 0, -6)
     card.description:SetWidth(CARD_WIDTH - 24)
-    card.description:SetWordWrap(false)
+    card.description:SetHeight(26)
+    card.description:SetWordWrap(true)
+    card.description:SetJustifyH("LEFT")
+    card.description:SetJustifyV("TOP")
+    if card.description.SetMaxLines then card.description:SetMaxLines(2) end
 
     card.open = kit.CreateButton(card, "Review", 84, 22)
     card.open:SetPoint("BOTTOMRIGHT", card, "BOTTOMRIGHT", -10, 8)

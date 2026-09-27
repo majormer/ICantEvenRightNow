@@ -359,7 +359,11 @@ local function Build()
     frame = CreateFrame("Frame", "ICantEvenTriageFrame", UIParent)
     frame:SetSize(640, 440)
     frame:SetPoint("CENTER")
-    frame:SetFrameStrata("DIALOG")
+    -- Above the console (in game a DIALOG frame sat behind it, like the
+    -- price-first prompt did).
+    frame:SetFrameStrata("FULLSCREEN_DIALOG")
+    if frame.SetToplevel then frame:SetToplevel(true) end
+    frame:SetFrameLevel((UIParent and UIParent:GetFrameLevel() or 0) + 60)
     frame:SetMovable(true) frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
