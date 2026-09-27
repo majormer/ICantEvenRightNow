@@ -75,6 +75,30 @@ P.IsMythicKeystone = IsMythicKeystone
 -- Binding detection
 -- ===========================================================================
 
+-- The binding line of a bag item's tooltip: "warbound", "soulbound", or nil.
+-- It decides Warbound vs Soulbound for bound items: in game
+-- C_Bank.IsItemAllowedInBankType flipped for the same bag item between reads
+-- (L00T RAID-R Mini showed Soulbound while its tooltip said Warbound, and
+-- Soul Sigil II the other way round).
+local function TooltipBinding(bagID, slot)
+    if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
+    if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local warbound = {
+        [ITEM_ACCOUNTBOUND or "Warbound"] = true,
+        [ITEM_BNETACCOUNTBOUND or "Warbound"] = true,
+        ["Warbound"] = true,
+    }
+    local soulbound = ITEM_SOULBOUND or "Soulbound"
+    -- The binding line is near the top; later lines are descriptions.
+    for i = 1, math.min(#data.lines, 6) do
+        local text = data.lines[i] and data.lines[i].leftText
+        if warbound[text] then return "warbound" end
+        if text == soulbound then return "soulbound" end
+    end
+    return nil
+end
+
 local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
     local details = {
         bindingScope    = fallbackIsBound and "Bound" or "Unbound",
@@ -146,7 +170,17 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         end
     end
 
-    if details.isBound then
+    local tooltipBinding = details.isBound and TooltipBinding(bagID, slot) or nil
+    if details.isBound and tooltipBinding == "warbound" then
+        details.bindingScope   = "Warbound"
+        details.isSoulbound    = false
+        details.isWarbandBound = true
+        details.accountBankAllowed = true
+    elseif details.isBound and tooltipBinding == "soulbound" then
+        details.isSoulbound        = true
+        details.accountBankAllowed = false
+        details.bindingScope = details.bindingScope == "Quest" and "Quest" or "Soulbound"
+    elseif details.isBound then
         details.isSoulbound        = true
         details.accountBankAllowed = false
         if C_Bank and C_Bank.IsItemAllowedInBankType and Enum and Enum.BankType and Enum.BankType.Account then

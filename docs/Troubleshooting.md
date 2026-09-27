@@ -88,6 +88,10 @@ Gear is judged partly on its main stat and appearance, which the game loads on d
 
 In the Warband bank the game's binding functions report such items as unbound; the addon reads the tooltip there instead (`ITEM_ACCOUNTBOUND_UNTIL_EQUIP`).
 
+### An item flips between "Soulbound" and "Warbound"
+
+The game's bank-eligibility check answers differently between reads for some bound items. The addon reads the binding line of the item's tooltip instead ("Warbound" or "Soulbound"), and only falls back to the bank check when the tooltip has no binding line.
+
 ### Items show without names, or as "Item 12345"
 
 The client hadn't loaded their data when they were scanned. `/icanteven itemdata` shows what's still missing. Scans retry when data arrives (`GET_ITEM_INFO_RECEIVED`).

@@ -196,6 +196,7 @@ function World:put(bagID, slot, itemID, count, opts)
     container.slots[slot] = {
         itemID = itemID, count = count or 1, locked = opts.locked or false,
         bound = opts.bound or false, wue = opts.warboundUntilEquipped or false, apiHidesWue = opts.apiHidesWue,
+        tooltipBinding = opts.tooltipBinding,
         questActive = opts.questActive,
     }
     return container.slots[slot]
@@ -459,6 +460,8 @@ function World:_buildEnv()
             if not stack then return nil end
             local lines = { { leftText = (world.items[stack.itemID] or {}).name or "?" } }
             if stack.wue then table.insert(lines, { leftText = "Warbound until equipped" }) end
+            -- stack.tooltipBinding: the binding line the tooltip shows ("Warbound", "Soulbound").
+            if stack.tooltipBinding then table.insert(lines, { leftText = stack.tooltipBinding }) end
             return { lines = lines }
         end,
     }

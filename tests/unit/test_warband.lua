@@ -366,3 +366,25 @@ T.test("task lists log what is left out and what joins later", function()
     g:Core().RefreshUI()
     T.contains(table.concat(g:P().GetLogLines(), " | "), "JOINED Broken Tusk")
 end)
+
+T.test("bound items: the tooltip's binding line wins over a flickering bank check", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        -- The bank check says "not allowed" (in game it flickered), the tooltip says Warbound.
+        w:defineItem(8901, { name = "Loot Gadget", classID = 0, quality = 3, sellPrice = 100, expansionID = 10,
+            bindType = 1, accountBankAllowed = false })
+        w:put(0, 1, 8901, 1, { bound = true, tooltipBinding = "Warbound" })
+        -- And the other way: the bank check says "allowed", the tooltip says Soulbound.
+        w:defineItem(8902, { name = "Sigil", classID = 7, quality = 3, sellPrice = 100, expansionID = 10,
+            bindType = 1, accountBankAllowed = true })
+        w:put(0, 2, 8902, 1, { bound = true, tooltipBinding = "Soulbound" })
+    end })
+    g:Core().ScanInventory("bags", true)
+    local byID = {}
+    for _, it in ipairs(g:P().GetScanList("bags")) do byID[it.itemID] = it end
+    T.eq(byID[8901].bindingScope, "Warbound")
+    T.ok(byID[8901].accountBankAllowed, "can go to the Warband bank")
+    T.eq(byID[8902].bindingScope, "Soulbound")
+    T.ok(not byID[8902].accountBankAllowed)
+end)
