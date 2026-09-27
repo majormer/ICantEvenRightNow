@@ -107,6 +107,39 @@ P.RegisterHomeNotice(function()
     }
 end)
 
+-- Old class-set pieces replaced by the set the character wears (player's
+-- rule: ask proactively; "Keep for now" asks again after an upgrade).
+-- Priority 50 (D-029): after tips and questions, before price hints.
+P.RegisterHomeNotice(function()
+    local char = P.GetCurrentCharacter()
+    if not (char and P.ExplainScanned and P.AllSnapshots) then return nil end
+    local items, setName = {}, nil
+    for _, snapshot in ipairs(P.AllSnapshots()) do
+        if snapshot.character and snapshot.character.key == char.key then
+            for _, item in ipairs(snapshot.items or {}) do
+                local explanation = P.ExplainScanned(item)
+                if explanation.primary and explanation.primary.id == "set_replaced" then
+                    items[#items + 1] = item
+                    setName = setName or (P.ItemTooltipFacts and P.ItemTooltipFacts(item).setName)
+                end
+            end
+        end
+    end
+    if #items == 0 then return nil end
+    return {
+        id = "old-class-set", priority = 50,
+        text = "Old class set: " .. #items .. " piece" .. (#items == 1 and "" or "s") .. " of "
+            .. (setName or "an older set") .. " can go. You wear a newer class set, and these can't be upgraded.",
+        buttons = {
+            { label = "Review", style = "primary", onClick = function() P.OpenTask("Sell Items That Can Go") end },
+            { label = "Keep for now", onClick = function()
+                for _, item in ipairs(items) do P.SetKeepReason(item.itemID, "fornow", item.name, nil, item) end
+                Core.RefreshUI()
+            end },
+        },
+    }
+end)
+
 -- ---------------------------------------------------------------------------
 -- Home tab
 -- ---------------------------------------------------------------------------

@@ -116,6 +116,7 @@ function World.new(opts)
     self.pendingMoves = {}
     self.bankTabs = { [0] = {}, [2] = {} }
     self.equipped = {}
+    self.equippedItems = {}   -- [slot] = itemID (for sets); levels stay in self.equipped
     self.quests = { completed = {}, active = {} }
     self.collections = { appearances = {}, toys = {}, mounts = {}, pets = {} }
     self.player = {
@@ -450,10 +451,27 @@ function World:_buildEnv()
     G.time = function(t) if t then return os.time(t) end return math.floor(world.now) end
     G.date = function(fmt, t) return os.date(fmt, t or math.floor(world.now)) end
     G.GetTime = function() return world.now end
+    G.GetInventoryItemID = function(_, slot) return world.equippedItems[slot] end
+    G.GetInventoryItemLink = function(_, slot)
+        local itemID = world.equippedItems[slot]
+        return itemID and world:itemLink(itemID) or nil
+    end
+    G.ITEM_UPGRADE_TOOLTIP_FORMAT_STRING = "Upgrade Level: %s %d/%d"
+    G.ITEM_CLASSES_ALLOWED = "Classes: %s"
     G.GetServerTime = function() return math.floor(world.now) end
     G.GetMoney = function() return world.money end
     G.ITEM_ACCOUNTBOUND_UNTIL_EQUIP = "Warbound until equipped"
     G.C_TooltipInfo = {
+        -- def.tooltipLines: extra lines ("Upgrade Level: Hero 2/6", "(2) Set: ...").
+        GetHyperlink = function(link)
+            local itemID = parseItemID(link)
+            local def = itemID and world.items[itemID]
+            if not def then return nil end
+            if def.tooltipLoading then return { lines = { { leftText = "Retrieving item information" } } } end
+            local lines = { { leftText = def.name or "?" } }
+            for _, text in ipairs(def.tooltipLines or {}) do lines[#lines + 1] = { leftText = text } end
+            return { lines = lines }
+        end,
         GetBagItem = function(bagID, slot)
             local c = world.containers[bagID]
             local stack = c and c.slots[slot]
@@ -710,7 +728,7 @@ function World:_buildEnv()
         return def.name, world:itemLink(itemID), def.quality, def.itemLevel, def.requiredLevel,
             def.itemType or "Miscellaneous", def.itemSubType or "Other", def.maxStack, def.equipLoc,
             def.icon, def.sellPrice, def.classID, def.subclassID, def.bindType, def.expansionID,
-            nil, def.isCraftingReagent or false
+            def.setID, def.isCraftingReagent or false
     end
     G.GetItemInfo = getItemInfo
     G.C_Item = {

@@ -40,6 +40,7 @@ local REASONS = {
     keep_for_alt         = { disposition = "keep",   label = "You're keeping it for an alt" },
     keep_event           = { disposition = "keep",   label = "You're keeping it for an event" },
     keep_investment      = { disposition = "keep",   label = "You're holding it as an investment" },
+    keep_for_now         = { disposition = "keep",   label = "You're keeping it for now" },
     quest_active         = { disposition = "keep",   label = "Quest in progress" },
     collectible_unlearned = { disposition = "keep",  label = "Collectible not learned yet" },
     appearance_uncollected = { disposition = "keep", label = "Appearance not collected yet" },
@@ -55,6 +56,8 @@ local REASONS = {
     old_consumable       = { disposition = "free",   label = "Consumable from a past expansion" },
     unused_material      = { disposition = "free",   label = "Material no crafter on your account uses" },
     unused_gear          = { disposition = "free",   label = "Gear none of your played characters can use" },
+    set_replaced         = { disposition = "free",   label = "Old class set: replaced by the set you wear" },
+    outgrown_no_upgrade  = { disposition = "free",   label = "Below what you wear, and it can't be upgraded" },
     -- Outranks the other free reasons: selling isn't an option, so say what is.
     vendor_refused       = { disposition = "free",   label = "No vendor buys it: destroy it or keep it", rank = 1.9 },
     -- review
@@ -66,6 +69,7 @@ local REASONS = {
     roles_needed         = { disposition = "review", label = "Assign character roles to see who can use this" },
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
     situational_gear     = { disposition = "review", label = "Max-level trinket or weapon: check before selling" },
+    set_completes        = { disposition = "review", label = "Completes a set bonus: your call" },
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
@@ -76,12 +80,14 @@ P.REASONS = REASONS
 
 local KEEP_REASON_BY_CHOICE = {
     keepsake = "keepsake", alt = "keep_for_alt", event = "keep_event", investment = "keep_investment",
+    fornow = "keep_for_now",
 }
 P.KEEP_REASON_CHOICES = {
     { value = "keepsake",   label = "Keepsake" },
     { value = "alt",        label = "For an alt" },
     { value = "event",      label = "For an event" },
     { value = "investment", label = "Investment" },
+    { value = "fornow",     label = "For now" },
 }
 
 -- ---------------------------------------------------------------------------
@@ -427,21 +433,91 @@ local function Names(list, field)
     return table.concat(names, ", ")
 end
 
+-- The lowest item level the character wears in the item's slot(s), or nil.
+-- `skip`: slots to leave out (e.g. the ring slot already holding a set piece).
+local function EquippedLevelFor(char, item, skip)
+    local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
+    if not (char and slots and char.equipped) then return nil end
+    local lowest
+    for _, slot in ipairs(slots) do
+        local level = not (skip and skip[slot]) and char.equipped[slot] or nil
+        if type(level) == "number" and level > 0 and (not lowest or level < lowest) then lowest = level end
+    end
+    return lowest
+end
+P.EquippedLevelFor = EquippedLevelFor
+
+-- Distinct slots of a set the character holds in bags and bank (plus the
+-- Warband bank for pieces that aren't soulbound).
+local function HeldSetSlots(char, setID)
+    local slots, count = {}, 0
+    for _, snapshot in ipairs(P.AllSnapshots and P.AllSnapshots() or {}) do
+        local mine = snapshot.character and snapshot.character.key == char.key
+        if mine or snapshot.scope == "warband" then
+            for _, held in ipairs(snapshot.items or {}) do
+                local fits = mine or not held.isSoulbound
+                if fits and held.equipLoc and not slots[held.equipLoc] and P.ItemSetID(held) == setID then
+                    slots[held.equipLoc] = true
+                    count = count + 1
+                end
+            end
+        end
+    end
+    return count
+end
+
+-- Set rules for gear someone can wear but that isn't an upgrade. Returns a
+-- reason id and evidence, or nil when sets don't decide it.
+local function SetVerdict(item, setID, facts, users)
+    for _, char in ipairs(users) do
+        local sets = char.equippedSets or {}
+        local worn = sets[setID] and sets[setID].count or 0
+        local min = facts.setMin or 2
+        -- A class set replaced by another class set the character wears.
+        if facts.classes and not facts.upgradable then
+            for otherID, other in pairs(sets) do
+                if otherID ~= setID and other.classSet and other.count >= (other.min or 2) then
+                    return "set_replaced", (char.name or "?") .. " wears " .. other.count .. " pieces of "
+                        .. (other.name or "a newer class set") .. (other.level and (" at " .. other.level) or "")
+                        .. "; this set (" .. (facts.setName or "old set") .. ") can't be upgraded"
+                end
+            end
+        end
+        -- Would turn on a bonus that isn't active.
+        if worn < min and worn + HeldSetSlots(char, setID) >= min then
+            -- The piece would replace what's in a slot not holding this set.
+            local wornLevel = EquippedLevelFor(char, item, sets[setID] and sets[setID].slots)
+            local cost = wornLevel and item.itemLevel and (wornLevel - item.itemLevel) or nil
+            return "set_completes", "With " .. (worn > 0 and (worn .. " piece" .. (worn == 1 and "" or "s") .. " "
+                .. (char.name or "?") .. " wears") or "pieces you hold") .. ", completes "
+                .. (facts.setName or "a set") .. " (" .. min .. ")"
+                .. (cost and cost > 0 and ("; costs " .. cost .. " item levels in that slot") or "")
+        end
+    end
+    return nil
+end
+
 -- ctx: { locationKey = ..., owner = character record or nil }
 local function ExplainItem(item, ctx)
     ctx = ctx or {}
     local reasons = {}
     local function add(id, evidence) table.insert(reasons, { id = id, evidence = evidence }) end
+    local keptForNow
 
     local rule = ns.DB.rules and ns.DB.rules.items and ns.DB.rules.items[item.itemID]
     if type(rule) == "table" then
         if rule.protect then add("protected") end
         local keep = rule.keepReason and KEEP_REASON_BY_CHOICE[rule.keepReason]
         if keep then
+            local wornNow = rule.keepReason == "fornow" and EquippedLevelFor(ctx.owner or P.GetCurrentCharacter(), item)
             if rule.keepReason == "investment" and rule.keepUntil and Now() >= rule.keepUntil then
                 add("investment_due", "Keep holding it, or let it go")
+            elseif rule.keepReason == "fornow" and rule.keepAtLevel and wornNow and wornNow > rule.keepAtLevel then
+                -- Kept "for now"; the slot got better since: ask again (player's rule).
+                keptForNow = "You kept it for now at " .. rule.keepAtLevel .. "; you now wear " .. wornNow .. ". "
             else
-                add(keep)
+                add(keep, rule.keepReason == "fornow" and rule.keepAtLevel
+                    and ("Until you wear better than " .. rule.keepAtLevel .. " in that slot") or nil)
             end
         end
     end
@@ -490,7 +566,9 @@ local function ExplainItem(item, ctx)
 
     if IsGear(item) and not gearPending then
         local collected = AppearanceCollected(item)
-        if collected == false then add("appearance_uncollected") end
+        if collected == false then
+            add("appearance_uncollected", "Equip it once to collect the appearance; then it can go")
+        end
         if AnyRolesAssigned() then
             local ownerKey = ctx.owner and ctx.owner.key or nil
             local users = GearUsers(item, ownerKey)
@@ -501,15 +579,33 @@ local function ExplainItem(item, ctx)
                     labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
                 end
                 add("usable_gear", "Upgrade for " .. Names(labels))
-            elseif #users > 0 and IsSituational(item) then
-                -- Item level is a weak test for these: an on-use effect or a
-                -- spec, role or content fit can matter more (player's point).
-                add("situational_gear", "Wearable by " .. Names(users, "name")
-                    .. "; trinkets and weapons can matter for a spec, role, or dungeon vs. raid")
             elseif #users > 0 then
-                -- Wearable but worse than what everyone wears (maybe an off-spec
-                -- or transmog piece): the player decides, the addon doesn't keep it.
-                add("outgrown_gear", "Wearable by " .. Names(users, "name") .. ", but not an upgrade")
+                local facts = P.ItemTooltipFacts and P.ItemTooltipFacts(item) or { state = "unknown" }
+                local setID = P.ItemSetID and P.ItemSetID(item)
+                local setReason, setEvidence
+                if setID and facts.state == "ready" then setReason, setEvidence = SetVerdict(item, setID, facts, users) end
+                if setReason then
+                    add(setReason, (setReason ~= "set_completes" and keptForNow or "") .. setEvidence)
+                elseif IsSituational(item) then
+                    -- Item level is a weak test for these: an on-use effect or a
+                    -- spec, role or content fit can matter more (player's point).
+                    add("situational_gear", "Wearable by " .. Names(users, "name")
+                        .. "; trinkets and weapons can matter for a spec, role, or dungeon vs. raid")
+                elseif facts.state == "ready" and not facts.upgradable
+                    and not SITUATIONAL_SLOTS[item.equipLoc or ""] then
+                    -- (Trinkets and weapons stay the player's call at any level.)
+                    -- Worse than what everyone wears and it can't get better
+                    -- (no upgrade track): it can go (player's rule).
+                    add("outgrown_no_upgrade", (keptForNow or "") .. "Wearable by " .. Names(users, "name")
+                        .. ", but below what they wear" .. (facts.upgradeTrack and " and fully upgraded" or "")
+                        .. ", and it can't be upgraded")
+                else
+                    -- Wearable but worse, and it can still be upgraded (or its
+                    -- tooltip isn't in yet): the player decides.
+                    add("outgrown_gear", "Wearable by " .. Names(users, "name") .. ", but not an upgrade"
+                        .. (facts.upgradable and ("; can be upgraded (" .. facts.upgradeTrack .. " "
+                            .. facts.upgradeCur .. "/" .. facts.upgradeMax .. ")") or ""))
+                end
             elseif collected then
                 add("appearance_collected", "You keep the appearance; none of your played characters wear this")
             else
@@ -592,7 +688,7 @@ end
 P.ExplainItem = ExplainItem
 
 -- Player-assigned keep reasons (Y4). choice = nil clears it.
-function P.SetKeepReason(itemID, choice, itemName, remindAfterDays)
+function P.SetKeepReason(itemID, choice, itemName, remindAfterDays, item)
     ns.DB.rules = ns.DB.rules or { items = {} }
     ns.DB.rules.items = ns.DB.rules.items or {}
     local rule = ns.DB.rules.items[itemID]
@@ -604,6 +700,8 @@ function P.SetKeepReason(itemID, choice, itemName, remindAfterDays)
     rule.name = rule.name or itemName
     rule.keepReason = choice
     rule.keepUntil = (choice == "investment" and remindAfterDays) and (Now() + remindAfterDays * DAY) or nil
+    -- "For now": ask again once the slot holds something better than today.
+    rule.keepAtLevel = (choice == "fornow" and item) and EquippedLevelFor(P.GetCurrentCharacter(), item) or nil
     if Core.OnRulesChanged then Core.OnRulesChanged() end
 end
 

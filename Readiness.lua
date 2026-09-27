@@ -32,6 +32,10 @@ local function PendingReason(item)
     if item.classID == nil then return "the next scan" end
     if item.bindingPending then return "binding" end
     if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
+        and P.ItemTooltipFacts and P.ItemTooltipFacts(item).state == "loading" then
+        return "tooltip"
+    end
+    if P.IsGearItem and P.IsGearItem(item) and P.RolesAssigned and P.RolesAssigned()
         and P.GearDetailsState and P.GearDetailsState(item) == "pending" then
         return "stats"
     end

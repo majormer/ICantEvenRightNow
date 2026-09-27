@@ -1164,7 +1164,7 @@ AddRule = function(item, ruleType)
     end
     local keepChoice = type(ruleType) == "string" and ruleType:match("^keep:(%a+)$")
     if keepChoice then
-        P.SetKeepReason(item.itemID, keepChoice, item.name, keepChoice == "investment" and 90 or nil)
+        P.SetKeepReason(item.itemID, keepChoice, item.name, keepChoice == "investment" and 90 or nil, item)
         Core.RefreshUI()
         return
     end
@@ -1842,6 +1842,7 @@ local function BuildTransferTab(parent)
             { text = "Keep for an alt", ruleType = "keep:alt" },
             { text = "Keep for an event", ruleType = "keep:event" },
             { text = "Investment (90 days)", ruleType = "keep:investment" },
+            { text = "Keep for now (ask when I upgrade)", ruleType = "keep:fornow" },
             { text = "Send to an alt...", ruleType = "handoff" },
         })
         parent.rows[i] = row

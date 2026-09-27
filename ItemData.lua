@@ -180,6 +180,90 @@ function P.ItemAppearance(item)
     return false, state
 end
 
+-- ---------------------------------------------------------------------------
+-- Sets and upgrade tracks
+-- Checked in game 2026-09-26: GetItemInfo's 16th value is the item set ID
+-- (ask by item ID; link lookups can come back empty). The tooltip carries the
+-- set name with pieces worn "(0/5)", each bonus "(2) Set: ...", the class
+-- restriction "Classes: Death Knight" (class sets), and "Upgrade Level:
+-- Hero 2/6" only when the item has an upgrade track.
+-- ---------------------------------------------------------------------------
+
+local setIDs = {}       -- [itemID] = setID or false
+local factsCache = {}   -- [VariantKey] = facts
+
+-- The item's set ID, or nil (not in a set, or not loaded yet).
+function P.ItemSetID(item)
+    if not item or not item.itemID or not (C_Item and C_Item.GetItemInfo) then return nil end
+    local cached = setIDs[item.itemID]
+    if cached ~= nil then return cached or nil end
+    local info = { pcall(C_Item.GetItemInfo, item.itemID) }
+    if not info[1] or info[2] == nil then return nil end
+    local setID = info[17]
+    setIDs[item.itemID] = setID or false
+    return setID
+end
+
+-- A Lua pattern from a localized format string ("Upgrade Level: %s %d/%d").
+local function FormatPattern(fmt, fallback)
+    if type(fmt) ~= "string" or fmt == "" then return fallback end
+    local pattern = fmt:gsub("([%(%)%.%+%-%*%?%[%]%^%$])", "%%%1")
+    pattern = pattern:gsub("%%s", "(.+)")
+    pattern = pattern:gsub("%%d", "(%%d+)")
+    return "^" .. pattern .. "$"
+end
+
+local UPGRADE_PATTERN = FormatPattern(ITEM_UPGRADE_TOOLTIP_FORMAT_STRING, "^Upgrade Level: (.+) (%d+)/(%d+)$")
+local CLASSES_PATTERN = FormatPattern(ITEM_CLASSES_ALLOWED, "^Classes: (.+)$")
+local SET_NAME_PATTERN = "^(.+) %((%d+)/(%d+)%)$"
+local SET_BONUS_PATTERN = "^%((%d+)%) "
+
+-- What the tooltip says about sets and upgrades:
+-- { state, setName, setTotal, setMin, classes, upgradeTrack, upgradeCur, upgradeMax, upgradable }.
+-- state "ready", "loading" (tooltip reads "Retrieving item information"), or "unknown".
+function P.ItemTooltipFacts(item)
+    -- "unknown": no tooltip to read. Never taken as "can't be upgraded".
+    if not item or not item.itemID then return { state = "unknown" } end
+    local key = VariantKey(item)
+    if factsCache[key] then return factsCache[key] end
+    if not (C_TooltipInfo and C_TooltipInfo.GetHyperlink) or type(item.link) ~= "string" then
+        return { state = "unknown" }
+    end
+    local ok, data = pcall(C_TooltipInfo.GetHyperlink, item.link)
+    if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return { state = "unknown" } end
+    local first = data.lines[1] and data.lines[1].leftText
+    if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+        if C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, item.itemID) end
+        return { state = "loading" }
+    end
+    local facts = { state = "ready" }
+    local bonusCounts = {}
+    for _, line in ipairs(data.lines) do
+        local text = line.leftText
+        if type(text) == "string" then
+            local track, cur, max = text:match(UPGRADE_PATTERN)
+            if track then
+                facts.upgradeTrack, facts.upgradeCur, facts.upgradeMax = track, tonumber(cur), tonumber(max)
+            end
+            local classes = text:match(CLASSES_PATTERN)
+            if classes then facts.classes = classes end
+            if not facts.setName then
+                local name, _, total = text:match(SET_NAME_PATTERN)
+                if name and tonumber(total) and tonumber(total) >= 2 then
+                    facts.setName, facts.setTotal = name, tonumber(total)
+                end
+            end
+            local count = text:match(SET_BONUS_PATTERN)
+            if count and text:find("Set", 1, true) then bonusCounts[#bonusCounts + 1] = tonumber(count) end
+        end
+    end
+    table.sort(bonusCounts)
+    facts.setMin = bonusCounts[1]
+    facts.upgradable = (facts.upgradeCur and facts.upgradeMax and facts.upgradeCur < facts.upgradeMax) or false
+    factsCache[key] = facts
+    return facts
+end
+
 -- Give up-and-retry: Rescan asks again for everything that failed.
 function P.RetryFailedItemData()
     for itemID, rec in pairs(records) do

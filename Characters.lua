@@ -156,12 +156,39 @@ local function ReadEquipped()
     return equipped, read
 end
 
+-- Sets the character wears: { [setID] = { count, name, min, classSet, level } }
+-- (level = the lowest item level among the worn pieces). Nil when a worn
+-- set piece's tooltip isn't loaded yet (keep what was known).
+local function ReadEquippedSets(equipped)
+    if not (GetInventoryItemID and P.ItemSetID and P.ItemTooltipFacts) then return nil end
+    local sets = {}
+    for _, slot in ipairs(EQUIP_SLOTS) do
+        local itemID = GetInventoryItemID("player", slot)
+        local setID = itemID and P.ItemSetID({ itemID = itemID })
+        if setID then
+            local link = GetInventoryItemLink and GetInventoryItemLink("player", slot)
+            local facts = P.ItemTooltipFacts({ itemID = itemID, link = link })
+            if facts.state == "loading" then return nil end
+            local entry = sets[setID] or { count = 0, name = facts.setName, min = facts.setMin or 2,
+                classSet = facts.classes ~= nil, slots = {} }
+            entry.count = entry.count + 1
+            entry.slots[slot] = true
+            local level = equipped and equipped[slot]
+            if level and (not entry.level or level < entry.level) then entry.level = level end
+            sets[setID] = entry
+        end
+    end
+    return sets
+end
+
 -- Refresh the current character's equipped levels, keeping earlier data when
 -- nothing could be read yet. Also records the overall equipped average, used
 -- when per-slot data is missing.
 local function RefreshEquipped(char)
     local equipped, read = ReadEquipped()
     if equipped and read > 0 then char.equipped = equipped end
+    local sets = ReadEquippedSets(char.equipped)
+    if sets then char.equippedSets = sets end
     if GetAverageItemLevel then
         local _, equippedAverage = GetAverageItemLevel()
         if type(equippedAverage) == "number" and equippedAverage > 0 then
