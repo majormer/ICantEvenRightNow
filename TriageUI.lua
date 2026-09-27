@@ -356,35 +356,39 @@ end
 
 local function Build()
     local kit = Kit()
-    frame = CreateFrame("Frame", "ICantEvenTriageFrame", UIParent)
-    frame:SetSize(640, 440)
+    -- The same bordered window template as the console, so it reads as its
+    -- own window on top of it (a flat dark rectangle did not).
+    frame = CreateFrame("Frame", "ICantEvenTriageFrame", UIParent, "BasicFrameTemplateWithInset")
+    frame:SetSize(640, 462)
     frame:SetPoint("CENTER")
     -- Above the console (in game a DIALOG frame sat behind it, like the
     -- price-first prompt did).
     frame:SetFrameStrata("FULLSCREEN_DIALOG")
     if frame.SetToplevel then frame:SetToplevel(true) end
     frame:SetFrameLevel((UIParent and UIParent:GetFrameLevel() or 0) + 60)
+    if frame.SetClampedToScreen then frame:SetClampedToScreen(true) end
     frame:SetMovable(true) frame:EnableMouse(true)
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
     frame:EnableKeyboard(true)
     frame:SetScript("OnKeyDown", OnKey)
-    local bg = frame:CreateTexture(nil, "BACKGROUND")
-    bg:SetAllPoints()
-    if bg.SetColorTexture then bg:SetColorTexture(0.05, 0.05, 0.05, 0.96) end
+    frame.windowTitle = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    frame.windowTitle:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)
+    frame.windowTitle:SetText("Justify every item")
+    if frame.CloseButton then frame.CloseButton:SetScript("OnClick", Stop) end
 
     frame.title = kit.CreateLabel(frame, "", "GameFontNormalLarge")
-    frame.title:SetPoint("TOPLEFT", 16, -14)
+    frame.title:SetPoint("TOPLEFT", 16, -36)
     frame.progress = kit.CreateLabel(frame, "", "GameFontDisableSmall")
     frame.progress:SetPoint("TOPLEFT", frame.title, "BOTTOMLEFT", 0, -2)
     frame.close = kit.CreateButton(frame, "Stop", 70, 22)
-    frame.close:SetPoint("TOPRIGHT", -14, -12)
+    frame.close:SetPoint("TOPRIGHT", -14, -34)
     frame.close:SetScript("OnClick", Stop)
 
     -- Scope choice
     frame.scopeRow = CreateFrame("Frame", nil, frame)
-    frame.scopeRow:SetPoint("TOPLEFT", 16, -70)
+    frame.scopeRow:SetPoint("TOPLEFT", 16, -92)
     frame.scopeRow:SetSize(600, 40)
     frame.scopeButtons = {}
     local x = 0
@@ -400,7 +404,7 @@ local function Build()
 
     -- Item area
     local area = CreateFrame("Frame", nil, frame)
-    area:SetPoint("TOPLEFT", 16, -62)
+    area:SetPoint("TOPLEFT", 16, -84)
     area:SetPoint("BOTTOMRIGHT", -16, 14)
     frame.itemArea = area
     frame.icon = area:CreateTexture(nil, "ARTWORK")
@@ -475,7 +479,7 @@ local function Build()
 
     -- Summary
     frame.summaryArea = CreateFrame("Frame", nil, frame)
-    frame.summaryArea:SetPoint("TOPLEFT", 16, -70)
+    frame.summaryArea:SetPoint("TOPLEFT", 16, -92)
     frame.summaryArea:SetSize(600, 120)
     frame.summary = kit.CreateLabel(frame.summaryArea, "", "GameFontHighlight")
     frame.summary:SetPoint("TOPLEFT", 0, 0)

@@ -110,6 +110,17 @@ T.test("the screen: Leave puts the item at the end; Carry stores keep+carry; Pre
     T.contains(frame.previousDecision:GetText(), "keep")
 end)
 
+T.test("the screen is a bordered window like the console; its title-bar close stops the session", function()
+    local g = game(function(w) w:put(0, 1, I.LINEN, 20) end)
+    local P = g:P()
+    local frame = P.ShowTriage("bags")
+    T.ok(frame.TitleBg and frame.CloseButton, "built from the bordered window template")
+    T.eq(frame.windowTitle:GetText(), "Justify every item")
+    T.ok(frame:GetHeight() >= 460, "tall enough for content below the title bar")
+    g:click(frame.CloseButton)
+    T.no(frame:IsShown())
+end)
+
 T.test("Home card 'Justify every item' counts what's left and opens the screen", function()
     local g = game(function(w) w:put(0, 1, I.LINEN, 20) w:put(0, 2, I.OLD_POTION, 5) end)
     local P = g:P()
