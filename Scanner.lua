@@ -175,6 +175,15 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             local questInfo = CContainer.GetContainerItemQuestInfo
                 and CContainer.GetContainerItemQuestInfo(bagID, slot) or nil
             local questID = questInfo and questInfo.questID or nil
+            -- Remembered once seen (saved): on the first scan after a reload
+            -- the container info had no questID for 25 quest-starting items,
+            -- which read as plain quest items until the next scan.
+            ns.DB.knownQuestItem = ns.DB.knownQuestItem or {}
+            if questID then
+                ns.DB.knownQuestItem[itemID] = questID
+            elseif itemID then
+                questID = ns.DB.knownQuestItem[itemID]
+            end
             local questCompleted = questID and C_QuestLog and C_QuestLog.IsQuestFlaggedCompleted
                 and C_QuestLog.IsQuestFlaggedCompleted(questID) or false
             -- The quest log is asked too: right after a reload the container

@@ -688,7 +688,8 @@ function World:_buildEnv()
         end,
         GetContainerItemQuestInfo = function(bagID, slot)
             local stack = world:isAccessible(bagID) and world:getStack(bagID, slot)
-            if not stack then return { isQuestItem = false, questID = nil, isActive = false } end
+            -- containerQuestInfoDropped: no questID at all (seen on the first scan after a reload).
+            if not stack or world.containerQuestInfoDropped then return { isQuestItem = false, questID = nil, isActive = false } end
             local def = world.items[stack.itemID]
             local questID = def.questID
             return {

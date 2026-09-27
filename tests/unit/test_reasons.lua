@@ -257,3 +257,14 @@ T.test("a companion-pet item the game hasn't described is pending, not 'no clear
     for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7004 then item = it end end
     T.ok(game:P().ItemDataPending(item), "Getting ready waits")
 end)
+
+T.test("a quest-starting item keeps its quest when the container info has no questID (saved)", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, I.QUEST_START, 1)
+        w.quests.completed[90001] = true
+    end)
+    T.eq(explain(game, I.QUEST_START).primary.id, "quest_done")
+    T.eq(game:db().knownQuestItem[I.QUEST_START], 90001, "saved")
+    game.world.containerQuestInfoDropped = true
+    T.eq(explain(game, I.QUEST_START).primary.id, "quest_done", "judged from the quest log, not the dropped info")
+end)
