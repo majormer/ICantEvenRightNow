@@ -35,6 +35,8 @@ local function Settings()
     }
 end
 
+local TROLL_PRICE = 50000000   -- 5,000g (copper)
+
 local function IsCommodity(item)
     return (item.maxStack or 1) > 1
 end
@@ -182,6 +184,12 @@ local function GetAuctionPrice(item)
         end
     end
     if not result then return nil end
+    -- A common or uncommon item listed at 5,000g+ is almost always a troll
+    -- listing (in game: Depleted Two-Handed Axe at 47,908g made up most of
+    -- a ~60,705g "Auction Candidates" total). Kept, but not counted as value.
+    if not result.unconfirmed and (item.quality or 0) <= 2 and result.price >= TROLL_PRICE then
+        result.unconfirmed = true
+    end
     local settings = Settings()
     local limit = IsCommodity(item) and settings.freshCommodity or settings.freshItem
     result.fresh = result.ageDays == nil or result.ageDays <= limit
@@ -250,8 +258,65 @@ end
 function P.NeedsPriceCheck(item)
     if not item or not P.HasPriceSource() then return false end
     if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    if P.NotListedAtLastScan(item) then return false end
     local price = GetAuctionPrice(item)
     return not price or not price.fresh
+end
+
+-- ---------------------------------------------------------------------------
+-- Auctionator full scans
+-- Auctionator's own scan timestamps aren't reliable (its summary-mode full
+-- scan only updates TimeOfLastBrowseScan, which browsing also sets), so the
+-- addon listens for "scan complete" on Auctionator's event bus (internal API,
+-- checked in v339: EventBus:Register(listener, events), events
+-- IncrementalScan.Events.ScanComplete and FullScan.Events.ScanComplete).
+-- After a full scan, an item with no price wasn't listed: there's no market
+-- to wait for, so "price it first" stops asking about it.
+-- ---------------------------------------------------------------------------
+
+local scanListener = {}
+function scanListener.ReceiveEvent(_, eventName)
+    ns.DB.fullAuctionScanAt = Now()
+    P.Log("auction", "Auctionator full scan finished (%s)", tostring(eventName))
+    if P.NoteLateData then P.NoteLateData() end
+end
+
+function P.HookAuctionatorScans()
+    if scanListener.hooked then return true end
+    local bus = Auctionator and Auctionator.EventBus
+    if not (bus and bus.Register) then return false end
+    local events = {}
+    for _, group in ipairs({ Auctionator.IncrementalScan, Auctionator.FullScan }) do
+        if type(group) == "table" and group.Events and group.Events.ScanComplete then
+            events[#events + 1] = group.Events.ScanComplete
+        end
+    end
+    if #events == 0 then return false end
+    scanListener.hooked = pcall(bus.Register, bus, scanListener, events)
+    return scanListener.hooked
+end
+
+if CreateFrame then
+    local hookFrame = CreateFrame("Frame")
+    hookFrame:RegisterEvent("PLAYER_LOGIN")
+    hookFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
+    hookFrame:SetScript("OnEvent", function() P.HookAuctionatorScans() end)
+end
+
+-- Days since the last completed full scan, or nil.
+function P.FullScanAgeDays()
+    local at = ns.DB and ns.DB.fullAuctionScanAt
+    return at and (Now() - at) / DAY or nil
+end
+
+-- Tradeable green-or-better item that a recent full scan didn't find listed
+-- (no price, or its price is older than the scan).
+function P.NotListedAtLastScan(item)
+    local scanAge = P.FullScanAgeDays()
+    if not scanAge or scanAge > Settings().freshItem then return false end
+    if not item or (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or (price.ageDays ~= nil and price.ageDays > math.ceil(scanAge))
 end
 
 -- Before a sell task: auctionable items whose best price (any source) is
@@ -260,6 +325,8 @@ local PRICE_FIRST_DAYS = 1
 P.PRICE_FIRST_DAYS = PRICE_FIRST_DAYS
 function P.NeedsRecentPrice(item)
     if not item or (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local scanAge = P.FullScanAgeDays()
+    if scanAge and scanAge <= PRICE_FIRST_DAYS and P.NotListedAtLastScan(item) then return false end
     local price = GetAuctionPrice(item)
     return not price or (price.ageDays or 1) > PRICE_FIRST_DAYS
 end

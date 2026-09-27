@@ -536,6 +536,10 @@ local function BuildTransferRowDetail(plan, source, dest)
             status = status .. "  -  worth ~" .. FormatMoney(net) .. " at auction"
         elseif P.NeedsPriceCheck and P.NeedsPriceCheck(item) then
             status = status .. "  -  no recent auction price: scan at the auction house first"
+        elseif P.NotListedAtLastScan and P.NotListedAtLastScan(item) then
+            local days = math.floor(P.FullScanAgeDays() or 0)
+            status = status .. "  -  not listed at the auction house (full scan "
+                .. (days < 1 and "today" or (days .. " day" .. (days == 1 and "" or "s") .. " ago")) .. ")"
         end
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"

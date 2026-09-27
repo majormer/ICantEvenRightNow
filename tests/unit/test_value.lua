@@ -15,7 +15,14 @@ local function withAuctionator(prices, ages)
             GetAuctionPriceByItemID = function(_, id) return prices[id] end,
             GetAuctionAgeByItemID = function(_, id) return (ages or {})[id] end,
             GetDisenchantPriceByItemLink = function() return 400000 end,
-        } } })
+        } },
+        EventBus = { listeners = {}, Register = function(self, listener, events)
+            for _, name in ipairs(events) do self.listeners[name] = listener end
+            return self
+        end },
+        IncrementalScan = { Events = { ScanComplete = "full_incremental_scan_complete" } },
+        FullScan = { Events = { ScanComplete = "replicate_scan_complete" } },
+        })
     end
 end
 
@@ -265,4 +272,33 @@ T.test("prices: the freshest source wins, including the addon's own lookups", fu
     T.eq(price.price, 900)
     P.OpenTask("Sell Items That Can Go")
     T.ok(not g:UI().priceFirstFrame or not g:UI().priceFirstFrame:IsShown(), "own lookup from today counts")
+end)
+
+T.test("after a full scan, items with no price weren't listed: no more 'price first'", function()
+    local g, P = bootsGame({}, {})
+    T.ok(P.NeedsRecentPrice(scanned(g, 8960)), "unpriced before the scan")
+    P.HookAuctionatorScans()
+    local bus = g.env.Auctionator.EventBus
+    local listener = bus.listeners["full_incremental_scan_complete"]
+    T.ok(listener, "listening for Auctionator's scan")
+    listener:ReceiveEvent("full_incremental_scan_complete")
+    local boots = scanned(g, 8960)
+    T.ok(P.NotListedAtLastScan(boots))
+    T.ok(not P.NeedsRecentPrice(boots), "nothing to wait for")
+    T.ok(not P.NeedsPriceCheck(boots))
+    P.OpenTask("Sell Items That Can Go")
+    T.ok(not g:UI().priceFirstFrame or not g:UI().priceFirstFrame:IsShown(), "no prompt")
+end)
+
+T.test("troll prices on common and uncommon items are unconfirmed and not counted as value", function()
+    local g = game(function(w)
+        w:defineItem(8970, { name = "Depleted Axe", classID = 2, subclassID = 1, equipLoc = "INVTYPE_2HWEAPON",
+            itemLevel = 20, requiredLevel = 10, bindType = 2, quality = 2, sellPrice = 500, expansionID = 1 })
+        w:put(0, 1, 8970, 1)
+    end, withAuctionator({ [8970] = 479082800 }, { [8970] = 0 }))
+    local P = g:P()
+    local axe = scanned(g, 8970)
+    local price = P.GetAuctionPrice(axe)
+    T.ok(price.unconfirmed, "unconfirmed")
+    T.eq(select(2, P.GetItemValue(axe)), "vendor", "not counted as auction value")
 end)
