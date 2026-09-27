@@ -55,6 +55,8 @@ local REASONS = {
     old_consumable       = { disposition = "free",   label = "Consumable from a past expansion" },
     unused_material      = { disposition = "free",   label = "Material no crafter on your account uses" },
     unused_gear          = { disposition = "free",   label = "Gear none of your played characters can use" },
+    -- Outranks the other free reasons: selling isn't an option, so say what is.
+    vendor_refused       = { disposition = "free",   label = "No vendor buys it: destroy it or keep it", rank = 1.9 },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -470,6 +472,12 @@ local function ExplainItem(item, ctx)
         end
     end
 
+    local refused = P.MerchantRefused and P.MerchantRefused(item.itemID)
+    if refused then
+        add("vendor_refused", "A vendor refused it" .. (refused.at and date and (" on " .. date("%Y-%m-%d", refused.at)) or "")
+            .. ". To destroy it: drag it out of your bag, drop it on the game world, and confirm.")
+    end
+
     local detailsState = IsGear(item) and AnyRolesAssigned() and P.GearDetailsState(item) or nil
     local gearPending = detailsState ~= nil
     if detailsState == "pending" then
@@ -566,7 +574,7 @@ local function ExplainItem(item, ctx)
     local order = { keep = 1, free = 2, review = 3, info = 4 }
     local function rank(id)
         local def = REASONS[id]
-        return def.pinned and 1.5 or order[def.disposition]
+        return def.rank or (def.pinned and 1.5) or order[def.disposition]
     end
     local primary
     for _, r in ipairs(reasons) do
@@ -770,6 +778,7 @@ end
 -- Items the "can go" tasks act on: free to go and sellable at a vendor.
 local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
+    if P.MerchantRefused and P.MerchantRefused(item.itemID) then return false end
     if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then return false end
     local explanation = P.ExplainScanned(item)
     return explanation.disposition == "free"

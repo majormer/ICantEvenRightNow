@@ -658,6 +658,10 @@ CheckSales = function()
         Print("Sold " .. #sold .. " of " .. #watch.items .. earnedText
             .. ". The merchant refused " .. #refused .. ": " .. table.concat(names, ", ")
             .. (#refused > #names and ", ..." or "") .. (reason and (" (" .. reason .. ")") or "") .. ".")
+        Print("No vendor will buy " .. (#refused == 1 and "it" or "them") .. ": destroy "
+            .. (#refused == 1 and "it" or "them") .. " if you don't need "
+            .. (#refused == 1 and "it" or "them") .. " (drag out of your bag, drop on the game world, confirm), or keep "
+            .. (#refused == 1 and "it" or "them") .. ". /icanteven refused lists every item vendors refused.")
         -- They are back in the bags: show that (the result of the player's click).
         Core.ScanInventory("bags", true)
     else
