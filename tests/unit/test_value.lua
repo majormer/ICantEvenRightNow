@@ -302,3 +302,13 @@ T.test("troll prices on common and uncommon items are unconfirmed and not counte
     T.ok(price.unconfirmed, "unconfirmed")
     T.eq(select(2, P.GetItemValue(axe)), "vendor", "not counted as auction value")
 end)
+
+T.test("troll prices: anything at 25,000g or more is unconfirmed", function()
+    local g = game(function(w)
+        w:defineItem(8971, { name = "Depleted Axe (rare)", classID = 15, subclassID = 0, quality = 3,
+            sellPrice = 0, expansionID = 1, bindType = 0 })
+        w:put(0, 1, 8971, 1)
+    end, withAuctionator({ [8971] = 479082800 }, { [8971] = 0 }))
+    local P = g:P()
+    T.ok(P.GetAuctionPrice(scanned(g, 8971)).unconfirmed)
+end)

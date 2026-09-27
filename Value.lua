@@ -35,7 +35,8 @@ local function Settings()
     }
 end
 
-local TROLL_PRICE = 50000000   -- 5,000g (copper)
+local TROLL_PRICE = 50000000        -- 5,000g (copper), common/uncommon items
+local TROLL_PRICE_ANY = 250000000   -- 25,000g, any quality
 
 local function IsCommodity(item)
     return (item.maxStack or 1) > 1
@@ -184,10 +185,12 @@ local function GetAuctionPrice(item)
         end
     end
     if not result then return nil end
-    -- A common or uncommon item listed at 5,000g+ is almost always a troll
-    -- listing (in game: Depleted Two-Handed Axe at 47,908g made up most of
-    -- a ~60,705g "Auction Candidates" total). Kept, but not counted as value.
-    if not result.unconfirmed and (item.quality or 0) <= 2 and result.price >= TROLL_PRICE then
+    -- A common or uncommon item at 5,000g+, or anything at 25,000g+, is
+    -- usually a troll listing (in game: Depleted Two-Handed Axe, a rare with
+    -- no vendor price, at 47,908g made up most of a ~61,332g "Auction
+    -- Candidates" total). Kept as a candidate, but not counted as value.
+    if not result.unconfirmed and ((item.quality or 0) <= 2 and result.price >= TROLL_PRICE
+        or result.price >= TROLL_PRICE_ANY) then
         result.unconfirmed = true
     end
     local settings = Settings()
