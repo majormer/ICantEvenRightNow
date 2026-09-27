@@ -192,7 +192,19 @@ local function CollectibleState(item)
         end
     end
     if C_PetJournal and C_PetJournal.GetPetInfoByItemID then
+        -- The species is remembered once seen (saved): when the client drops
+        -- the item's data, GetPetInfoByItemID returns nothing, and in game a
+        -- learned pet (Slim) went from "Can go" to "no clear reason" between
+        -- one scan and the next.
+        ns.DB.knownPetSpecies = ns.DB.knownPetSpecies or {}
         local speciesID = select(13, SafeCall(C_PetJournal.GetPetInfoByItemID, itemID))
+        if speciesID then
+            ns.DB.knownPetSpecies[itemID] = speciesID
+        else
+            speciesID = ns.DB.knownPetSpecies[itemID]
+            -- A companion-pet item never described yet: not known, not "no reason".
+            if not speciesID and item.classID == 15 and item.subclassID == 2 then return "pet", nil end
+        end
         if speciesID then
             if P.PetJournalReady and not P.PetJournalReady() then return "pet", nil end   -- not known yet
             local collected = SafeCall(C_PetJournal.GetNumCollectedInfo, speciesID) or 0
@@ -816,8 +828,9 @@ function P.ExplainLines(query)
                         evidence[#evidence + 1] = r.id .. (r.evidence and (": " .. r.evidence) or "")
                     end
                     local price = P.GetAuctionPrice and P.GetAuctionPrice(item)
-                    local advice, why = P.AuctionAdvice and P.AuctionAdvice(item, true)
-                    local kind, learned = P.GetCollectibleState and P.GetCollectibleState(item)
+                    local advice, why, kind, learned
+                    if P.AuctionAdvice then advice, why = P.AuctionAdvice(item, true) end
+                    if P.GetCollectibleState then kind, learned = P.GetCollectibleState(item) end
                     lines[#lines + 1] = string.format("%s (%s) at %s: %s [%s]", tostring(item.name), tostring(item.itemID),
                         tostring(item.location), explanation.disposition, table.concat(evidence, "; "))
                     lines[#lines + 1] = string.format("  data %s | link %s | vendor %s | price %s | advice %s%s",

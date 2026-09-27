@@ -918,7 +918,7 @@ function World:_buildEnv()
     G.C_PetJournal = {
         GetPetInfoByItemID = function(itemID)
             local def = world.items[itemID]
-            if not def or not def.petSpeciesID then return nil end
+            if not def or not def.petSpeciesID or def.petInfoDropped then return nil end
             return def.name, 0, 0, 0, "", "", false, false, "", "", 0, 0, def.petSpeciesID
         end,
         GetNumCollectedInfo = function(speciesID)

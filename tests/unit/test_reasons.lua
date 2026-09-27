@@ -235,3 +235,25 @@ T.test("/icanteven explain prints the facts behind an item's verdict", function(
     T.contains(lines[3], "can go and sellable true")
     T.contains(game:P().ExplainLines("nothing-here")[1], "No scanned item")
 end)
+
+T.test("a pet's species is remembered when the client drops the item's data (saved)", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 7003, 1)
+        w.collections.pets[4543] = 1
+    end, function(w) w:defineItem(7003, { name = "Slim", classID = 15, subclassID = 2, petSpeciesID = 4543, sellPrice = 100000 }) end)
+    T.eq(explain(game, 7003).primary.id, "collectible_learned")
+    T.eq(game:db().knownPetSpecies[7003], 4543, "saved")
+    game.world.items[7003].petInfoDropped = true
+    T.eq(explain(game, 7003).primary.id, "collectible_learned", "still learned from the saved species")
+end)
+
+T.test("a companion-pet item the game hasn't described is pending, not 'no clear reason'", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 7004, 1)
+    end, function(w) w:defineItem(7004, { name = "Mystery Pet", classID = 15, subclassID = 2, petSpeciesID = 4544, petInfoDropped = true, sellPrice = 100 }) end)
+    local e = explain(game, 7004)
+    T.eq(e.primary.id, "details_loading")
+    local item
+    for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7004 then item = it end end
+    T.ok(game:P().ItemDataPending(item), "Getting ready waits")
+end)
