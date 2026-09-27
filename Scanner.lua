@@ -84,6 +84,13 @@ local function KnownItemInfo()
                     for _, field in ipairs(STATIC_FIELDS) do info[field] = item[field] end
                     knownItemInfo[item.itemID] = info
                 end
+                -- Item level per variant (item + bonus IDs), never shared
+                -- between copies of one item ID at different levels.
+                local known = item.itemID and knownItemInfo[item.itemID]
+                if known and item.itemLevel and not item.levelPending and P.ItemVariantKey then
+                    known.levels = known.levels or {}
+                    known.levels[P.ItemVariantKey(item)] = item.itemLevel
+                end
             end
         end
     end
@@ -122,11 +129,17 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 link = hyperlink or link
             end
             local known = KnownItemInfo()
+            local variantKey = P.ItemVariantKey and P.ItemVariantKey({ itemID = itemID, link = hyperlink or link })
+            local levelPending = false
             if name then
                 known[itemID] = known[itemID] or {}
                 local k = known[itemID]
                 k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName = name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName
                 k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID = maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID
+                if variantKey and itemLevel then
+                    k.levels = k.levels or {}
+                    k.levels[variantKey] = itemLevel
+                end
             else
                 if C_Item.RequestLoadItemDataByID then C_Item.RequestLoadItemDataByID(itemID) end
                 -- Keep what an earlier scan knew until the client loads the data.
@@ -140,6 +153,16 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 if k then
                     name, quality, itemLevel, requiredLevel, itemTypeName, itemSubTypeName = k.name, k.quality, k.itemLevel, k.requiredLevel, k.itemTypeName, k.itemSubTypeName
                     maxStack, equipLoc, icon, sellPrice, classID, subclassID, bindType, expansionID = k.maxStack, k.equipLoc, k.icon, k.sellPrice, k.classID, k.subclassID, k.bindType, k.expansionID
+                    -- Gear: only this exact variant's level counts. Another
+                    -- copy's level made Warband gear look "below what you
+                    -- wear" (pulled out, then deposited again).
+                    if classID == 2 or classID == 4 then
+                        itemLevel = k.levels and variantKey and k.levels[variantKey] or nil
+                        if not itemLevel then
+                            levelPending = true
+                            missingData = true
+                        end
+                    end
                 end
             end
             local bindingDetails = GetBindingDetails(bagID, slot, bindType, info.isBound and true or false)
@@ -180,6 +203,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 accountBankAllowed = bindingDetails.accountBankAllowed,
                 bindingScope       = bindingDetails.bindingScope,
                 bindingPending     = bindingDetails.bindingPending,
+                levelPending       = levelPending or nil,
                 isQuestItem        = questInfo and questInfo.isQuestItem or false,
                 questID            = questID,
                 questActive        = questInfo and questInfo.isActive or false,

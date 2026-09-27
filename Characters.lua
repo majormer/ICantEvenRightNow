@@ -541,7 +541,7 @@ end
 -- snapshot, so they are removed before the game writes saved variables.
 local TRANSIENT_FIELDS = {
     "rule", "curated", "blockedReasons", "eligibleForBankMove", "eligibleForRecall",
-    "ruleStatus", "bankTargetStorage", "reason", "key", "bindingPending",
+    "ruleStatus", "bankTargetStorage", "reason", "key", "bindingPending", "levelPending",
 }
 
 function P.CompactSnapshots()

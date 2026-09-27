@@ -586,6 +586,7 @@ local function ExplainItem(item, ctx)
     end
 
     local detailsState = IsGear(item) and AnyRolesAssigned() and P.GearDetailsState(item) or nil
+    if IsGear(item) and item.levelPending then detailsState = "pending" end
     local gearPending = detailsState ~= nil
     if detailsState == "pending" then
         -- No verdict until the stats are in; the list shows it as checking.

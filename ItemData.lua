@@ -52,6 +52,8 @@ local function VariantKey(item)
     return table.concat(key, ":")
 end
 
+P.ItemVariantKey = VariantKey
+
 local function IsCached(itemID)
     if not (C_Item and C_Item.IsItemDataCachedByID) then return true end
     return C_Item.IsItemDataCachedByID(itemID) and true or false

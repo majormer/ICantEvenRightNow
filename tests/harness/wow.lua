@@ -172,9 +172,14 @@ function World:defineItem(itemID, def)
     return def
 end
 
-function World:itemLink(itemID)
+-- bonusIDs (optional): a variant of the item, like the game's bonus list.
+function World:itemLink(itemID, bonusIDs)
     local def = self.items[itemID]
-    return "|cffffffff|Hitem:" .. itemID .. "::::::::80:::::|h[" .. (def and def.name or "?") .. "]|h|r"
+    local tail = ":::::"
+    if bonusIDs and #bonusIDs > 0 then
+        tail = ":::" .. #bonusIDs .. ":" .. table.concat(bonusIDs, ":") .. "::"
+    end
+    return "|cffffffff|Hitem:" .. itemID .. "::::::::80" .. tail .. "|h[" .. (def and def.name or "?") .. "]|h|r"
 end
 
 local function parseItemID(value)
@@ -197,7 +202,7 @@ function World:put(bagID, slot, itemID, count, opts)
     container.slots[slot] = {
         itemID = itemID, count = count or 1, locked = opts.locked or false,
         bound = opts.bound or false, wue = opts.warboundUntilEquipped or false, apiHidesWue = opts.apiHidesWue,
-        tooltipBinding = opts.tooltipBinding, tooltipLoading = opts.tooltipLoading,
+        tooltipBinding = opts.tooltipBinding, tooltipLoading = opts.tooltipLoading, bonusIDs = opts.bonusIDs,
         questActive = opts.questActive,
     }
     return container.slots[slot]
@@ -652,7 +657,7 @@ function World:_buildEnv()
         return {
             iconFileID = def.icon, stackCount = stack.count, isLocked = stack.locked,
             quality = def.quality, isReadable = false, hasLoot = false,
-            hyperlink = world:itemLink(stack.itemID), isFiltered = false,
+            hyperlink = world:itemLink(stack.itemID, stack.bonusIDs), isFiltered = false,
             hasNoValue = (def.sellPrice or 0) <= 0, itemID = stack.itemID, isBound = stack.bound,
         }
     end
@@ -740,7 +745,14 @@ function World:_buildEnv()
         if not def or not def.cached then return nil end
         -- Optional: link lookups return nothing while ID lookups work.
         if def.linkLookupFails and type(value) == "string" then return nil end
-        return def.name, world:itemLink(itemID), def.quality, def.itemLevel, def.requiredLevel,
+        -- def.levelByBonus: { [bonusID] = level } for variants of one item.
+        local level = def.itemLevel
+        if type(value) == "string" and def.levelByBonus then
+            for bonus, bonusLevel in pairs(def.levelByBonus) do
+                if value:find(":" .. bonus .. ":", 1, true) then level = bonusLevel end
+            end
+        end
+        return def.name, world:itemLink(itemID), def.quality, level, def.requiredLevel,
             def.itemType or "Miscellaneous", def.itemSubType or "Other", def.maxStack, def.equipLoc,
             def.icon, def.sellPrice, def.classID, def.subclassID, def.bindType, def.expansionID,
             def.setID, def.isCraftingReagent or false

@@ -181,3 +181,21 @@ T.test("appearance: collected if either check says so (the link check can be wro
     g.world.collections.appearances[296661] = true
     T.eq((P.ItemAppearance(helm(g))), true)
 end)
+
+T.test("scanner: a dropped item keeps its own item level, never another copy's", function()
+    local g = game({ levelByBonus = { [12345] = 300 } })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g.world:put(0, 2, 8701, 1, { bonusIDs = { 12345 } })     -- a 300 copy next to the 100 one
+    g:slash("scan bags")
+    local def = g.world.items[8701]
+    def.cached, def.neverLoads = false, true                 -- the client drops the data
+    g.world:put(0, 3, 8701, 1, { bonusIDs = { 999 } })       -- a copy never read before
+    g:slash("scan bags")
+    local bySlot = {}
+    for _, item in ipairs(P.GetScanList("bags")) do if item.itemID == 8701 then bySlot[item.slot] = item end end
+    T.eq(bySlot[1].itemLevel, 100, "own level")
+    T.eq(bySlot[2].itemLevel, 300, "own level, not the other copy's")
+    T.ok(bySlot[3].levelPending, "unknown variant waits instead of borrowing a level")
+    T.eq(P.ExplainScanned(bySlot[3]).primary.id, "details_loading")
+end)
