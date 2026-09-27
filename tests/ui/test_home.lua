@@ -313,3 +313,20 @@ T.test("Consolidate Warbound Gear reads the character bank tabs and leaves out g
     T.no(ids[I.BOUND_HELM], "gear that can go is pulled to sell, not consolidated")
     T.no(ids[I.WARBOUND_TOY], "Warbound non-gear belongs to Deposit to Warband")
 end)
+
+T.test("Sell Old Consumables never offers an item the addon says to keep (a utility gadget in the consumable class)", function()
+    local game = bagGame(function(w)
+        w:defineItem(111820, { name = "Swapblaster", classID = 0, subclassID = 0, itemSubType = "Explosives and Devices",
+            quality = 3, sellPrice = 75000, expansionID = 6, bindType = 1, useSpell = "Swap" })
+        w:put(0, 1, 111820, 1, { bound = true })
+        w:put(0, 2, I.OLD_POTION, 5)
+    end)
+    game.world:openVendor()
+    game:Core().UpdateContext()
+    game:Core().ScanInventory("bags", true)
+    local P = game:P()
+    local ids = {}
+    for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Sell Old Consumables"))) do ids[plan.item.itemID] = true end
+    T.ok(ids[I.OLD_POTION], "the old potion is offered")
+    T.no(ids[111820], "the utility gadget is not")
+end)

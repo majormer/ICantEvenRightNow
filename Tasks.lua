@@ -73,7 +73,15 @@ local TASK_EXTRAS = {
     },
     ["Pull Bank Upgrades"] = { description = "Gear in the bank that beats what you're wearing." },
     ["Pull Auctionable BoEs"] = { description = "Bind-on-equip gear to list on the auction house." },
-    ["Sell Old Consumables"] = { description = "Potions, food, and flasks from past expansions." },
+    ["Sell Old Consumables"] = {
+        description = "Potions, food, and flasks from past expansions.",
+        -- Never an item the addon says to keep (in game it offered Swapblaster,
+        -- a utility gadget that shares the consumable item class).
+        predicate = function(item)
+            if not P.ExplainScanned then return true end
+            return P.ExplainScanned(item).disposition ~= "keep"
+        end,
+    },
     ["Deposit to Warband"] = {
         description = "Items your other characters can use, sorted into Warband tabs by their settings.",
         -- Only items worth keeping: in game this also offered appearance-
