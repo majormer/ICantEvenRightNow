@@ -81,7 +81,9 @@ local REASONS = {
     outgrown_gear        = { disposition = "review", label = "Gear that isn't an upgrade for anyone" },
     situational_gear     = { disposition = "review", label = "Max-level trinket or weapon: check before selling" },
     set_completes        = { disposition = "review", label = "Completes a set bonus: your call" },
-    gear_token           = { disposition = "review", label = "Creates gear when used: use it on a character who needs it, or sell it" },
+    gear_token           = { disposition = "review", label = "Creates gear when used: your call" },
+    gear_token_for       = { disposition = "keep",   label = "Creates gear one of your characters can use" },
+    gear_token_unused    = { disposition = "free",   label = "Creates gear none of your played characters can use" },
     -- info
     quest_item           = { disposition = "info",   label = "Quest item" },
     unexplained          = { disposition = "info",   label = "No clear reason found" },
@@ -644,10 +646,27 @@ local function ExplainItem(item, ctx)
     -- Forbidden Reach): armor or weapon class, not equippable, with a Use
     -- that creates the real piece. Not gear, so the gear rules don't apply;
     -- the player picks the character.
-    if (item.classID == 2 or item.classID == 4) and not IsGear(item) and item.classID ~= 12 and P.ItemUseSpell then
+    -- They carry a class restriction ("Classes: Mage, Priest, Warlock"):
+    -- kept for a played character of that class, can go when none is.
+    if (item.classID == 2 or item.classID == 4) and not IsGear(item) and P.ItemUseSpell then
         local tokenUse = P.ItemUseSpell(item)
         if tokenUse then
-            add("gear_token", "Use: " .. tokenUse .. (item.isWarbandBound and "; Warbound, so any of your characters can use it" or ""))
+            local facts = P.ItemTooltipFacts and P.ItemTooltipFacts(item) or { state = "unknown" }
+            if facts.state == "ready" and facts.classes and AnyRolesAssigned() then
+                local wanted = {}
+                for name in facts.classes:gmatch("[^,]+") do wanted[name:gsub("^%s+", ""):gsub("%s+$", ""):lower()] = true end
+                local takers = {}
+                for _, char in ipairs(P.CharactersWith("receivesGear")) do
+                    if char.className and wanted[char.className:lower()] then takers[#takers + 1] = char.name end
+                end
+                if #takers > 0 then
+                    add("gear_token_for", "Use: " .. tokenUse .. "; for " .. facts.classes .. ": " .. Names(takers))
+                else
+                    add("gear_token_unused", "Use: " .. tokenUse .. "; for " .. facts.classes .. ", and no played character is one")
+                end
+            else
+                add("gear_token", "Use: " .. tokenUse .. (facts.classes and ("; for " .. facts.classes) or ""))
+            end
         end
     end
     local curiosity = IsGear(item) and item.itemLevel and item.itemLevel <= 1
