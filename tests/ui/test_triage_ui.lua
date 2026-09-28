@@ -344,3 +344,25 @@ T.test("bags: equip into an empty slot, swap in a bigger one, let a smaller one 
     T.eq(e.primary.id, "bag_outgrown", "no bigger than the 36 in use")
     T.eq(e.disposition, "free")
 end)
+
+T.test("the destroy row says why: your decision, or nothing buys it", function()
+    local g = game(function(w)
+        w:defineItem(9502, { name = "Worthless Ring", classID = 15, subclassID = 0, quality = 1, sellPrice = 0,
+            expansionID = 6, bindType = 1 })
+        w:put(0, 1, 9502, 1, { bound = true })
+        w:put(0, 2, I.QUEST_START, 1)
+    end)
+    local P = g:P()
+    P.SetDecision(9502, "sell")
+    P.SetDecision(I.QUEST_START, "destroy")
+    g:Core().ScanInventory("bags", true)
+    P.OpenTask("Destroy Items That Can Go")
+    g:Core().RefreshUI()
+    local texts = {}
+    for _, row in ipairs(g:UI().frame.panels.Transfer.rows or {}) do
+        if row:IsShown() and row.detailText then texts[#texts + 1] = row.detailText:GetText() or "" end
+    end
+    local all = table.concat(texts, "\n")
+    T.contains(all, "nothing buys it")
+    T.contains(all, "you decided")
+end)

@@ -617,7 +617,11 @@ local function BuildTransferRowDetail(plan, source, dest)
         status = "Ready to list at " .. FormatMoney(price or 0) .. ((item.count or 1) > 1 and " each" or "")
             .. (info and (" (" .. P.FormatPriceSource(info) .. ")") or "")
     elseif dest == P.STORAGE_DESTROY then
-        status = "Ready to destroy (you decided)" .. (((item.quality or 0) >= 2) and "; the game asks you to confirm" or "")
+        -- Say why: the player's decision, or nothing buys it (in game every
+        -- row read "you decided", including items the player never decided).
+        local decided = P.DecidedToDestroy and P.DecidedToDestroy(item)
+        status = "Ready to destroy (" .. (decided and "you decided" or "nothing buys it; can't be undone") .. ")"
+            .. (((item.quality or 0) >= 2) and "; the game asks you to confirm" or "")
     elseif dest == "Bags" then
         status = "Ready to withdraw to Bags"
     elseif dest == P.STORAGE_WARBAND_ROUTED then
