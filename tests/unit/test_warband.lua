@@ -609,3 +609,28 @@ T.test("Deposit to Warband leaves a played character's current supplies in the b
     T.eq(potionGame("leveling").ready, 0, "so does a Leveling alt")
     T.eq(potionGame("crafter").ready, 1, "a crafting-only alt hands them over")
 end)
+
+-- In game (2026-09-28) Kiosk's housing dyes, kept "in Warband" by the player,
+-- were never offered by Deposit to Warband: unbound, not gear, not a material.
+T.test("Deposit to Warband takes housing items, and anything a Utility character keeps", function()
+    local function depositCard(role, itemDef)
+        local g = T.game({ player = P_MAIN, setup = function(w)
+            F.defineItems(w)
+            w:defineItem(9101, itemDef)
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:addBankTab(2, 12, "Tab 1", 0, 5)
+            w:put(0, 1, 9101, 6)
+        end })
+        g:P().SetCharacterRole("Main-R", role)
+        g:P().SetDecision(9101, "keep")
+        g:openBank()
+        for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Deposit to Warband" then return c end end
+    end
+    local dye = { name = "Blue Housing Dye", classID = 20, subclassID = 1, quality = 2, maxStack = 200,
+        sellPrice = 1, expansionID = 11 }
+    local trinket = { name = "Shiny Pebble", classID = 15, subclassID = 4, quality = 1, maxStack = 20,
+        sellPrice = 5, expansionID = 11 }
+    T.eq(depositCard("main", dye).ready, 1, "housing dye goes to the Warband bank")
+    T.eq(depositCard("utility", trinket).ready, 1, "a Utility character hands over what it keeps")
+    T.eq(depositCard("main", trinket).ready, 0, "a Main keeps its own unbound keeps")
+end)

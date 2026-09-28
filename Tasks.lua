@@ -44,6 +44,16 @@ local function IsShareable(item)
             if use.character.key ~= currentKey then return true end
         end
     end
+    -- Housing items: the house belongs to the whole account (in game,
+    -- Kiosk's 30 housing dyes, kept "in Warband" by the player, were never
+    -- offered: they are unbound and neither gear nor a material).
+    if item.classID == 20 then return true end
+    -- A Utility character (bank or auction alt) keeps nothing for itself:
+    -- whatever it keeps belongs where the others can reach it.
+    local char = P.GetCurrentCharacter and P.GetCurrentCharacter()
+    if char and P.GetRole and P.GetRole(char) == "utility" and item.accountBankAllowed ~= false then
+        return true
+    end
     return false
 end
 P.IsShareableItem = IsShareable
