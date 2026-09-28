@@ -477,33 +477,50 @@ P.GearUsersFor = GearUsers
 
 -- Gear-receiving characters for whom this item beats what they wear
 -- (two-slot items compare against the weaker slot; empty slot = 0).
-local function UpgradeUsers(item, ownerKey)
+-- Does the item beat what this character wears in its slot(s)? Rings and
+-- trinkets compare against the weaker of the two. Uses the recorded equipped
+-- levels (read with retries after login), never the live slot levels, which
+-- read 0 until the gear's data loads.
+local function UpgradeForCharacter(item, char)
     local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
-    if not slots or not item.itemLevel or item.itemLevel <= 0 then return {} end
+    if not slots or not item.itemLevel or item.itemLevel <= 0 then return false end
+    -- Unknown equipment (never read, or read before the gear loaded) is
+    -- not an upgrade target; fall back to the equipped average if known.
+    -- Saves from before this fix hold 0 for every slot: also unknown.
+    local known = false
+    for _, level in pairs(char.equipped or {}) do
+        if type(level) == "number" and level > 0 then known = true break end
+    end
+    if not known and (char.averageItemLevel or 0) <= 0 then return false end
+    local lowest
+    for _, slot in ipairs(slots) do
+        local level = known and (char.equipped[slot] or 0) or char.averageItemLevel
+        if known and level == 0 and (char.averageItemLevel or 0) > 0 and char.equipped[slot] == 0 then
+            level = char.averageItemLevel -- a stored 0 means "not loaded", not "empty"
+        end
+        if not lowest or level < lowest then lowest = level end
+    end
+    return item.itemLevel > (lowest or 0)
+end
+
+local function UpgradeUsers(item, ownerKey)
     local users = {}
     for _, char in ipairs(GearUsers(item, ownerKey)) do
-        -- Unknown equipment (never read, or read before the gear loaded) is
-        -- not an upgrade target; fall back to the equipped average if known.
-        -- Saves from before this fix hold 0 for every slot: also unknown.
-        local known = false
-        for _, level in pairs(char.equipped or {}) do
-            if type(level) == "number" and level > 0 then known = true break end
-        end
-        if known or (char.averageItemLevel or 0) > 0 then
-            local lowest
-            for _, slot in ipairs(slots) do
-                local level = known and (char.equipped[slot] or 0) or char.averageItemLevel
-                if known and level == 0 and (char.averageItemLevel or 0) > 0 and char.equipped[slot] == 0 then
-                    level = char.averageItemLevel -- a stored 0 means "not loaded", not "empty"
-                end
-                if not lowest or level < lowest then lowest = level end
-            end
-            if item.itemLevel > (lowest or 0) then table.insert(users, char) end
-        end
+        if UpgradeForCharacter(item, char) then table.insert(users, char) end
     end
     return users
 end
 P.UpgradeUsersFor = UpgradeUsers
+
+-- The played character, whatever its role: gear it should equip rather than
+-- deposit (in game, Deposit to Warband offered 16 freshly withdrawn upgrades
+-- straight back). Class and level checks come from the upgrade filter.
+function P.IsUpgradeForPlayer(item)
+    local char = P.GetCurrentCharacter and P.GetCurrentCharacter()
+    if not char then return false end
+    if P.IsUpgradeEligibleItem and not P.IsUpgradeEligibleItem(item) then return false end
+    return UpgradeForCharacter(item, char)
+end
 
 local function AnyRolesAssigned()
     local counts = P.CountByRole()
@@ -1260,7 +1277,13 @@ function P.WhoBenefits(item)
         if #upgrades > 0 then
             local labels = {}
             for _, char in ipairs(upgrades) do
-                labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
+                if char.key == P.currentCharacterKey then
+                    -- The player, first: "Upgrade for you: equip it" reads
+                    -- better than their own name and role.
+                    table.insert(labels, 1, "you: equip it")
+                else
+                    labels[#labels + 1] = char.name .. " (" .. P.GetRoleLabel(P.GetRole(char)) .. ")"
+                end
             end
             return "Upgrade for " .. Names(labels)
         end

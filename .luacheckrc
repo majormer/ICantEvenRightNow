@@ -14,7 +14,7 @@ read_globals = {
     "C_Container",
     "C_CurrencyInfo",
     "C_EquipmentSet",
-    "C_Item",
+    "C_Heirloom", "C_Item",
     "C_MountJournal",
     "C_PetJournal",
     "C_PlayerInteractionManager",

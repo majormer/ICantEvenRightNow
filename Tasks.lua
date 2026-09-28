@@ -104,6 +104,9 @@ local TASK_EXTRAS = {
         -- clearing it. "Can go" and "Your call" items stay out.
         predicate = function(item)
             if not IsShareable(item) then return false end
+            -- Never gear this character should equip: in game, Minormer's 16
+            -- freshly withdrawn upgrades were offered straight back.
+            if P.IsUpgradeForPlayer and P.IsUpgradeForPlayer(item) then return false end
             if not P.ExplainScanned then return true end
             return P.ExplainScanned(item).disposition == "keep"
         end,

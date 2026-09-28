@@ -527,3 +527,34 @@ T.test("Pull Bank Upgrades reads the Warband bank when that is where the upgrade
     T.eq(c.waiting, 2)
     T.eq(c.needs, "Visit a bank")
 end)
+
+-- In game (2026-09-28), Deposit to Warband offered Minormer's 16 freshly
+-- withdrawn upgrades straight back ("Upgrade for Minormer" on his own screen).
+T.test("Deposit to Warband never offers gear this character should equip", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(8902, { name = "Parked Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 7, sellPrice = 100, expansionID = 10 })
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(0, 1, 8902, 1)
+        w.equipped[16] = 200
+    end })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openBank()
+    local P = g:P()
+    local blade
+    for _, item in ipairs(P.GetScanList(P.BAG_SCOPE)) do if item.itemID == 8902 then blade = item end end
+    T.ok(blade, "scanned")
+    T.ok(P.IsUpgradeForPlayer(blade), "it beats the equipped weapon")
+    T.contains(P.WhoBenefits(blade) or "", "Upgrade for you: equip it")
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
+    T.ok(card, "task exists")
+    T.eq(card.ready, 0, "not offered back to the Warband bank")
+    -- Once it is worn (the equipment event re-reads the levels), the same
+    -- piece in the bags is no upgrade any more.
+    g.world.equipped[16] = 260
+    P.RefreshEquipped()
+    T.no(P.IsUpgradeForPlayer(blade))
+end)
