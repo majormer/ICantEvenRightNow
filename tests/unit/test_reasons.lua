@@ -464,3 +464,15 @@ T.test("deck cards are for sale even in the current expansion (the player doesn'
     game.world:put(0, 2, 7202, 1)
     T.ok(explain(game, 7202).primary.id ~= "deck_card")
 end)
+
+-- In game (Dorftastic, 2026-09-28) Lil' Scoots' Pillow, a toy already in the
+-- collection, was kept as "from the current expansion".
+T.test("a learned toy from the current expansion can go", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 7003, 1)
+        w.collections.toys[7003] = true
+    end, function(w) w:defineItem(7003, { name = "New Toy", classID = 15, isToy = true, expansionID = 11, quality = 3 }) end)
+    local e = explain(game, 7003)
+    T.eq(e.primary.id, "collectible_learned")
+    T.eq(e.disposition, "free")
+end)

@@ -480,6 +480,10 @@ end
 -- than the worn piece) is not outgrown, it is the player's call.
 local function KeepLapsed(item, decision)
     if not decision or decision.choice ~= "keep" or decision.keptCopy or decision.reaffirmed then return false end
+    -- A kept legendary or artifact is a keepsake, never an upgrade that ran
+    -- out (in game the Heart of Azeroth and a legendary cloak stayed in the
+    -- bags as "decide again" instead of going to the bank, 2026-09-28).
+    if (item.quality or 0) >= 5 and item.quality ~= 7 then return false end
     if decision.reason or (decision.note and decision.note ~= "keepsake") then return false end
     if not P.IsGearItem(item) or not P.RolesAssigned() then return false end
     if item.scope == "warband" or (item.owner and item.owner ~= P.currentCharacterKey) then return false end
@@ -1029,11 +1033,18 @@ local function ExplainItem(item, ctx)
         end
     end
 
-    -- Current-expansion content is protected by default elsewhere in the addon.
-    local hasKeep = false
+    -- Current-expansion content is protected by default elsewhere in the addon,
+    -- except what is already settled: in game (Dorftastic, 2026-09-28) a toy
+    -- already in the collection was kept as "from the current expansion".
+    local hasKeep, settled = false, false
+    local SETTLED = { collectible_learned = true, collectible_complete = true, heirloom_copy = true, bag_outgrown = true }
     for _, r in ipairs(reasons) do
-        if REASONS[r.id].disposition == "keep" then hasKeep = true break end
+        if REASONS[r.id].disposition == "keep" then hasKeep = true end
+        if SETTLED[r.id] then settled = true end
     end
+    -- A learned pet with room for another copy still adds to the collection.
+    if kind == "pet" and copies and copies.collected < copies.limit then settled = false end
+    if settled then hasKeep = true end   -- (no "current expansion" keep)
     -- Gear is judged by who it upgrades once roles are set, not by expansion.
     local judgedAsGear = IsGear(item) and AnyRolesAssigned()   -- includes gear still loading
     if not hasKeep and not judgedAsGear and item.quality ~= 0 and item.expansionID

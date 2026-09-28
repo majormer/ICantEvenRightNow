@@ -498,3 +498,21 @@ T.test("gear far below what its wearers use is outgrown, set piece or weapon", f
     T.ok(P.ExplainScanned(scanned(g, 9403)).primary.id ~= "outgrown_no_upgrade",
         "a weapon close to the worn one stays your call")
 end)
+
+-- In game (2026-09-28) the Heart of Azeroth and a legendary cloak, kept by
+-- the player, came back as "decide again" and stayed in the bags.
+T.test("a kept legendary never lapses: it is a keepsake", function()
+    local g = druidGame(function(w)
+        w:defineItem(9701, { name = "Legendary Cloak", classID = 4, subclassID = 1, quality = 5, equipLoc = "INVTYPE_CLOAK",
+            itemLevel = 67, requiredLevel = 50, bindType = 1, sellPrice = 100, expansionID = 7,
+            stats = { ITEM_MOD_AGILITY_SHORT = 20 } })
+        w:put(0, 1, 9701, 1)
+        w.equipped[15] = 250
+    end)
+    local P = g:P()
+    P.RefreshEquipped()
+    P.SetDecision(9701, "keep", { note = "keepsake" })
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 9701)).primary.id, "decided_keep")
+    T.no(P.KeepLapsed(scanned(g, 9701), P.GetDecision(9701)))
+end)
