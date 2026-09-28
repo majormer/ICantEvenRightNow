@@ -320,3 +320,17 @@ T.test("decision lines paste: exported lines apply as-is, comments and bad lines
     T.eq(P.GetDecision(I.LINEN).note, "carry")
     T.contains(messages[1], "Usage")
 end)
+
+-- In game (2026-09-28), five pasted "carry" lines answered "Unknown choice":
+-- the screen's Carry is a keep with the note "carry", and the command
+-- accepts the same word.
+T.test("decide carry: keeps the item in the bags, like the screen's Carry", function()
+    local g = game(function(w) w:put(0, 1, I.NEW_FLASK, 5) end)
+    local P = g:P()
+    T.contains(P.DecideCommand(I.NEW_FLASK .. " carry"), "-> carry (keep it in your bags)")
+    g:Core().ScanInventory("bags", true)
+    local e = P.ExplainScanned(scanned(g, I.NEW_FLASK))
+    T.eq(e.primary.id, "decided_carry")
+    T.eq(e.disposition, "keep")
+    T.contains(P.DecideCommand("nonsense"), "carry|use")
+end)

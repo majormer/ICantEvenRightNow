@@ -283,9 +283,13 @@ end
 function P.DecideCommand(args)
     local itemID, choice, rest = (args or ""):match("^(%d+)%s+(%a+)%s*(.-)$")
     if not itemID then
-        return "Usage: /icanteven decide <itemID> sell|auction|destroy|keep|use|defer|clear [keep <n>] [days or note]"
+        return "Usage: /icanteven decide <itemID> sell|auction|destroy|keep|carry|use|defer|clear [keep <n>] [days or note]"
     end
     choice = choice:lower()
+    -- "carry" is the triage screen's "keep it in your bags": a keep with the
+    -- note "carry" (in game, 5 pasted carry lines answered "Unknown choice").
+    local carry = choice == "carry"
+    if carry then choice, rest = "keep", "carry" end
     if choice == "clear" then
         return P.ClearDecision(itemID) and ("Decision cleared for item " .. itemID .. ".") or ("No decision for item " .. itemID .. ".")
     end
@@ -305,7 +309,7 @@ function P.DecideCommand(args)
         note = (not days and rest ~= "") and rest or nil })
     if not record then return err end
     if Core.RefreshUI and P.UI and P.UI.frame and P.UI.frame:IsShown() then Core.RefreshUI() end
-    return "Decided: " .. (name or ("item " .. itemID)) .. " -> " .. choice
+    return "Decided: " .. (name or ("item " .. itemID)) .. " -> " .. (carry and "carry (keep it in your bags)" or choice)
         .. (record.keepCount and (" (keep " .. record.keepCount .. ", the rest " .. choice .. ")") or "")
         .. (record.until_ and (" until " .. (date and date("%Y-%m-%d", record.until_) or "")) or "")
         .. ((total or 0) == 0 and " (not in your scans yet)" or "")
