@@ -765,7 +765,7 @@ local function ExplainItem(item, ctx)
         add("quest_item", "Destroying a quest item can remove its quest from your log")
     end
 
-    if item.hasLoot then
+    if P.IsOpenable and P.IsOpenable(item) then
         add("open_container", "Right-click it in your bags to open it and take what's inside")
     end
 

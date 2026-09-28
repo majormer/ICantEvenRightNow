@@ -228,6 +228,15 @@ local KNOWN_LINE = (type(ITEM_SPELL_KNOWN) == "string" and ITEM_SPELL_KNOWN) or 
 -- { state, setName, setTotal, setMin (lowest inactive bonus), activeBonuses, classes,
 --   upgradeTrack, upgradeCur, upgradeMax, upgradable, known ("Already known": a learned recipe) }.
 -- state "ready", "loading" (tooltip reads "Retrieving item information"), or "unknown".
+-- A container to open: the tooltip's "<Right Click to Open>", or the
+-- container info's hasLoot when the tooltip isn't read yet.
+function P.IsOpenable(item)
+    if not item then return false end
+    if item.hasLoot then return true end
+    local facts = P.ItemTooltipFacts(item)
+    return facts.openable == true
+end
+
 function P.ItemTooltipFacts(item)
     -- "unknown": no tooltip to read. Never taken as "can't be upgraded".
     if not item or not item.itemID then return { state = "unknown" } end
@@ -255,6 +264,10 @@ function P.ItemTooltipFacts(item)
             local classes = text:match(CLASSES_PATTERN)
             if classes then facts.classes = classes end
             if text == KNOWN_LINE then facts.known = true end
+            -- "<Right Click to Open>": a loot container. The container info's
+            -- hasLoot flag read true once and false after a reload (in game,
+            -- Glowheart's satchels, 2026-09-28); the tooltip line is steady.
+            if text == (ITEM_OPENABLE or "<Right Click to Open>") then facts.openable = true end
             -- "26 Slot Reagent Bag", "30 Slot Bag": a container's size.
             local slots = text:match("^(%d+) Slot")
             if slots and not facts.containerSlots then facts.containerSlots = tonumber(slots) end

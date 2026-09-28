@@ -45,7 +45,7 @@ read_globals = {
     "FauxScrollFrame_GetOffset",
     "FauxScrollFrame_OnVerticalScroll",
     "FauxScrollFrame_Update",
-    "GameTooltip", "GetQuestLogSpecialItemInfo", "GameTooltip_ShowCompareItem",
+    "GameTooltip", "ITEM_OPENABLE", "GetQuestLogSpecialItemInfo", "GameTooltip_ShowCompareItem",
     "GetAverageItemLevel",
     "GetBuildInfo",
     "GetCoinTextureString",
