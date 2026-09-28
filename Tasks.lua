@@ -116,7 +116,17 @@ local TASK_EXTRAS = {
             return preset
         end,
     },
-    ["Pull Auctionable BoEs"] = { description = "Bind-on-equip gear to list on the auction house." },
+    ["Pull Auctionable BoEs"] = {
+        description = "Bind-on-equip gear to list on the auction house.",
+        -- Only BoEs that can go: in game (Glowheart, 2026-09-28) it pulled
+        -- back a "your call" greatsword Deposit Old Items had just banked.
+        predicate = function(item)
+            local channels = P.ItemChannels and P.ItemChannels(item)
+            if channels and not channels.auction then return false end
+            if P.IsAuctionCandidate and P.IsAuctionCandidate(item) then return true end
+            return P.ExplainScanned and P.ExplainScanned(item).disposition == "free" or false
+        end,
+    },
     ["Sell Old Consumables"] = {
         description = "Potions, food, and flasks from past expansions.",
         -- Never an item the addon says to keep (in game it offered Swapblaster,

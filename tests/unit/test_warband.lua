@@ -578,13 +578,20 @@ T.test("Pull Auctionable BoEs skips BoE items that have since been bound", funct
             w:put(6, 1, I.OLD_SWORD, 1, { bound = bound })
         end })
     end
+    -- The sword can go (the player decided to auction it); only then is
+    -- it offered (2026-09-28: "your call" BoEs are not pulled).
     local function card(g)
         for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Pull Auctionable BoEs" then return c end end
     end
     local g = boeGame(false)
+    g:P().SetDecision(I.OLD_SWORD, "sell")
     g:openBank()
-    T.eq(card(g).ready, 1, "an unbound BoE is auctionable")
+    T.eq(card(g).ready, 1, "an unbound BoE that can go is auctionable")
+    g:P().ClearDecision(I.OLD_SWORD)
+    g:Core().ScanInventory("all", true)
+    T.eq(card(g).ready, 0, "an undecided one is not pulled")
     g = boeGame(true)
+    g:P().SetDecision(I.OLD_SWORD, "sell")
     g:openBank()
     T.eq(card(g).ready, 0, "a bound one is not")
 end)
