@@ -615,6 +615,9 @@ function P.IsUpgradeForPlayer(item)
     local char = P.GetCurrentCharacter and P.GetCurrentCharacter()
     if not char then return false end
     if P.IsUpgradeEligibleItem and not P.IsUpgradeEligibleItem(item) then return false end
+    -- The class must be able to wield it: in game (Glowheart, a Paladin,
+    -- 2026-09-28) Pull Bank Upgrades pulled a staff.
+    if not CanCharacterUse(char, item, false) then return false end
     return UpgradeForCharacter(item, char)
 end
 

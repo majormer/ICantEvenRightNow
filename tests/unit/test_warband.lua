@@ -690,3 +690,23 @@ T.test("Deposit Old Items never banks gear this character should equip", functio
     for _, plan in ipairs(g:P().GetTaskPlans(g:P().FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
     T.no(ids[9801], "an upgrade stays in the bags")
 end)
+
+-- In game (Glowheart, a Paladin, 2026-09-28) Pull Bank Upgrades pulled a staff.
+T.test("an upgrade must be a weapon the class can wield", function()
+    local PALADIN = { name = "Main", realm = "R", level = 80, classFile = "PALADIN" }
+    local g = T.game({ player = PALADIN, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(9901, { name = "Big Staff", classID = 2, subclassID = 10, equipLoc = "INVTYPE_2HWEAPON",
+            itemLevel = 260, requiredLevel = 60, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:put(6, 1, 9901, 1)
+        w.equipped[16] = 200
+    end })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "leveling")
+    P.RefreshEquipped()
+    g:openBank()
+    for _, c in ipairs(P.GetTaskCards()) do
+        if c.name == "Pull Bank Upgrades" then T.eq(c.ready, 0, "a paladin can't use staves") end
+    end
+end)
