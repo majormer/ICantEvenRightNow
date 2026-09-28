@@ -86,6 +86,7 @@ local REASONS = {
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
+    pet_battle_supply    = { disposition = "keep",   label = "Pet battle supply: levels or heals your battle pets" },
     open_container       = { disposition = "keep",   label = "Holds loot: open it", rank = 0.9 },
     bag_equip            = { disposition = "keep",   label = "A bag for an empty bag slot: equip it" },
     bag_upgrade          = { disposition = "keep",   label = "Bigger than a bag you use: swap it in" },
@@ -1012,6 +1013,16 @@ local function ExplainItem(item, ctx)
     end
 
     if item.quality == 0 then add("junk") end
+    -- "Other" consumables (subclass 8) the spent list doesn't cover. In game
+    -- (Glowheart, 2026-09-28) Battle-Training Stones and an old Scroll of
+    -- Intellect were "unexplained".
+    if item.classID == 0 and item.subclassID == 8 and item.name then
+        if item.name:find("Battle%-Training Stone$") or item.name:find("Battle%-Stone$") then
+            add("pet_battle_supply", "Upgrades or trains a battle pet; any character can use it through the Warband bank")
+        elseif item.name:find("^Scroll of ") and P.IsOldExpansion(item.expansionID) then
+            add("old_consumable", "From " .. P.GetExpansionName(item.expansionID))
+        end
+    end
     -- Darkmoon-style deck cards ("Six of Blood"): the player doesn't
     -- assemble decks (2026-09-27), so they're for sale whatever the
     -- expansion. Rank 0.9 puts this above the current-expansion keep.

@@ -492,3 +492,17 @@ T.test("a bag of loot says open it, and Use is offered", function()
     T.eq(channels.useWhat, "open it")
     T.eq(game:P().TriageOptions(item).recommended, "use")
 end)
+
+-- In game (Glowheart, 2026-09-28) Battle-Training Stones and a Scroll of
+-- Intellect VI were "unexplained".
+T.test("pet battle stones are kept; old scrolls are spent consumables", function()
+    local game = mageWith(function(w) w:put(0, 1, 7501, 6) w:put(0, 2, 7502, 1) end, function(w)
+        w:defineItem(7501, { name = "Humanoid Battle-Training Stone", classID = 0, subclassID = 8, quality = 1,
+            maxStack = 25, bindType = 8, sellPrice = 0, expansionID = 5 })
+        w:defineItem(7502, { name = "Scroll of Intellect VI", classID = 0, subclassID = 8, quality = 1,
+            maxStack = 20, sellPrice = 270, expansionID = 1 })
+    end)
+    T.eq(explain(game, 7501).primary.id, "pet_battle_supply")
+    T.eq(explain(game, 7501).disposition, "keep")
+    T.eq(explain(game, 7502).primary.id, "old_consumable")
+end)
