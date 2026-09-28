@@ -1016,10 +1016,21 @@ local function ExplainItem(item, ctx)
     -- "Other" consumables (subclass 8) the spent list doesn't cover. In game
     -- (Glowheart, 2026-09-28) Battle-Training Stones and an old Scroll of
     -- Intellect were "unexplained".
-    if item.classID == 0 and item.subclassID == 8 and item.name then
-        if item.name:find("Battle%-Training Stone$") or item.name:find("Battle%-Stone$") then
-            add("pet_battle_supply", "Upgrades or trains a battle pet; any character can use it through the Warband bank")
-        elseif item.name:find("^Scroll of ") and P.IsOldExpansion(item.expansionID) then
+    -- Pet battle supplies by name (stones, bandages, treats, pet charms):
+    -- without the player's own keep they read "unexplained" (Kiosk's treats,
+    -- Glowheart's stones, 2026-09-28).
+    local PET_SUPPLY = { "Battle%-Training Stone$", "Battle%-Stone$", "^Battle Pet Bandage$", "Pet Treat$",
+        "Pet Biscuit$", "Mini%-Treat$", "^Polished Pet Charm$", "Pet Charm$" }
+    local isPetSupply = false
+    if item.name and (item.classID == 0 or item.classID == 15) then
+        for _, pattern in ipairs(PET_SUPPLY) do
+            if item.name:find(pattern) then isPetSupply = true break end
+        end
+    end
+    if isPetSupply then
+        add("pet_battle_supply", "For battle pets (levels, heals, buffs or buys pet gear); any character can use it through the Warband bank")
+    elseif item.classID == 0 and item.subclassID == 8 and item.name then
+        if item.name:find("^Scroll of ") and P.IsOldExpansion(item.expansionID) then
             add("old_consumable", "From " .. P.GetExpansionName(item.expansionID))
         end
     end

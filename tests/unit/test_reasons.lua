@@ -506,3 +506,15 @@ T.test("pet battle stones are kept; old scrolls are spent consumables", function
     T.eq(explain(game, 7501).disposition, "keep")
     T.eq(explain(game, 7502).primary.id, "old_consumable")
 end)
+
+T.test("pet treats, bandages and pet charms are pet battle supplies", function()
+    local game = mageWith(function(w) w:put(0, 1, 7601, 5) w:put(0, 2, 7602, 16) w:put(0, 3, 7603, 50) end, function(w)
+        w:defineItem(7601, { name = "Magical Pet Biscuit", classID = 0, subclassID = 8, quality = 2, maxStack = 20,
+            bindType = 8, sellPrice = 50, expansionID = 3 })
+        w:defineItem(7602, { name = "Battle Pet Bandage", classID = 0, subclassID = 8, quality = 1, maxStack = 20,
+            bindType = 8, sellPrice = 0, expansionID = 4 })
+        w:defineItem(7603, { name = "Polished Pet Charm", classID = 15, subclassID = 4, quality = 1, maxStack = 1000,
+            bindType = 8, sellPrice = 0, expansionID = 7 })
+    end)
+    for _, id in ipairs({ 7601, 7602, 7603 }) do T.eq(explain(game, id).primary.id, "pet_battle_supply", tostring(id)) end
+end)
