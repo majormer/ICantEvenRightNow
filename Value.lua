@@ -839,6 +839,15 @@ function P.RegisterValueTasks()
                     expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
                     hideBlocked = true, sort = "Vendor Value" }
             end
+            -- Items in the Warband bank already wait for the auction
+            -- character: never pull them back (in game the card offered
+            -- Review with both of Kiosk's items in the Warband bank, a route
+            -- that would have withdrawn them into Minormer's bags).
+            if target then
+                return { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                    hideBlocked = true, sort = "Vendor Value" }
+            end
             -- Everything is already in the bags: the next stop is the auction
             -- house, not a bank (the card read "Visit a bank" with 11 in bags).
             if inBank + inWarband == 0 and inBags > 0 then return AH_PRESET end
@@ -882,7 +891,9 @@ function P.RegisterValueTasks()
                 else
                     summary = inWarband .. " in the Warband bank, waiting for " .. target.name
                 end
-                return total, nil, value, summary .. " (~" .. P.FormatMoney(value) .. " at auction"
+                -- Ready = what this character still has to move; items already in
+                -- the Warband bank are Kiosk's work (no Review for them here).
+                return toHand, nil, value, summary .. " (~" .. P.FormatMoney(value) .. " at auction"
                     .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")", toHand
             end
             if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end

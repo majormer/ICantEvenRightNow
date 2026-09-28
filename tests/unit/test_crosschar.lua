@@ -391,6 +391,8 @@ T.test("auction character: auctionables are handed to it through the Warband ban
     g:Core().ScanInventory("all", true)
     card = cardNamed(g, "Auction Candidates")
     T.contains(P.CardSummary(card), "1 in the Warband bank, waiting for Kiosk")
+    T.eq(card.ready, 0, "nothing left for this character to move")
+    T.ok(card.task.preset.source ~= P.STORAGE_WARBAND_BANK, "never pulls Kiosk's items back out")
     local entries = P.GetHandoffs(function(e) return e.to == "Kiosk-R" and e.state == "deposited" end)
     T.eq(#entries, 1, "a deposited hand-off for Kiosk")
     T.eq(#P.GetHandoffs(), 1, "recorded once, however often the card refreshes")
