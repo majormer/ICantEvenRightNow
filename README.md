@@ -1,5 +1,9 @@
 # I Can't Even Right Now (With My Bags and Bank)
 
+<img src="docs/images/finalomega-labs-horizontal-color-960.png" alt="Finalomega Labs" width="400">
+
+Project by Finalomega Labs.
+
 A World of Warcraft Retail addon that makes inventory cleanup a short, safe routine: it finds the items worth moving or letting go, explains why each one is there, knows which of your characters can use it, and waits for your click before anything moves.
 
 ## Overview
@@ -143,10 +147,12 @@ Modules share symbols through `ns.Private`. The offline test suite (`tests/`) ru
 
 ## Support
 
-Bug reports and feature requests are welcome through the GitHub issue tracker.
+Bug reports and feature requests are welcome through the [GitHub issue tracker](https://github.com/majormer/ICantEvenRightNow/issues). The user guide lives in the [wiki](https://github.com/majormer/ICantEvenRightNow/wiki).
 
 Optional support is available on Ko-fi: <https://ko-fi.com/finalomega>
 
 ## License
 
-Source code is MIT licensed. The addon artwork and Finalomega brand assets are all rights reserved and are not licensed for reuse. See [LICENSE](LICENSE) for details.
+I Can't Even Right Now (With My Bags and Bank) is a Finalomega Labs project. Source code is MIT licensed. The addon artwork and the Finalomega Labs brand assets are all rights reserved and are not licensed for reuse. See [LICENSE](LICENSE) for details.
+
+© 2026 Finalomega Labs. All rights reserved.

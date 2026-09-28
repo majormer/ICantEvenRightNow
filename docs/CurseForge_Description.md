@@ -1,5 +1,7 @@
 # I Can't Even Right Now (With My Bags and Bank)
 
+*A Finalomega Labs project.*
+
 I Can't Even Right Now (With My Bags and Bank) turns inventory cleanup into a short, safe routine. It finds the items worth moving or letting go, explains why each one is there, knows which of your characters can use it, and waits for your click before anything moves.
 
 ## Who This Addon Is For
@@ -90,3 +92,13 @@ No. It reads prices to warn you before vendoring something valuable and to list 
 ## Philosophy
 
 The addon finds, explains, and routes; you decide. It asks at most one question per character, and skipping any question is always safe.
+
+## Support and Credits
+
+- Guide and FAQ: https://github.com/majormer/ICantEvenRightNow/wiki
+- Bugs and requests: https://github.com/majormer/ICantEvenRightNow/issues
+- Optional support on Ko-fi: https://ko-fi.com/finalomega
+
+I Can't Even Right Now (With My Bags and Bank) is a Finalomega Labs project. Source code is MIT licensed; the addon artwork and the Finalomega Labs brand assets are all rights reserved and are not licensed for reuse outside official Finalomega Labs releases.
+
+© 2026 Finalomega Labs. All rights reserved.

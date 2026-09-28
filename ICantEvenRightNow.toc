@@ -1,7 +1,7 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100
 ## Title: I Can't Even Right Now (With My Bags and Bank)
-## Notes: Intelligent inventory cleanup - bank old content items, recall relevant items, and manage inventory clutter
-## Author: majormer
+## Notes: Inventory cleanup that explains itself: bank old content, pull what your characters can use, sell what can go. A Finalomega Labs project.
+## Author: Finalomega Labs
 ## Version: 0.6.0
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\ICantEvenRightNow\ICantEvenRightNow.png
@@ -13,6 +13,7 @@
 ## X-Category: Inventory
 ## X-License: All Rights Reserved
 ## X-Website: https://github.com/majormer/ICantEvenRightNow
+## X-Support: https://ko-fi.com/finalomega
 
 Data.lua
 Debug.lua
