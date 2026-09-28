@@ -260,6 +260,7 @@ T.test("the screen: hovering the item shows the game's tooltip with the worn pie
     T.ok(tooltip:IsShown(), "tooltip shown")
     T.contains(table.concat(tooltip._lines, "\n"), "Cataclysm Broadsword", "the bag copy's tooltip")
     T.ok(compared, "compared with the worn piece")
+    T.eq(frame.hover.UpdateTooltip, frame.hover:GetScript("OnEnter"), "the tooltip's update loop re-runs the hover")
     frame.hover:GetScript("OnLeave")(frame.hover)
     T.no(tooltip:IsShown())
 end)

@@ -464,7 +464,7 @@ local function Build()
     frame.hover = CreateFrame("Button", nil, area)
     frame.hover:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
     frame.hover:SetSize(420, 38)
-    frame.hover:SetScript("OnEnter", function(self)
+    local function ShowItemTooltip(self)
         local item = state.queue[state.index] and state.queue[state.index].item
         if not item or not GameTooltip then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -476,9 +476,21 @@ local function Build()
         else
             GameTooltip:SetHyperlink(item.link or ("item:" .. tostring(item.itemID)))
         end
-        if GameTooltip_ShowCompareItem then pcall(GameTooltip_ShowCompareItem, GameTooltip) end
+        -- Shown first: the comparison anchors to the tooltip's edges (in
+        -- game, compared before Show, the worn pieces floated to the top of
+        -- the screen and read "Retrieving item information"). The worn
+        -- items' data is requested, and the tooltip's own update loop calls
+        -- UpdateTooltip again while hovered, so the comparison fills in.
         GameTooltip:Show()
-    end)
+        local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
+        for _, slot in ipairs(slots or {}) do
+            local wornID = GetInventoryItemID and GetInventoryItemID("player", slot)
+            if wornID and C_Item and C_Item.RequestLoadItemDataByID then pcall(C_Item.RequestLoadItemDataByID, wornID) end
+        end
+        if GameTooltip_ShowCompareItem then pcall(GameTooltip_ShowCompareItem, GameTooltip) end
+    end
+    frame.hover:SetScript("OnEnter", ShowItemTooltip)
+    frame.hover.UpdateTooltip = ShowItemTooltip   -- GameTooltip_OnUpdate re-runs it (Blizzard's bag buttons do the same)
     frame.hover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     frame.facts = kit.CreateLabel(area, "", "GameFontHighlightSmall")
     frame.facts:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -2)
