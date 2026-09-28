@@ -634,3 +634,33 @@ T.test("Deposit to Warband takes housing items, and anything a Utility character
     T.eq(depositCard("utility", trinket).ready, 1, "a Utility character hands over what it keeps")
     T.eq(depositCard("main", trinket).ready, 0, "a Main keeps its own unbound keeps")
 end)
+
+-- In game (Dorftastic, 2026-09-28) Deposit Old Items and Deposit to Warband
+-- offered the same crafting materials: one to the character bank, one to
+-- the Warband bank.
+T.test("Deposit Old Items leaves what Deposit to Warband takes", function()
+    local saved
+    for _, spec in ipairs({ { player = P_MAIN, role = "main" },
+        { player = { name = "Tailor", realm = "R", level = 70, classFile = "MAGE",
+            professions = { { name = "Tailoring", skillLine = 197 } } }, role = "crafter" } }) do
+        local g = T.game({ savedVariables = saved, player = spec.player, setup = function(w) F.defineItems(w) end })
+        g:P().SetCharacterRole(spec.player.name .. "-R", spec.role)
+        saved = g:logout()
+    end
+    local g = T.game({ savedVariables = saved, player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(0, 1, I.LINEN, 20)          -- old cloth the Tailor uses
+        w:put(0, 2, I.OLD_POTION, 5)      -- old consumable nobody else needs
+    end })
+    g:openBank()
+    local P = g:P()
+    local function ids(name)
+        local set = {}
+        for _, plan in ipairs(P.GetTaskPlans(P.FindTask(name))) do set[plan.item.itemID] = true end
+        return set
+    end
+    T.ok(ids("Deposit to Warband")[I.LINEN], "linen goes to the Warband bank")
+    T.no(ids("Deposit Old Items")[I.LINEN], "not also to the character bank")
+end)

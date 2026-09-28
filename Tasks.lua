@@ -58,6 +58,15 @@ local function IsShareable(item)
 end
 P.IsShareableItem = IsShareable
 
+-- Would Deposit to Warband take this item (a Warband tab exists, another
+-- character benefits, the addon keeps it, and it isn't this character's
+-- upgrade or own current supplies)? Read through TASK_EXTRAS at call time.
+function P.WantsWarbandBank(item)
+    if P.WarbandTabsPurchased and P.WarbandTabsPurchased() == 0 then return false end
+    local extra = P.TASK_EXTRAS and P.TASK_EXTRAS["Deposit to Warband"]
+    return extra and extra.predicate and extra.predicate(item) and true or false
+end
+
 -- Items headed out of storage don't get banked: auction candidates (in game,
 -- right after pulling them this offered to deposit them again), "Can go"
 -- items (Pull Items That Can Go takes them back out), and items for a quest
@@ -82,7 +91,13 @@ P.IsHeadedOut = IsHeadedOut
 local TASK_EXTRAS = {
     ["Deposit Old Items"] = {
         description = "Old-expansion items from your bags into the bank.",
-        predicate = function(item) return not IsHeadedOut(item) end,
+        -- Nothing Deposit to Warband wants: in game (Dorftastic, 2026-09-28)
+        -- both cards offered the same crafting materials and alt gear, one
+        -- to the character bank, the other to the Warband bank.
+        predicate = function(item)
+            if IsHeadedOut(item) then return false end
+            return not (P.WantsWarbandBank and P.WantsWarbandBank(item))
+        end,
     },
     ["Pull Bank Upgrades"] = {
         description = "Gear in your bank or the Warband bank that beats what you're wearing.",
@@ -155,6 +170,8 @@ function P.WithPresetSource(preset, source)
     copy.source = source
     return copy
 end
+
+P.TASK_EXTRAS = TASK_EXTRAS
 
 -- Other modules (Reasons, Value, Warband queue) register extra built-in tasks.
 local EXTRA_TASKS = {}
