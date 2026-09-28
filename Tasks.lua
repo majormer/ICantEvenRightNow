@@ -74,7 +74,19 @@ local TASK_EXTRAS = {
         description = "Old-expansion items from your bags into the bank.",
         predicate = function(item) return not IsHeadedOut(item) end,
     },
-    ["Pull Bank Upgrades"] = { description = "Gear in the bank that beats what you're wearing." },
+    ["Pull Bank Upgrades"] = {
+        description = "Gear in your bank or the Warband bank that beats what you're wearing.",
+        -- Reads whichever bank holds more upgrades. In game, Minormer's Home
+        -- said "Nothing to do" while the Warband bank held 14 pieces his main
+        -- had parked there for him: the preset only read the character bank.
+        presetFor = function(preset)
+            local warband = P.WithPresetSource(preset, P.STORAGE_WARBAND_BANK)
+            local inBank = #P.GetTaskPlans({ preset = preset })
+            local inWarband = #P.GetTaskPlans({ preset = warband })
+            if inWarband > inBank then return warband end
+            return preset
+        end,
+    },
     ["Pull Auctionable BoEs"] = { description = "Bind-on-equip gear to list on the auction house." },
     ["Sell Old Consumables"] = {
         description = "Potions, food, and flasks from past expansions.",
@@ -115,6 +127,14 @@ local TASK_EXTRAS = {
     },
 }
 
+-- A copy of a preset that reads another source (the preset tables are shared).
+function P.WithPresetSource(preset, source)
+    local copy = {}
+    for k, v in pairs(preset) do copy[k] = v end
+    copy.source = source
+    return copy
+end
+
 -- Other modules (Reasons, Value, Warband queue) register extra built-in tasks.
 local EXTRA_TASKS = {}
 function P.RegisterTask(task)
@@ -134,6 +154,7 @@ local function GetAllTasks()
     for _, option in ipairs(P.GetQuickWorkflowOptions()) do
         local preset = P.FindQuickWorkflow(option.value)
         local extra = TASK_EXTRAS[option.value] or {}
+        if preset and extra.presetFor then preset = extra.presetFor(preset) end
         table.insert(tasks, { name = option.value, kind = "quick", preset = preset,
             description = extra.description, predicate = extra.predicate })
     end

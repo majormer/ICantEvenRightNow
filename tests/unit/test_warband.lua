@@ -488,3 +488,42 @@ T.test("Warbound-until-equipped is remembered while a tooltip is loading (saved 
     T.eq(item.bindingScope, "Warbound Until Equipped", "not 'BoE' while the tooltip loads")
     T.ok(not item.bindingPending)
 end)
+
+-- In game (2026-09-28), Minormer's Home said "Nothing to do" for upgrades
+-- while the Warband bank held 14 pieces his main had parked for him.
+T.test("Pull Bank Upgrades reads the Warband bank when that is where the upgrades are", function()
+    local function upgradeGame(bankCount, warbandCount)
+        return T.game({ player = P_MAIN, setup = function(w)
+            F.defineItems(w)
+            w:defineItem(8902, { name = "Parked Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+                itemLevel = 260, requiredLevel = 80, bindType = 7, sellPrice = 100, expansionID = 10 })
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:addBankTab(2, 12, "Tab 1", 0, 5)
+            for i = 1, bankCount do w:put(6, i, 8902, 1) end
+            for i = 1, warbandCount do w:put(12, i, 8902, 1) end
+            w.equipped[16] = 200
+        end })
+    end
+    local function card(g)
+        for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Pull Bank Upgrades" then return c end end
+    end
+    local g = upgradeGame(0, 2)
+    g:openBank()
+    local c = card(g)
+    T.ok(c, "task exists")
+    T.eq(c.ready, 2, "counts the Warband bank's upgrades")
+    T.eq(c.task.preset.source, g:P().STORAGE_WARBAND_BANK)
+    -- The character bank wins when it holds more.
+    g = upgradeGame(3, 1)
+    g:openBank()
+    c = card(g)
+    T.eq(c.ready, 3)
+    T.eq(c.task.preset.source, g:P().STORAGE_ALL_BANK_TABS)
+    -- Away from a bank (after one visit) the card still says what's waiting.
+    g = upgradeGame(0, 2)
+    g:openBank()
+    g:closeBank()
+    c = card(g)
+    T.eq(c.waiting, 2)
+    T.eq(c.needs, "Visit a bank")
+end)

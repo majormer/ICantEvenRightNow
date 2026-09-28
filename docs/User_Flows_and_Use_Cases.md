@@ -36,7 +36,7 @@ Dozens of characters, few played. Some farm gold (garrisons), some only craft.
 
 ### D. Gear upgrade scout
 
-- Pull Bank Upgrades lists bank gear that beats what this character wears.
+- Pull Bank Upgrades lists gear in the bank or the Warband bank that beats what this character wears (whichever bank holds more).
 - Tooltips name upgrades for other characters with gear-receiving roles.
 
 ### E. Collector and keepsake holder
@@ -100,7 +100,7 @@ Dozens of characters, few played. Some farm gold (garrisons), some only craft.
 | Specific hand-off | Send to Alts / Waiting for You | Bags → Warband → alt's bags | Recipient filtered by role and usability |
 | Sell | Sell Items That Can Go / Sell Old Consumables | Bags → Vendor | 12 per click; value-flagged items excluded |
 | Auction prep | Auction Candidates / Pull Auctionable BoEs | Bank → Bags | Bound items never candidates |
-| Upgrades | Pull Bank Upgrades | Bank → Bags | Class, level, and slot checks |
+| Upgrades | Pull Bank Upgrades | Bank or Warband bank → Bags | Class, level, and slot checks |
 
 ## 5. Behavioral Principles
 
