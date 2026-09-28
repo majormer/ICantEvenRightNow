@@ -53,6 +53,7 @@ function P.BuildTriageQueue(scope, includeDecided)
                 if item.itemID then
                     local decision = P.GetDecision(item.itemID)
                     local live = decision and not decision.due
+                        and not (P.KeepLapsed and P.KeepLapsed(item, decision))
                         and not (P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision))
                     if includeDecided or not live then
                         local key = where .. ":" .. item.itemID
@@ -79,7 +80,10 @@ function P.TriageProgress(scope)
     local all = P.BuildTriageQueue(scope or "all", true)
     local decided = 0
     for _, entry in ipairs(all) do
-        if entry.decision and not entry.decision.due then decided = decided + 1 end
+        local decision = entry.decision
+        if decision and not decision.due and not (P.KeepLapsed and P.KeepLapsed(entry.item, decision)) then
+            decided = decided + 1
+        end
     end
     return #all, decided
 end
@@ -327,7 +331,12 @@ local function Choose(choice, fromClick)
     -- "Keep N": the number in the box applies to sell/auction/destroy.
     local keepCount = frame and frame.keepBox and tonumber(frame.keepBox:GetText())
     if keepCount and (keepCount <= 0 or keepCount >= (entry.count or 1)) then keepCount = nil end
-    P.SetDecision(item.itemID, decisionChoice, { name = item.name, note = note, keepCount = keepCount })
+    -- Keep on a lapsed keep is an answer: it stays kept from now on.
+    local previous = P.GetDecision(item.itemID)
+    local reaffirmed = decisionChoice == "keep" and previous and previous.choice == "keep"
+        and P.KeepLapsed and P.KeepLapsed(item, previous) or nil
+    P.SetDecision(item.itemID, decisionChoice, { name = item.name, note = note, keepCount = keepCount,
+        reaffirmed = reaffirmed })
     entry.decision = P.GetDecision(item.itemID)
     state.done[item.itemID] = choice
     P.Log("triage", "screen: %s -> %s", tostring(item.name), choice)

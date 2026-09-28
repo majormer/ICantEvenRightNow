@@ -84,6 +84,7 @@ local REASONS = {
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
+    decision_lapsed      = { disposition = "review", label = "Kept as an upgrade; nobody needs it now: decide again", rank = 0.5, pinned = true },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
     investment_due       = { disposition = "review", label = "Your investment reminder is due", pinned = true },
@@ -450,6 +451,49 @@ local function IsSituational(item)
     return maxLevel > 0 and (item.requiredLevel or 0) >= maxLevel
 end
 
+-- Primary stats of what this character wears in the given slots (union), or
+-- nil when none is known. For classes with two primary stats (Druid, Monk,
+-- Paladin, Shaman) this tells off-spec gear apart from outgrown gear.
+local function WornPrimaryStats(slots)
+    if not GetInventoryItemLink then return nil end
+    local union, any = {}, false
+    for _, slot in ipairs(slots) do
+        local link = GetInventoryItemLink("player", slot)
+        local itemID = link and tonumber(link:match("item:(%d+)"))
+        if itemID then
+            local stats = PrimaryStats({ itemID = itemID, link = link })
+            for stat in pairs(stats or {}) do union[stat] = true any = true end
+        end
+    end
+    return any and union or nil
+end
+
+-- A plain Keep on gear lapses once nobody would upgrade with the piece: it
+-- was kept as an upgrade (the player's Warband triage kept 15 pieces for
+-- Minormer; after he equipped the best, the leftovers sat in his bags under
+-- "You decided to keep it", 2026-09-28). Explicit keeps stay: a note, a
+-- reason, a kept share, a reaffirmed keep. Only what this character holds
+-- (its bags or bank) is judged; off-spec gear (a different primary stat
+-- than the worn piece) is not outgrown, it is the player's call.
+local function KeepLapsed(item, decision)
+    if not decision or decision.choice ~= "keep" or decision.keptCopy or decision.reaffirmed then return false end
+    if decision.reason or (decision.note and decision.note ~= "keepsake") then return false end
+    if not P.IsGearItem(item) or not P.RolesAssigned() then return false end
+    if item.scope == "warband" or (item.owner and item.owner ~= P.currentCharacterKey) then return false end
+    if P.GearDetailsPending(item) then return false end
+    if #P.UpgradeUsersFor(item) > 0 then return false end
+    local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
+    local mine = PrimaryStats(item)
+    local worn = slots and WornPrimaryStats(slots)
+    if mine and worn then
+        local shared = false
+        for stat in pairs(mine) do if worn[stat] then shared = true end end
+        if not shared then return false end
+    end
+    return true
+end
+P.KeepLapsed = KeepLapsed
+
 -- The only character who can ever use a Soulbound item (it can't be traded,
 -- mailed or put in the Warband bank): its owner. In game, Soulbound pieces
 -- in Finalomega's bags were kept as "Upgrade for Minormer". Nil when the item
@@ -505,6 +549,11 @@ end
 local function UpgradeForCharacter(item, char)
     local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
     if not slots or not item.itemLevel or item.itemLevel <= 0 then return false end
+    -- An off-hand piece is no upgrade for a character wielding a two-hander:
+    -- the empty off-hand slot is not free, it is taken by the weapon.
+    if slots[1] == 17 and #slots == 1 and char.twoHander and not (char.equipped and (char.equipped[17] or 0) > 0) then
+        return false
+    end
     local lowest = LowestEquipped(char, slots)
     return lowest ~= nil and item.itemLevel > lowest
 end
@@ -965,6 +1014,8 @@ local function ExplainItem(item, ctx)
             end
         elseif decision.choice == "keep" and (decision.reason == "carry" or decision.note == "carry") then
             add("decided_carry", stamp)
+        elseif decision.choice == "keep" and KeepLapsed(item, decision) then
+            add("decision_lapsed", stamp .. " you kept it; nobody would upgrade with it now. Decide again.")
         elseif decision.choice == "keep" then
             add("decided_keep", stamp .. (decision.reason and (": " .. decision.reason) or "") .. (decision.note and (" (" .. decision.note .. ")") or ""))
         else

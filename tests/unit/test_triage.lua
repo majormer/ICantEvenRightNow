@@ -334,3 +334,98 @@ T.test("decide carry: keeps the item in the bags, like the screen's Carry", func
     T.eq(e.disposition, "keep")
     T.contains(P.DecideCommand("nonsense"), "carry|use")
 end)
+
+-- A plain Keep on gear lapses once nobody would upgrade with it (Minormer's
+-- bags, 2026-09-28: 15 pieces kept as his upgrades sat there after he had
+-- equipped the best). Off-spec gear and explicit keeps do not lapse.
+local DRUID = { name = "Main", realm = "R", level = 90, classFile = "DRUID" }
+local function druidGame(populate)
+    local g = T.game({ player = DRUID, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(8910, { name = "Agile Vest", classID = 4, subclassID = 2, quality = 3, equipLoc = "INVTYPE_CHEST",
+            itemLevel = 250, requiredLevel = 80, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 100 } })
+        w:defineItem(8911, { name = "Wise Vest", classID = 4, subclassID = 2, quality = 3, equipLoc = "INVTYPE_CHEST",
+            itemLevel = 250, requiredLevel = 80, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_INTELLECT_SHORT = 100 } })
+        w:defineItem(8912, { name = "Worn Agile Vest", classID = 4, subclassID = 2, quality = 3, equipLoc = "INVTYPE_CHEST",
+            itemLevel = 220, requiredLevel = 80, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 80 } })
+        w.collections.appearances = w.collections.appearances or {}
+        populate(w)
+    end })
+    g:P().SetCharacterRole("Main-R", "main")
+    return g
+end
+local function wear(g, slot, itemID, level)
+    g.world.equippedItems[slot], g.world.equipped[slot] = itemID, level
+    g:P().RefreshEquipped()
+    g:Core().ScanInventory("bags", true)
+end
+
+T.test("a plain keep on gear lapses once it is no longer an upgrade; keeping again settles it", function()
+    local g = druidGame(function(w)
+        w:put(0, 1, 8910, 1)
+        w.equippedItems[5], w.equipped[5] = 8912, 220   -- wearing 220 Agility: the 250 vest is an upgrade
+    end)
+    local P = g:P()
+    g:Core().ScanInventory("bags", true)
+    T.contains(P.WhoBenefits(scanned(g, 8910)) or "", "Upgrade for you")
+    P.SetDecision(8910, "keep", { note = "keepsake" })   -- the screen's plain Keep
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 8910)).primary.id, "decided_keep")
+    -- The player equips something better: the keep lapses and asks again.
+    wear(g, 5, 8910, 250)
+    local e = P.ExplainScanned(scanned(g, 8910))
+    T.eq(e.primary.id, "decision_lapsed")
+    T.eq(e.disposition, "review")
+    T.contains(e.evidence, "nobody would upgrade with it now")
+    -- Keeping it again is an answer: it stays kept.
+    T.contains(P.DecideCommand("8910 keep"), "Decided:")
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 8910)).primary.id, "decided_keep")
+    T.ok(P.GetDecision(8910).reaffirmed, "reaffirmed")
+end)
+
+T.test("off-spec gear and explicit keeps never lapse", function()
+    -- Wearing Agility at 300; an Intellect vest at 250 is off-spec, not outgrown.
+    local g = druidGame(function(w)
+        w:put(0, 1, 8911, 1)
+        w:put(0, 2, 8910, 1)
+        w.equippedItems[5], w.equipped[5] = 8912, 300
+    end)
+    local P = g:P()
+    P.SetDecision(8911, "keep")
+    P.SetDecision(8910, "keep", { note = "for a Guardian set" })
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 8911)).primary.id, "decided_keep", "off-spec Intellect vest stays kept")
+    T.eq(P.ExplainScanned(scanned(g, 8910)).primary.id, "decided_keep", "a keep with a note stays kept")
+    T.no(P.KeepLapsed(scanned(g, 8911), P.GetDecision(8911)))
+    -- The same Agility vest with a plain keep would lapse.
+    P.SetDecision(8910, "keep")
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 8910)).primary.id, "decision_lapsed")
+end)
+
+-- In game (2026-09-28) two off-hand pieces read "Upgrade for Minormer": his
+-- off-hand slot is empty because he wields a staff.
+T.test("an off-hand piece is no upgrade next to a two-hander, and its plain keep lapses", function()
+    local g = druidGame(function(w)
+        w:defineItem(8920, { name = "Staff of Testing", classID = 2, subclassID = 10, quality = 3, equipLoc = "INVTYPE_2HWEAPON",
+            itemLevel = 250, requiredLevel = 80, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_INTELLECT_SHORT = 100 } })
+        w:defineItem(8921, { name = "Dawnlit Beacon", classID = 4, subclassID = 0, quality = 2, equipLoc = "INVTYPE_HOLDABLE",
+            itemLevel = 192, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_INTELLECT_SHORT = 50 } })
+        w:put(0, 1, 8921, 1)
+        w.equippedItems[16], w.equipped[16] = 8920, 250
+    end)
+    local P = g:P()
+    P.RefreshEquipped()
+    g:Core().ScanInventory("bags", true)
+    T.ok(P.GetCurrentCharacter().twoHander, "the staff is recorded")
+    T.no((P.WhoBenefits(scanned(g, 8921)) or ""):find("Upgrade for you", 1, true), "not an upgrade")
+    P.SetDecision(8921, "keep")
+    g:Core().ScanInventory("bags", true)
+    T.eq(P.ExplainScanned(scanned(g, 8921)).primary.id, "decision_lapsed")
+end)

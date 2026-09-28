@@ -60,7 +60,7 @@ local function IsHeadedOut(item)
         if reason.id == "quest_active" then return true end
         -- Needs the player's attention first (a refused or run-out decision):
         -- depositing it would hide the question (8 refused legendaries, 2026-09-28).
-        if reason.id == "decision_blocked" or reason.id == "decision_due" then return true end
+        if reason.id == "decision_blocked" or reason.id == "decision_due" or reason.id == "decision_lapsed" then return true end
         -- Stays in the bags (utility items the player uses: Jeeves).
         local def = P.REASONS and P.REASONS[reason.id]
         if def and def.bags then return true end

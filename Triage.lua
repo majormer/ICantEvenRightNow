@@ -40,7 +40,7 @@ function P.SetDecision(itemID, choice, opts)
     if not CHOICES[choice] then return nil, "Unknown choice: " .. tostring(choice) end
     opts = opts or {}
     local record = { choice = choice, at = Now(), by = P.currentCharacterKey, name = opts.name,
-        reason = opts.reason, note = opts.note }
+        reason = opts.reason, note = opts.note, reaffirmed = opts.reaffirmed or nil }
     if choice == "defer" then
         record.until_ = Now() + (tonumber(opts.days) or P.TriageDeferDays()) * DAY
     end
@@ -293,20 +293,24 @@ function P.DecideCommand(args)
     if choice == "clear" then
         return P.ClearDecision(itemID) and ("Decision cleared for item " .. itemID .. ".") or ("No decision for item " .. itemID .. ".")
     end
-    local name
+    local name, found
     local total, _ = P.CountAcrossAccount and P.CountAcrossAccount(tonumber(itemID))
     for _, snapshot in ipairs(P.AllSnapshots()) do
         for _, item in ipairs(snapshot.items or {}) do
-            if item.itemID == tonumber(itemID) then name = item.name break end
+            if item.itemID == tonumber(itemID) then name, found = item.name, item break end
         end
         if name then break end
     end
+    -- Keeping a lapsed keep again is an answer: it stays kept from now on.
+    local previous = P.GetDecision(tonumber(itemID))
+    local reaffirmed = choice == "keep" and previous and previous.choice == "keep" and found
+        and P.KeepLapsed and P.KeepLapsed(found, previous) or nil
     local days = choice == "defer" and tonumber(rest) or nil
     -- "<choice> keep <n> [note]": keep n units, the rest follow the choice.
     local keepCount, afterKeep = rest:match("^keep%s+(%d+)%s*(.-)$")
     if keepCount then rest = afterKeep end
     local record, err = P.SetDecision(itemID, choice, { name = name, days = days, keepCount = keepCount,
-        note = (not days and rest ~= "") and rest or nil })
+        note = (not days and rest ~= "") and rest or nil, reaffirmed = reaffirmed })
     if not record then return err end
     if Core.RefreshUI and P.UI and P.UI.frame and P.UI.frame:IsShown() then Core.RefreshUI() end
     return "Decided: " .. (name or ("item " .. itemID)) .. " -> " .. (carry and "carry (keep it in your bags)" or choice)

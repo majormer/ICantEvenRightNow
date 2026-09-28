@@ -184,9 +184,25 @@ end
 -- Refresh the current character's equipped levels, keeping earlier data when
 -- nothing could be read yet. Also records the overall equipped average, used
 -- when per-slot data is missing.
+-- Is the worn main-hand weapon a two-hander (the off-hand slot is empty by
+-- design, not free)? Nil when unknown.
+local function WearsTwoHander()
+    if not (GetInventoryItemLink and C_Item and C_Item.GetItemInfoInstant) then return nil end
+    local link = GetInventoryItemLink("player", 16)
+    if not link then return nil end
+    local ok, _, _, _, equipLoc = pcall(C_Item.GetItemInfoInstant, link)
+    if not ok then return nil end
+    return equipLoc == "INVTYPE_2HWEAPON" or equipLoc == "INVTYPE_RANGED" or equipLoc == "INVTYPE_RANGEDRIGHT"
+end
+
 local function RefreshEquipped(char)
     local equipped, read = ReadEquipped()
-    if equipped and read > 0 then char.equipped = equipped end
+    if equipped and read > 0 then
+        char.equipped = equipped
+        -- In game (2026-09-28) two off-hand pieces read "Upgrade for Minormer"
+        -- because his off-hand slot is empty: he wields a staff.
+        char.twoHander = WearsTwoHander() or nil
+    end
     local sets = ReadEquippedSets(char.equipped)
     if sets then char.equippedSets = sets end
     if GetAverageItemLevel then
