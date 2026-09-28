@@ -2345,27 +2345,9 @@ function Core.RefreshTransferUncached()
         local warbandFull = top and toWarband and (top:find("No empty slots", 1, true)
             or (P.WARBAND_ASSIGNED_FULL and top:sub(1, #P.WARBAND_ASSIGNED_FULL) == P.WARBAND_ASSIGNED_FULL))
         if warbandFull then
-            local bought = P.WarbandTabsPurchased and P.WarbandTabsPurchased()
             -- Only offer the pull when it has something (in game, Finalomega
             -- 2026-09-28, it opened an empty list); name what does free room.
-            local pullTask = P.FindTask and P.FindTask("Pull Warband Items That Can Go")
-            local canPull = pullTask and #P.GetTaskPlans(pullTask) > 0
-            local waiting = 0
-            local target = P.AuctionCharacter and P.AuctionCharacter()
-            if target and P.GetHandoffs then
-                for _, entry in ipairs(P.GetHandoffs(function(e) return e.to == target.key and e.state == "deposited" end)) do
-                    waiting = waiting + 1
-                end
-            end
-            local ways = {}
-            if canPull then ways[#ways + 1] = "pull out items that can go" end
-            if waiting > 0 and target.key ~= P.currentCharacterKey then
-                ways[#ways + 1] = "have " .. target.name .. " collect the " .. waiting .. " item" .. (waiting == 1 and "" or "s")
-                    .. " waiting to be auctioned"
-            end
-            if bought and bought < 5 then
-                ways[#ways + 1] = "buy another Warband tab at a banker (" .. bought .. " of 5 bought)"
-            end
+            local ways, canPull = P.WarbandRoomWays()
             emptyMsg = "The Warband bank is full." .. (#ways > 0 and (" To make room: " .. table.concat(ways, "; ") .. ".") or "")
             if canPull then
                 emptyActionMode = "task"

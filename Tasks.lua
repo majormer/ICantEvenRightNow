@@ -301,6 +301,30 @@ local function TaskPlans(task)
 end
 P.GetTaskPlans = TaskPlans
 
+-- What frees Warband bank space, in the player's words, most useful first.
+-- In game (Finalomega, 2026-09-28) a full Warband bank advised "pull items
+-- that can go", but nothing in it could go: the pull list was empty while
+-- 31 items waited there for Kiosk to auction. Returns ways, canPull.
+function P.WarbandRoomWays()
+    local ways = {}
+    local pullTask = P.FindTask("Pull Warband Items That Can Go")
+    local canPull = pullTask and #TaskPlans(pullTask) > 0 or false
+    if canPull then ways[#ways + 1] = "pull out items that can go" end
+    local target = P.AuctionCharacter and P.AuctionCharacter()
+    if target and target.key ~= P.currentCharacterKey and P.GetHandoffs then
+        local waiting = #P.GetHandoffs(function(e) return e.to == target.key and e.state == "deposited" end)
+        if waiting > 0 then
+            ways[#ways + 1] = "have " .. target.name .. " collect the " .. waiting .. " item"
+                .. (waiting == 1 and "" or "s") .. " waiting to be auctioned"
+        end
+    end
+    local bought = P.WarbandTabsPurchased and P.WarbandTabsPurchased()
+    if bought and bought < 5 then
+        ways[#ways + 1] = "buy another Warband tab at a banker (" .. bought .. " of 5 bought)"
+    end
+    return ways, canPull
+end
+
 -- Evaluate a task into card data.
 local function EvaluateTask(task)
     local card = {
@@ -543,7 +567,8 @@ function P.CardSummary(card)
         if P.IsWarbandStorage(dest) then
             local free = P.FreeWarbandSlots()
             if free and free < card.ready then
-                extra = extra .. "; Warband bank has " .. free .. " free: pull items that can go first"
+                local ways = P.WarbandRoomWays()
+                extra = extra .. "; Warband bank has " .. free .. " free" .. (ways[1] and (": " .. ways[1] .. " first") or "")
             end
         elseif dest == "Bags" and P.NeedsBankStorage(source) then
             local free = P.FreeBagSlots()

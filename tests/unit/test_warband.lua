@@ -499,6 +499,15 @@ T.test("a full Warband bank offers no pull when nothing in it can go, and names 
     T.contains(text, "have Kiosk collect the 2 items waiting to be auctioned")
     T.contains(text, "1 of 5 bought")
     T.ok(panel.emptyAction:GetText() ~= "Pull Warband Items That Can Go" or not panel.emptyAction:IsShown())
+    -- The Home card gives the same advice, not "pull items that can go".
+    for _, c in ipairs(P.GetTaskCards()) do
+        local summary = P.CardSummary(c)
+        T.notContains(summary, "pull items that can go")
+        T.notContains(summary, "pull out items that can go")
+        if summary:find("Warband bank has", 1, true) then
+            T.contains(summary, "have Kiosk collect the 2 items waiting to be auctioned first")
+        end
+    end
 end)
 
 T.test("Warbound-until-equipped is remembered while a tooltip is loading (saved across reloads)", function()
