@@ -97,23 +97,32 @@ function P.DecisionSurplus(itemID)
                 if item.itemID == itemID then stacks[#stacks + 1] = item end
             end
         end
+        -- Stacks kept last time stay kept (record.keptKeys): otherwise a
+        -- surplus copy pulled into the bags would outrank the copy it was
+        -- meant to lose to (bags before banks) and the two would swap places
+        -- on every scan (seen in game with Winged Terror Gloves, 2026-09-28).
+        local keptBefore = record.keptKeys or {}
         table.sort(stacks, function(a, b)
             local la, lb = a.itemLevel or 0, b.itemLevel or 0
             if la ~= lb then return la > lb end
+            local ka, kb = keptBefore[P.StackKey(a)] and 0 or 1, keptBefore[P.StackKey(b)] and 0 or 1
+            if ka ~= kb then return ka < kb end
             local sa, sb = SCOPE_ORDER[a.scope] or 3, SCOPE_ORDER[b.scope] or 3
             if sa ~= sb then return sa < sb end
             local ca, cb = a.count or 1, b.count or 1
             if ca ~= cb then return ca > cb end
             return P.StackKey(a) < P.StackKey(b)
         end)
-        local kept = 0
+        local kept, keptKeys = 0, {}
         for _, stack in ipairs(stacks) do
             if kept < record.keepCount then
                 kept = kept + (stack.count or 1)
+                keptKeys[P.StackKey(stack)] = true
             else
                 surplus[P.StackKey(stack)] = true
             end
         end
+        if #stacks > 0 then record.keptKeys = keptKeys end
     end
     surplusCache[itemID] = surplus
     return surplus

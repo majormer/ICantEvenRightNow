@@ -107,6 +107,38 @@ T.test("keep N, the rest go: duplicates and commodity stacks split per stack", f
         end
     end
     T.eq(kept, 1) T.eq(sold, 1)
+    -- The kept copy stays kept when the surplus copy moves next to it (a pull into the bags).
+    g = T.game({ player = PLAYER, setup = F.setup(function(w)
+        w:put(0, 1, I.OLD_SWORD, 1)     -- bags
+        w:put(6, 1, I.OLD_SWORD, 1)     -- bank
+    end) })
+    P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:openBank()
+    g:Core().ScanInventory("all", true)
+    g:slash("decide " .. I.OLD_SWORD .. " sell keep 1")
+    local function surplusScopes()
+        local out = {}
+        for _, scope in ipairs({ "bags", "bank" }) do
+            for _, it in ipairs(P.GetScanList(scope)) do
+                if it.itemID == I.OLD_SWORD then out[scope] = P.EffectiveDecision(it).choice end
+            end
+        end
+        return out
+    end
+    T.eq(surplusScopes().bags, "keep") T.eq(surplusScopes().bank, "sell", "bags copy kept, bank copy surplus")
+    -- The surplus copy is pulled into the bags, next to the kept one.
+    g.world.containers[6].slots[1] = nil
+    g.world:put(0, 2, I.OLD_SWORD, 1)
+    g:Core().ScanInventory("all", true)
+    local keepCount, sellCount = 0, 0
+    for _, it in ipairs(P.GetScanList("bags")) do
+        if it.itemID == I.OLD_SWORD then
+            if P.EffectiveDecision(it).choice == "keep" then keepCount = keepCount + 1 else sellCount = sellCount + 1 end
+            if it.slot == 1 then T.eq(P.EffectiveDecision(it).choice, "keep", "the original stays the kept one") end
+        end
+    end
+    T.eq(keepCount, 1) T.eq(sellCount, 1)
     -- Four stacks of 20 ore, keep 60 and auction the rest: exactly one stack is a candidate.
     g = game(function(w) for slot = 1, 4 do w:put(0, slot, I.VALUABLE_ORE, 20) end end)
     P = g:P()
