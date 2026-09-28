@@ -603,12 +603,19 @@ local function MatchesTabFilters(item, tabName, extraParts)
     if filters.upgrade and not IsAllFilterValue(filters.upgrade.include) then
         if not IsUpgradeEligibleItem(item) then return false end
         if item.itemLevel and item.itemLevel > 0 then
-            local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
-            if equippedIlvl ~= nil then
-                local isUpgrade = item.itemLevel > equippedIlvl
-                if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
-                if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
+            -- Recorded levels (read with retries after login), not the live
+            -- slots, which read 0 until the gear's data loads: after a reload
+            -- every piece looked like an upgrade and the list shrank as the
+            -- data arrived. Unknown equipment: nothing is called an upgrade.
+            local equippedIlvl
+            if P.PlayerEquippedLevel then
+                equippedIlvl = P.PlayerEquippedLevel(item.equipLoc)
+            else
+                equippedIlvl = GetEquippedItemLevel(item.equipLoc)
             end
+            local isUpgrade = equippedIlvl ~= nil and item.itemLevel > equippedIlvl
+            if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
+            if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
         end
     end
     -- Item level filter: when active, restricts to equippable gear within the range.

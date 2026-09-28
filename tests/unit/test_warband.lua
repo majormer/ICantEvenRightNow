@@ -513,6 +513,15 @@ T.test("Pull Bank Upgrades reads the Warband bank when that is where the upgrade
     T.ok(c, "task exists")
     T.eq(c.ready, 2, "counts the Warband bank's upgrades")
     T.eq(c.task.preset.source, g:P().STORAGE_WARBAND_BANK)
+    -- The live slot levels read 0 for a while after a reload (in game a
+    -- level 1 ring "beat" a 250 one and the list shrank while scrolling):
+    -- the recorded levels decide. Worn 300 at login, live 0 now: no upgrade.
+    g = upgradeGame(0, 2)
+    g.world.equipped[16] = 300
+    g:P().RefreshEquipped()
+    g.world.equipped[16] = nil
+    g:openBank()
+    T.eq(card(g).ready, 0, "recorded levels, not live ones")
     -- The character bank wins when it holds more.
     g = upgradeGame(3, 1)
     g:openBank()
