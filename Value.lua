@@ -896,7 +896,13 @@ function P.RegisterValueTasks()
             label = function()
                 return ns.DB.context.auctionHouseOpen and "Check in Auctionator" or "Save to Auctionator"
             end,
-            isAvailable = function() return P.HasAuctionator() and #P.AuctionCandidateItems() > 0 end,
+            -- Not while another character lists: the shopping list belongs on
+            -- the auction character (the player, at the bank: "it will offer
+            -- to save to Auctionator when the items are going to Kiosk").
+            isAvailable = function()
+                if not ns.DB.context.auctionHouseOpen and P.AuctionHandoffTarget and P.AuctionHandoffTarget() then return false end
+                return P.HasAuctionator() and #P.AuctionCandidateItems() > 0
+            end,
             run = function() P.CheckCandidatesInAuctionator() end,
         },
     })

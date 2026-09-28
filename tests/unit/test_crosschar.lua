@@ -374,6 +374,13 @@ T.test("auction character: auctionables are handed to it through the Warband ban
     T.contains(P.CardSummary(card), "1 to hand to Kiosk")
     T.contains(card.description, "Handed to Kiosk through the Warband bank")
     T.eq(card.task.preset.dest, P.STORAGE_WARBAND_ROUTED, "the route is the Warband bank, not the auction house")
+    local hasAuctionator = P.HasAuctionator
+    P.HasAuctionator = function() return true end
+    T.no(card.task.secondary.isAvailable(), "no Save to Auctionator while Kiosk lists")
+    P.SetAuctionFlag("Kiosk-R", false)
+    T.ok(card.task.secondary.isAvailable(), "offered again when this character lists")
+    P.SetAuctionFlag("Kiosk-R", true)
+    P.HasAuctionator = hasAuctionator
     local trip = P.TripPlan(P.GetTaskCards()) or ""
     T.no(trip:find("auction house", 1, true), "no auction house stop for this character")
     T.contains(trip, "bank")
