@@ -264,3 +264,29 @@ T.test("the screen: hovering the item shows the game's tooltip with the worn pie
     frame.hover:GetScript("OnLeave")(frame.hover)
     T.no(tooltip:IsShown())
 end)
+
+-- In game (2026-09-28) destroying Kiosk's Stormwind Portal Stone removed
+-- "Legion: The Legion Returns" from the quest log: the stone is the quest's
+-- item, not a quest starter, so it read as a plain quest item.
+T.test("an item a quest in the log hands out is kept and never destroyed", function()
+    local g = game(function(w)
+        w:defineItem(9201, { name = "Stormwind Portal Stone", classID = 12, subclassID = 0, quality = 1,
+            sellPrice = 0, expansionID = 6 })
+        w:put(0, 1, 9201, 1)
+        w.quests.log = { { title = "Legion: The Legion Returns", specialItem = 9201, questID = 40519 } }
+    end)
+    local P = g:P()
+    g:Core().ScanInventory("bags", true)
+    local stone = scanned(g, 9201)
+    T.eq(stone.questUse, "Legion: The Legion Returns")
+    local e = P.ExplainScanned(stone)
+    T.eq(e.primary.id, "quest_active")
+    T.contains(e.evidence, "The Legion Returns")
+    P.SetDecision(9201, "destroy")
+    g:Core().ScanInventory("bags", true)
+    local plans = P.GetTransferCandidates("Bags", P.STORAGE_DESTROY)
+    local found
+    for _, plan in ipairs(plans) do if plan.item.itemID == 9201 then found = plan end end
+    T.ok(found and not found.movable, "destroy is blocked")
+    T.contains(found.blocked, "would remove the quest")
+end)

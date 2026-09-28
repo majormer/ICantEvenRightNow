@@ -473,6 +473,10 @@ function World:_buildEnv()
     G.date = function(fmt, t) return os.date(fmt, t or math.floor(world.now)) end
     G.GetTime = function() return world.now end
     G.GetInventoryItemID = function(_, slot) return world.equippedItems[slot] end
+    G.GetQuestLogSpecialItemInfo = function(index)
+        local entry = (world.quests.log or {})[index]
+        return entry and entry.specialItem and world:itemLink(entry.specialItem) or nil
+    end
     G.GetInventoryItemLink = function(_, slot)
         local itemID = world.equippedItems[slot]
         return itemID and world:itemLink(itemID) or nil
@@ -906,6 +910,15 @@ function World:_buildEnv()
         IsQuestFlaggedCompleted = function(questID) return world.quests.completed[questID] and true or false end,
         IsOnQuest = function(questID) return world.quests.active[questID] and true or false end,
         GetTitleForQuestID = function(questID) return "Quest " .. tostring(questID) end,
+        -- world.quests.log = { { title = "...", specialItem = itemID }, ... }
+        GetNumQuestLogEntries = function()
+            local n = #(world.quests.log or {})
+            return n, n
+        end,
+        GetInfo = function(index)
+            local entry = (world.quests.log or {})[index]
+            return entry and { title = entry.title, isHeader = false, questID = entry.questID } or nil
+        end,
         IsQuestFlaggedCompletedOnAccount = function(questID)
             return world.quests.completedOnAccount and world.quests.completedOnAccount[questID] or false
         end,

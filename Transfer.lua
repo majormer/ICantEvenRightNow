@@ -396,6 +396,10 @@ local function GetTransferBlockReason(item, source, dest)
         if not price then return why end
     elseif dest == P.STORAGE_DESTROY then
         if item.scope ~= BAG_SCOPE then return "Only items in your bags can be destroyed" end
+        if item.questUse then
+            return "Used by \"" .. item.questUse .. "\" in your quest log: destroying it would remove the quest"
+        end
+        if item.questActive then return "Belongs to a quest in your log: destroying it would remove the quest" end
         local channels = P.ItemChannels(item)
         if not channels.destroy then return channels.why.destroy end
     elseif P.IsWarbandStorage(dest) then

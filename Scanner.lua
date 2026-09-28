@@ -39,6 +39,28 @@ local CContainer = C_Container
 -- Originally missing from source; recovered from build/release/Core.lua.
 -- ===========================================================================
 
+-- Items the quests in this character's log hand out to use: [itemID] = quest
+-- title. GetQuestLogSpecialItemInfo(index) is the tracker's item button.
+local questLogItems, questLogItemsAt = {}, -1
+function P.QuestLogItems()
+    local now = GetTime and GetTime() or 0
+    if now == questLogItemsAt then return questLogItems end
+    questLogItems, questLogItemsAt = {}, now
+    if not (C_QuestLog and C_QuestLog.GetNumQuestLogEntries and C_QuestLog.GetInfo and GetQuestLogSpecialItemInfo) then
+        return questLogItems
+    end
+    local ok, count = pcall(C_QuestLog.GetNumQuestLogEntries)
+    for index = 1, (ok and tonumber(count) or 0) do
+        local okInfo, info = pcall(C_QuestLog.GetInfo, index)
+        if okInfo and info and not info.isHeader then
+            local okItem, link = pcall(GetQuestLogSpecialItemInfo, index)
+            local itemID = okItem and type(link) == "string" and tonumber(link:match("item:(%d+)"))
+            if itemID then questLogItems[itemID] = info.title or "a quest in your log" end
+        end
+    end
+    return questLogItems
+end
+
 local function RemoveMovedItemsFromScan(movedKeys)
     P.RemoveFromSnapshots(movedKeys)
 end
@@ -185,6 +207,11 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
             -- captured now (other characters' snapshots are read later).
             local questInfo = CContainer.GetContainerItemQuestInfo
                 and CContainer.GetContainerItemQuestInfo(bagID, slot) or nil
+            -- An item a quest in the log hands you to use (its tracker button).
+            -- In game (2026-09-28) Kiosk's Stormwind Portal Stone read as a
+            -- plain quest item; destroying it removed "Legion: The Legion
+            -- Returns" from the quest log.
+            local questUse = P.QuestLogItems and itemID and P.QuestLogItems()[itemID] or nil
             local questID = questInfo and questInfo.questID or nil
             -- Remembered once seen (saved): on the first scan after a reload
             -- the container info had no questID for 25 quest-starting items,
@@ -245,6 +272,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 questID            = questID,
                 questActive        = questActive,
                 questCompleted     = questCompleted and true or false,
+                questUse           = questUse,
             })
         end
     end

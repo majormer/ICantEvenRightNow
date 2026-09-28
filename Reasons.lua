@@ -729,8 +729,10 @@ local function ExplainItem(item, ctx)
             local expansion = P.GetExpansionName(item.expansionID)
             add("quest_not_started", expansion ~= "Unknown" and ("A " .. expansion .. " quest") or nil)
         end
+    elseif item.questUse then
+        add("quest_active", "Used by \"" .. item.questUse .. "\" in your quest log")
     elseif item.isQuestItem or item.classID == 12 then
-        add("quest_item")
+        add("quest_item", "Destroying a quest item can remove its quest from your log")
     end
 
     if item.classID == 20 then
