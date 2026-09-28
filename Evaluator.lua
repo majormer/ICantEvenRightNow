@@ -176,13 +176,21 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         local wanted = ITEM_ACCOUNTBOUND_UNTIL_EQUIP or "Warbound until equipped"
         local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
         local known = KnownBindings()
+        -- Remembered per copy (its GUID), not per item ID: copies of one
+        -- item differ. In game (2026-09-28) Kiosk's two Tarnished Dawnlit
+        -- Longswords were BoE and Finalomega's was Warbound until equipped;
+        -- the shared "boe" made Finalomega's copy an auction candidate after
+        -- every reload, until its tooltip loaded.
+        local okGUID, guid = false, nil
+        if C_Item.GetItemGUID then okGUID, guid = pcall(C_Item.GetItemGUID, itemLocation) end
+        local memoryKey = (okGUID and type(guid) == "string" and guid ~= "") and guid or itemID
         local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
         local first = ok and type(data) == "table" and data.lines and data.lines[1] and data.lines[1].leftText
         local wue
         if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
             -- Tooltip not loaded: reuse what was seen before, or wait for it.
-            if itemID and known[itemID] then
-                wue = known[itemID] == "wue"
+            if memoryKey and known[memoryKey] then
+                wue = known[memoryKey] == "wue"
             else
                 details.bindingPending = true
                 if itemID and C_Item and C_Item.RequestLoadItemDataByID then
@@ -196,8 +204,8 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
             end
             -- A saved "wue" stands: the game's own refusal set it (2026-09-27)
             -- and a Warbound-until-equipped item never becomes BoE.
-            if itemID then known[itemID] = (wue or known[itemID] == "wue") and "wue" or "boe" end
-            if known[itemID] == "wue" then wue = true end
+            if memoryKey then known[memoryKey] = (wue or known[memoryKey] == "wue") and "wue" or "boe" end
+            if memoryKey and known[memoryKey] == "wue" then wue = true end
         end
         if wue then
             details.bindingScope   = "Warbound Until Equipped"

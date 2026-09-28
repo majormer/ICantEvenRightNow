@@ -908,7 +908,10 @@ CheckListings = function()
         if reason and reason.permanent then
             AuctionRefusedStore()[item.itemID] = { name = item.name, reason = reason.text, at = time and time() or 0 }
             -- The game knows the binding better than the tooltip read did.
-            if reason.binding and ns.DB.knownBinding then ns.DB.knownBinding[item.itemID] = reason.binding end
+            -- ("wue" is remembered per copy: other copies can be plain BoE.)
+            if reason.binding and ns.DB.knownBinding then
+                ns.DB.knownBinding[(reason.binding == "wue" and item.guid) or item.itemID] = reason.binding
+            end
         end
         Print("Not listed: " .. ItemLabel(item) .. " (" .. (reason and reason.text or "no answer from the auction house") .. ")."
             .. (reason and reason.permanent and " It won't be offered for auction again (/icanteven refused clear to retry)." or ""))

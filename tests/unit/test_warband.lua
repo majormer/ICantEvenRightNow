@@ -523,11 +523,43 @@ T.test("Warbound-until-equipped is remembered while a tooltip is loading (saved 
         for _, it in ipairs(g:P().GetWarbandSnapshot().items) do if it.itemID == I.OLD_SWORD then return it end end
     end
     T.eq(sword().bindingScope, "Warbound Until Equipped")
-    T.eq(g:db().knownBinding[I.OLD_SWORD], "wue", "saved")
+    local guid = g.world.containers[12].slots[1].guid
+    T.eq(g:db().knownBinding[guid], "wue", "saved for this copy")
     g.world.containers[12].slots[1].tooltipLoading = true    -- the client dropped the item
     local item = sword()
     T.eq(item.bindingScope, "Warbound Until Equipped", "not 'BoE' while the tooltip loads")
     T.ok(not item.bindingPending)
+end)
+
+-- In game (2026-09-28) Kiosk's Longswords were BoE and Finalomega's copy was
+-- Warbound until equipped: the memory by item ID made his copy look BoE (an
+-- auction candidate) after every reload, until its tooltip loaded.
+T.test("Warbound-until-equipped is remembered per copy: a BoE copy of the same item doesn't vouch for another", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 5)
+        w:put(0, 1, I.OLD_SWORD, 1)                                    -- a plain BoE copy
+        -- This one is Warbound until equipped, and the API doesn't say so (as in game).
+        w:put(0, 2, I.OLD_SWORD, 1, { warboundUntilEquipped = true, apiHidesWue = true })
+    end })
+    g:openBank()
+    local function copies()
+        g:Core().ScanInventory("bags", true)
+        local out = {}
+        for _, it in ipairs(g:P().GetScanList("bags")) do if it.itemID == I.OLD_SWORD then out[it.slot] = it end end
+        return out
+    end
+    local c = copies()
+    T.eq(c[1].bindingScope, "BoE") T.eq(c[2].bindingScope, "Warbound Until Equipped")
+    -- The client drops the Warbound copy's tooltip, and it has no memory of
+    -- its own (a new session): it waits instead of borrowing the BoE answer.
+    g.world.containers[0].slots[2].tooltipLoading = true
+    g:db().knownBinding[g.world.containers[0].slots[2].guid] = nil
+    c = copies()
+    T.ok(c[2].bindingPending, "waits for its own tooltip")
+    T.ok(not g:P().ItemChannels(c[2]).auction, "never an auction candidate meanwhile")
+    T.eq(c[1].bindingScope, "BoE")
 end)
 
 -- In game (2026-09-28), Minormer's Home said "Nothing to do" for upgrades

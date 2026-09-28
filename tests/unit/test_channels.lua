@@ -166,7 +166,7 @@ T.test("a 'Warbound until equipped' refusal corrects the saved binding: the item
     g:click(panel.execute)
     g.world:advance(2)
     T.contains(g:printed(mark), "Warbound until equipped")
-    T.eq(g:db().knownBinding[I.OLD_SWORD], "wue", "binding corrected from the game's answer")
+    T.eq(g:db().knownBinding[g.world.containers[0].slots[1].guid], "wue", "binding corrected from the game's answer (this copy)")
     T.ok(P.AuctionRefused(I.OLD_SWORD))
     g:Core().ScanInventory("bags", true)
     local c = P.ItemChannels(scanned(g, I.OLD_SWORD))

@@ -703,12 +703,16 @@ P.LogAuctionCandidates = LogCandidates
 function P.AuctionCandidateReport()
     LogCandidates(P.AuctionCandidateItems())
     local lines, total = {}, 0
-    for _, item in ipairs(P.AuctionCandidateItems()) do
+    -- Per place, as the Home card counts them (in game the card read "1 to
+    -- hand to Kiosk, 3 already in the Warband bank" while this listed 3).
+    for _, item in ipairs(P.AuctionCandidateItems(true)) do
         local value = P.GetItemValue(item) or 0
         total = total + value
         local price = P.GetAuctionPrice(item)
-        table.insert(lines, string.format("  %s%s x%d: %s each (%s) = %s", item.name or ("Item " .. tostring(item.itemID)),
-            GearItemLevel(item) and (" [" .. GearItemLevel(item) .. "]") or "", item.count or 1,
+        local place = item.scope == P.BAG_SCOPE and "bags"
+            or (P.IsWarbandStorage(item.storageKind) and "Warband bank" or (item.storageKind or "bank"))
+        table.insert(lines, string.format("  %s%s x%d [%s]: %s each (%s) = %s", item.name or ("Item " .. tostring(item.itemID)),
+            GearItemLevel(item) and (" [" .. GearItemLevel(item) .. "]") or "", item.count or 1, place,
             price and P.FormatMoney(price.price) or "?", price and P.FormatPriceSource(price) or "no price",
             P.FormatMoney(value)))
     end
