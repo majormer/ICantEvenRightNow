@@ -664,3 +664,22 @@ T.test("Deposit Old Items leaves what Deposit to Warband takes", function()
     T.ok(ids("Deposit to Warband")[I.LINEN], "linen goes to the Warband bank")
     T.no(ids("Deposit Old Items")[I.LINEN], "not also to the character bank")
 end)
+
+-- In game (Gnomurcy, 2026-09-28) Deposit Old Items banked two upgrades that
+-- Pull Bank Upgrades then offered straight back.
+T.test("Deposit Old Items never banks gear this character should equip", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(9801, { name = "Old Upgrade Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 60, bindType = 1, sellPrice = 100, expansionID = 3 })
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:put(0, 1, 9801, 1, { bound = true })
+        w.equipped[16] = 200
+    end })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:P().RefreshEquipped()
+    g:openBank()
+    local ids = {}
+    for _, plan in ipairs(g:P().GetTaskPlans(g:P().FindTask("Deposit Old Items"))) do ids[plan.item.itemID] = true end
+    T.no(ids[9801], "an upgrade stays in the bags")
+end)

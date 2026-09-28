@@ -96,6 +96,10 @@ local TASK_EXTRAS = {
         -- to the character bank, the other to the Warband bank.
         predicate = function(item)
             if IsHeadedOut(item) then return false end
+            -- Never gear this character should equip: in game (Gnomurcy,
+            -- 2026-09-28) it banked two upgrades that Pull Bank Upgrades
+            -- then offered straight back.
+            if P.IsUpgradeForPlayer and P.IsUpgradeForPlayer(item) then return false end
             return not (P.WantsWarbandBank and P.WantsWarbandBank(item))
         end,
     },
