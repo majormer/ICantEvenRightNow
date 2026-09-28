@@ -22,7 +22,9 @@ Release note rules:
 
 - **A Keep on gear lapses once nobody needs it.** Gear you kept as an upgrade comes back to Justify every item ("Kept as an upgrade; nobody needs it now: decide again") once no character would upgrade with it. Off-spec pieces (a different primary stat than what you wear), keeps with a note or a kept count, and a Keep you answer a second time stay kept. An off-hand piece is no upgrade for a character wielding a two-hander.
 - **Escape closes the addon's windows.** Menus, dialogs and the main window close with Escape, one per press, the most recent first.
-- **Destroy what nothing takes.** Items that can go but that no vendor, auction or character takes (old class-hall trinkets with no sell price, toys you already learned) are offered by Destroy Items That Can Go, one click each. Nothing is destroyed without your click, and nothing you didn't decide is ever pre-selected.
+- **Destroy what nothing takes.** Items that can go but that no vendor, auction or character takes (old class-hall trinkets with no sell price, toys you already learned) are offered by Destroy Items That Can Go, one click each, and each row says why ("you decided" or "nothing buys it"). Nothing is destroyed without your click, and nothing you didn't decide is ever pre-selected. An item a quest in your log uses is kept ("Used by ... in your quest log") and can't be destroyed: destroying it would drop the quest. General crafting reagents that no profession list covers (Artisan's Acuity, Restored Artifacts) are your call, with the character's professions named, never "no crafter uses it".
+- **Open it.** Bags, caches and other items with "<Right Click to Open>" say "open it", stay in your bags and offer Use.
+- **Pet battle supplies.** Battle-Training Stones, Battle-Stones, pet bandages, treats and charms are kept for any character that battles pets. Old-expansion scrolls count as spent consumables.
 - **Consolidate Warbound Items.** Warbound tokens, pet charms and cosmetics in a character bank now go to the Warband bank too, not just gear.
 - **Bags.** A spare bag or reagent bag is judged against the ones you use: equip it into an empty slot, swap it in when it's bigger, or let it go when it's no bigger than any of yours.
 - **Far-outgrown gear can go.** Gear a quarter or more below what its wearers use is outgrown, even a trinket, a weapon or a set piece: an item level 15 set bonus is never worth 130 item levels a slot. Trinkets and weapons close to what you wear stay your call.
@@ -38,7 +40,7 @@ Release note rules:
 - Warband routing works with any number of Warband tabs (none, or up to five): general tabs fill one after another, the Transfer list shows each tab's free space, and when a tab you assigned to items is full the addon asks before using a general tab. With no Warband tab bought yet, Warband options are hidden and tasks say how to get one.
 - **Alt hand-offs.** Mark an item for another character from the row menu ("Send to an alt..."). The "Send to Alts" task deposits it, and that character sees "Waiting for You" to collect it.
 - **Why is this here?** Rows and tooltips explain why each item is being kept: appearance already collected, collectible not learned, quest status, a recipe you can still learn (or already know, or for a profession this character doesn't have), a crafter who uses it, gear a played character can wear, time held, and more. `/icanteven why` prints a read-only summary (`/icanteven why all` covers every character).
-- Gear in any character's saved Equipment Manager sets is kept, and max-level trinkets and weapons that someone can wear are left for you to decide rather than suggested for selling. Gear only counts for characters whose class can use that weapon type and primary stat.
+- Gear in any character's saved Equipment Manager sets is kept (in the bags when it's the character's own set, never deposited), and max-level trinkets and weapons that someone can wear are left for you to decide rather than suggested for selling. Gear only counts for characters whose class can use that weapon type and primary stat.
 - Keep reasons on any item from the row menu: Keepsake, Keep for an alt, Keep for an event, or Investment with a 90-day reminder. They stop suggestions without blocking moves you make yourself.
 - New tasks: Deposit to Warband (items your other characters can use), Pull Items That Can Go (from the character bank or the Warband bank) and Sell Items That Can Go, Auction Candidates, Send to Alts, and Waiting for You.
 - **Auction values.** Prices come from Auctionator or TSM when installed, or from "Price My Items" at an auction house (looks up only items you own). Each price shows its source and age; old prices are marked, and gear prices Auctionator only knows for the base item are marked "approximate".
@@ -64,7 +66,7 @@ Release note rules:
 
 ### Improved
 
-- **Trip order.** Home shows where to go next in the order that avoids shuffling items ("Trip: here: bank (4 tasks) -> auction house (8 to list) -> vendor (44 to sell)"). At a bank, pulls are listed before deposits because they free the space deposits need; deposit cards say when the Warband bank is short on space, and pull cards say when your bags are.
+- **Trip order.** Home shows where to go next in the order that avoids shuffling items ("Trip: here: bank (4 tasks) -> auction house (8 to list) -> vendor (44 to sell)"). At a bank, pulls are listed before deposits because they free the space deposits need; deposit cards say when the Warband bank is short on space, and pull cards say when your bags are. When the Warband bank is full, the addon names what frees room: items that can go, the items waiting for your auction character to collect ("have Kiosk collect the 31 items waiting to be auctioned"), or another Warband tab.
 
 - **Price first, then sell.** Opening a sell task asks first when items in it could sell at the auction house but have no price from the last day, from any source (Auctionator, TSM, or the addon's own lookups), and says how to get one. "Sell anyway" stops asking for the session.
 - **Full scans count.** After an Auctionator full scan, items it found no listings for are marked "not listed at the auction house" and are no longer held back for pricing. Common and uncommon items listed at 5,000g or more are marked unconfirmed and left out of value totals (troll listings).
@@ -96,6 +98,7 @@ Release note rules:
 - Transfer classification text no longer masquerades as a destination-specific movement reason.
 - New item rules retain the item name, and legacy rules use their stored source text as a readable fallback when item data is unavailable.
 - Logging into a different character no longer shows the previous character's bank contents.
+- A stack moved onto a partial stack of the same item no longer comes up short: the game filled the partial stack and returned the rest to where it came from, while the move reported success. Stacks now join a partial stack only when all of it fits, and otherwise use an empty slot or are blocked with a reason.
 ## [0.5.0] - 2026-05-11
 
 ### Added
