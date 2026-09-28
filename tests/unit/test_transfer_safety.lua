@@ -193,3 +193,49 @@ T.test("full bags: withdrawing is allowed only onto a partial stack of the same 
         T.eq(blocked[I.OLD_POTION], "No empty bag slots")
     end)
 end)
+
+-- In game (2026-09-28) 103 Trial of Style Tokens were dropped on a Warband
+-- stack of 159 (max 200): 41 joined it, 62 went back to the bank, and the
+-- move read "1 moved, 0 blocked".
+T.test("a stack joins a partial stack only when all of it fits; otherwise it takes an empty slot or is blocked", function()
+    local game = T.game({ setup = F.setup(function(w)
+        w:put(0, 1, I.LINEN, 150)                   -- partial stack (max 200): room for 50
+        w:put(6, 1, I.LINEN, 120)                   -- more than fits
+        w:put(6, 2, I.LINEN, 40)                    -- fits
+    end) })
+    game:openBank()
+    local P, Core = game:P(), game:Core()
+    local UI = game:UI()
+    game:slash("transfer")
+    UI.transferSource, UI.transferDest = "Bank (All Tabs)", "Bags"
+    P.ResetTabFilters("Transfer")
+    Core.RefreshUI()
+    for _, plan in ipairs(UI.transferVisible) do if plan.movable then UI.transferSelected[plan.key] = true end end
+    game.world:withHardwareEvent(function() Core.ExecuteTransferSelected() end)
+    game:advance(3)
+    local inBank, inBags = 0, 0
+    for bag = 0, 4 do
+        for _, st in pairs(game.world.containers[bag] and game.world.containers[bag].slots or {}) do
+            if st.itemID == I.LINEN then inBags = inBags + st.count end
+        end
+    end
+    for _, st in pairs(game.world.containers[6].slots) do if st.itemID == I.LINEN then inBank = inBank + st.count end end
+    T.eq(inBags, 310, "all 160 moved")
+    T.eq(inBank, 0, "nothing sent back to the bank")
+
+    -- Full bags: the 120 can't go anywhere whole, so it is blocked, not half-moved.
+    game = T.game({ setup = F.setup(function(w)
+        for bag = 1, 4 do w:setContainer(bag, 0) end
+        for slot = 1, 19 do w:put(0, slot, I.OLD_SWORD, 1) end
+        w.containers[0].slots[20] = nil
+        w:put(0, 20, I.LINEN, 150)
+        w:put(6, 1, I.LINEN, 120)
+    end) })
+    game:openBank()
+    P = game:P()
+    P.WithEvaluationCache(function()
+        local plan = P.GetTransferCandidates("Bank (All Tabs)", "Bags")[1]
+        T.eq(plan.item.count, 120)
+        T.eq(plan.blocked, "No empty bag slots")
+    end)
+end)

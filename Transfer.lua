@@ -71,7 +71,11 @@ local function FindFreeSlotInBags(bagIDs, takenSlots, item)
                     and CContainer.GetContainerItemID(bagID, slot) == item.itemID then
                     local info = CContainer.GetContainerItemInfo(bagID, slot)
                     local stackCount = info and info.stackCount or 0
-                    if info and not info.isLocked and stackCount < item.maxStack then
+                    -- Only a stack with room for all of it: the game fills a
+                    -- partial stack and sends the rest back to where it came
+                    -- from (in game, 41 of 103 Trial of Style Tokens moved
+                    -- and the move read "1 moved, 0 blocked").
+                    if info and not info.isLocked and stackCount + (item.count or 1) <= item.maxStack then
                         return bagID, slot, key
                     end
                 end
@@ -135,7 +139,7 @@ local function HasRoomIn(bagIDs, item)
         cache.partialStacks[key] = partial
     end
     for _, stack in ipairs(partial[item.itemID] or {}) do
-        if stack.count < item.maxStack and not IsItemOwnSlot(item, stack.bagID, stack.slot) then return true end
+        if stack.count + (item.count or 1) <= item.maxStack and not IsItemOwnSlot(item, stack.bagID, stack.slot) then return true end
     end
     return false
 end
