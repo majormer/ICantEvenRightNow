@@ -7,6 +7,14 @@ local Core = ns.Core
 local Data = ns.Data
 local P    = ns.Private
 
+local ITEM_BIND_ON_EQUIP = Enum and Enum.ItemBind and Enum.ItemBind.OnEquip or 2
+local ITEM_BIND_ON_USE = Enum and Enum.ItemBind and Enum.ItemBind.OnUse or 3
+local ITEM_BIND_QUEST = Enum and Enum.ItemBind and Enum.ItemBind.Quest or 4
+local ITEM_BIND_TO_WOW_ACCOUNT = Enum and Enum.ItemBind and Enum.ItemBind.ToWoWAccount or 7
+local ITEM_BIND_TO_BNET_ACCOUNT = Enum and Enum.ItemBind and Enum.ItemBind.ToBnetAccount or 8
+local ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED = Enum and Enum.ItemBind
+    and Enum.ItemBind.ToBnetAccountUntilEquipped or 9
+
 local STORAGE_BAGS          = P.STORAGE_BAGS
 local STORAGE_PRIVATE_BANK  = P.STORAGE_PRIVATE_BANK
 local STORAGE_REAGENT_BANK  = P.STORAGE_REAGENT_BANK
@@ -67,6 +75,47 @@ P.IsMythicKeystone = IsMythicKeystone
 -- Binding detection
 -- ===========================================================================
 
+-- Confirmed bindings: [itemID] = "warbound" | "soulbound" | "wue" | "boe",
+-- saved across reloads (ns.DB.knownBinding). The client drops item data (the
+-- tooltip then reads only "Retrieving item information"), so a binding seen
+-- once is reused until the tooltip is back. In game, Warband items read "BoE"
+-- instead of "Warbound until equipped" while their tooltips loaded, which
+-- moved them in and out of task lists between visits (38 vs 44).
+local function KnownBindings()
+    if not ns.DB then return {} end
+    ns.DB.knownBinding = ns.DB.knownBinding or {}
+    return ns.DB.knownBinding
+end
+
+-- The binding line of a bag item's tooltip: "warbound", "soulbound",
+-- "loading" (tooltip not loaded yet), or nil (no binding line).
+-- It decides Warbound vs Soulbound for bound items: in game
+-- C_Bank.IsItemAllowedInBankType flipped for the same bag item between reads
+-- (L00T RAID-R Mini showed Soulbound while its tooltip said Warbound, and
+-- Soul Sigil II the other way round).
+local function TooltipBinding(bagID, slot)
+    if not (C_TooltipInfo and C_TooltipInfo.GetBagItem) then return nil end
+    local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
+    if not ok or type(data) ~= "table" or type(data.lines) ~= "table" then return nil end
+    local first = data.lines[1] and data.lines[1].leftText
+    if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+        return "loading"
+    end
+    local warbound = {
+        [ITEM_ACCOUNTBOUND or "Warbound"] = true,
+        [ITEM_BNETACCOUNTBOUND or "Warbound"] = true,
+        ["Warbound"] = true,
+    }
+    local soulbound = ITEM_SOULBOUND or "Soulbound"
+    -- The binding line is near the top; later lines are descriptions.
+    for i = 1, math.min(#data.lines, 6) do
+        local text = data.lines[i] and data.lines[i].leftText
+        if warbound[text] then return "warbound" end
+        if text == soulbound then return "soulbound" end
+    end
+    return nil
+end
+
 local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
     local details = {
         bindingScope    = fallbackIsBound and "Bound" or "Unbound",
@@ -76,15 +125,19 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         accountBankAllowed = not fallbackIsBound,
     }
 
-    if bindType == 2 then
+    if bindType == ITEM_BIND_ON_EQUIP then
         details.bindingScope = "BoE"
-    elseif bindType == 3 then
+    elseif bindType == ITEM_BIND_ON_USE then
         details.bindingScope = "Bind on Use"
-    elseif bindType == 4 then
+    elseif bindType == ITEM_BIND_QUEST then
         details.bindingScope = "Quest"
         details.isBound = true
-    elseif bindType == 8 then
-        details.bindingScope = "Battle.net Account"
+    elseif bindType == ITEM_BIND_TO_WOW_ACCOUNT or bindType == ITEM_BIND_TO_BNET_ACCOUNT then
+        details.bindingScope = "Warbound"
+        details.isWarbandBound = true
+        details.accountBankAllowed = true
+    elseif bindType == ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED then
+        details.bindingScope = "Warbound Until Equipped"
         details.isWarbandBound = true
         details.accountBankAllowed = true
     end
@@ -113,7 +166,81 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         end
     end
 
-    if details.isBound then
+    -- C_Item.IsBoundToAccountUntilEquip can return false for items the
+    -- tooltip shows as "Warbound until equipped": always in the Warband bank,
+    -- and sometimes in bags (in game the same bag item flipped between BoE
+    -- and Warbound between refreshes). The link says BoE for them, so read
+    -- the tooltip for any unbound item the link calls BoE.
+    if not details.isBound and not details.isWarbandBound and bindType == ITEM_BIND_ON_EQUIP
+        and C_TooltipInfo and C_TooltipInfo.GetBagItem then
+        local wanted = ITEM_ACCOUNTBOUND_UNTIL_EQUIP or "Warbound until equipped"
+        local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
+        local known = KnownBindings()
+        -- Remembered per copy (its GUID), not per item ID: copies of one
+        -- item differ. In game (2026-09-28) Kiosk's two Tarnished Dawnlit
+        -- Longswords were BoE and Finalomega's was Warbound until equipped;
+        -- the shared "boe" made Finalomega's copy an auction candidate after
+        -- every reload, until its tooltip loaded.
+        local okGUID, guid = false, nil
+        if C_Item.GetItemGUID then okGUID, guid = pcall(C_Item.GetItemGUID, itemLocation) end
+        local memoryKey = (okGUID and type(guid) == "string" and guid ~= "") and guid or itemID
+        local ok, data = pcall(C_TooltipInfo.GetBagItem, bagID, slot)
+        local first = ok and type(data) == "table" and data.lines and data.lines[1] and data.lines[1].leftText
+        local wue
+        if first == (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+            -- Tooltip not loaded: reuse what was seen before, or wait for it.
+            if memoryKey and known[memoryKey] then
+                wue = known[memoryKey] == "wue"
+            else
+                details.bindingPending = true
+                if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+                    pcall(C_Item.RequestLoadItemDataByID, itemID)
+                end
+            end
+        elseif ok and type(data) == "table" then
+            wue = false
+            for _, line in ipairs(data.lines or {}) do
+                if line.leftText == wanted then wue = true break end
+            end
+            -- A saved "wue" stands: the game's own refusal set it (2026-09-27)
+            -- and a Warbound-until-equipped item never becomes BoE.
+            if memoryKey then known[memoryKey] = (wue or known[memoryKey] == "wue") and "wue" or "boe" end
+            if memoryKey and known[memoryKey] == "wue" then wue = true end
+        end
+        if wue then
+            details.bindingScope   = "Warbound Until Equipped"
+            details.isWarbandBound = true
+            details.accountBankAllowed = true
+        end
+    end
+
+    local tooltipBinding = details.isBound and TooltipBinding(bagID, slot) or nil
+    local itemID = C_Container and C_Container.GetContainerItemID and C_Container.GetContainerItemID(bagID, slot)
+    local knownBinding = KnownBindings()
+    if tooltipBinding == "warbound" or tooltipBinding == "soulbound" then
+        if itemID then knownBinding[itemID] = tooltipBinding end
+    elseif tooltipBinding == "loading" then
+        tooltipBinding = itemID and knownBinding[itemID] or nil
+        if tooltipBinding ~= "warbound" and tooltipBinding ~= "soulbound" then tooltipBinding = nil end
+        if not tooltipBinding then
+            -- Not known yet: ask for the data and say so (Readiness waits,
+            -- the scan retries) instead of trusting the bank check alone.
+            details.bindingPending = true
+            if itemID and C_Item and C_Item.RequestLoadItemDataByID then
+                pcall(C_Item.RequestLoadItemDataByID, itemID)
+            end
+        end
+    end
+    if details.isBound and tooltipBinding == "warbound" then
+        details.bindingScope   = "Warbound"
+        details.isSoulbound    = false
+        details.isWarbandBound = true
+        details.accountBankAllowed = true
+    elseif details.isBound and tooltipBinding == "soulbound" then
+        details.isSoulbound        = true
+        details.accountBankAllowed = false
+        details.bindingScope = details.bindingScope == "Quest" and "Quest" or "Soulbound"
+    elseif details.isBound then
         details.isSoulbound        = true
         details.accountBankAllowed = false
         if C_Bank and C_Bank.IsItemAllowedInBankType and Enum and Enum.BankType and Enum.BankType.Account then
@@ -131,12 +258,14 @@ local function GetBindingDetails(bagID, slot, bindType, fallbackIsBound)
         end
     elseif details.bindingScope ~= "Warbound Until Equipped" then
         details.accountBankAllowed = true
-        if not details.isWarbandBound and itemLocation
-            and C_Bank and C_Bank.IsItemAllowedInBankType
+        if itemLocation and C_Bank and C_Bank.IsItemAllowedInBankType
             and Enum and Enum.BankType and Enum.BankType.Account then
             local ok, allowed = pcall(C_Bank.IsItemAllowedInBankType, Enum.BankType.Account, itemLocation)
-            if ok and allowed then
-                details.isWarbandBound = true
+            if ok then
+                -- Bank eligibility and binding scope are separate concepts. A normal
+                -- unbound or BoE item may be accepted by the account bank without
+                -- becoming Warbound.
+                details.accountBankAllowed = allowed and true or false
             end
         end
     end
@@ -146,7 +275,10 @@ end
 
 local function IsItemWarboundUntilEquipped(item)
     if item.bindingScope == "Warbound Until Equipped" then return true end
-    if item.bindType and item.bindType ~= 2 then return false end
+    if item.bindType and item.bindType ~= ITEM_BIND_ON_EQUIP
+        and item.bindType ~= ITEM_BIND_TO_BNET_ACCOUNT_UNTIL_EQUIPPED then
+        return false
+    end
     if not (ItemLocation and C_Item and C_Item.IsBoundToAccountUntilEquip) then return false end
     if type(item.bagID) ~= "number" or type(item.slot) ~= "number" then return false end
     local itemLocation = ItemLocation:CreateFromBagAndSlot(item.bagID, item.slot)
@@ -169,6 +301,7 @@ local function GetItemType(item)
     if item.classID == 0  then return Data.ItemTypes.CONSUMABLE end
     if item.classID == 7  then return Data.ItemTypes.PROFESSION end
     if item.classID == 12 then return Data.ItemTypes.QUEST end
+    if item.classID == 20 then return Data.ItemTypes.HOUSING end
     if item.bindType == 2 and (item.classID == 2 or item.classID == 4) then return Data.ItemTypes.BOE end
     if item.classID == 2 or item.classID == 4 then return Data.ItemTypes.EQUIPMENT end
     return Data.ItemTypes.UNKNOWN
@@ -293,7 +426,7 @@ local function BuildDecision(item)
         expansionID = Data.CurrentExpansionID
         reason = "Mythic Keystone is protected as current seasonal content"
         table.insert(blocked, "Mythic Keystone")
-    elseif item.isBound and (item.classID == 2 or item.classID == 4) then
+    elseif item.isSoulbound and (item.classID == 2 or item.classID == 4) then
         reason = "Soulbound equipment"
         table.insert(blocked, "Soulbound equipment")
     elseif itemType == Data.ItemTypes.QUEST then
@@ -353,10 +486,10 @@ end
 
 local function GetAllDecisions()
     local decisions = {}
-    for _, item in ipairs(ns.DB.scans.bags or {}) do
+    for _, item in ipairs(P.GetScanList(BAG_SCOPE)) do
         table.insert(decisions, BuildDecision(item))
     end
-    for _, item in ipairs(ns.DB.scans.bank or {}) do
+    for _, item in ipairs(P.GetScanList(BANK_SCOPE)) do
         table.insert(decisions, BuildDecision(item))
     end
     return decisions
@@ -364,3 +497,95 @@ end
 
 P.BuildDecision   = BuildDecision
 P.GetAllDecisions = GetAllDecisions
+
+-- ===========================================================================
+-- Channels: what can happen to an item (the one source of truth)
+-- Every task, block reason and candidate rule reads this; nothing else
+-- decides "can it be auctioned" on its own. In game (2026-09-27) the addon
+-- posted Warbound-until-equipped items it had read as BoE, and the game
+-- refused them: an unknown binding now allows nothing outward.
+-- Rules (warcraft.wiki.gg/wiki/Bind, /wiki/Warbound_until_Equipped):
+--   Soulbound / quest: vendor (if it has a price) or destroy; nothing else.
+--   Warbound, Warbound until equipped: your own characters only (mail,
+--     Warband bank); never the auction house or a trade.
+--   BoE / unbound: auction, mail, trade; Warband bank if the game allows it.
+-- Returns { vendor, auction, mail, trade, warbandBank } where each is true,
+-- or false with the reason in `why[channel]`.
+-- ===========================================================================
+function P.ItemChannels(item)
+    local channels = { why = {} }
+    local function deny(channel, why)
+        channels[channel] = false
+        channels.why[channel] = why
+    end
+    local function allow(channel) if channels[channel] == nil then channels[channel] = true end end
+
+    local quest = item.classID == 12 or item.questID ~= nil or item.bindingScope == "Quest"
+    local warbound = item.isWarbandBound or item.bindingScope == "Warbound"
+        or item.bindingScope == "Warbound Until Equipped"
+    local soulbound = (item.isBound or item.isSoulbound) and not warbound
+
+    if item.bindingPending then
+        local why = "Binding not confirmed yet"
+        deny("auction", why) deny("mail", why) deny("trade", why)
+    end
+    if quest then
+        deny("vendor", "Quest item")
+        deny("auction", "Quest item") deny("mail", "Quest item") deny("trade", "Quest item")
+        deny("warbandBank", "Quest item")
+    elseif soulbound then
+        local why = "Soulbound: only this character can use it"
+        deny("auction", why) deny("mail", why) deny("trade", why)
+        if item.accountBankAllowed ~= true then deny("warbandBank", "Not eligible for Warband Bank") end
+    elseif warbound then
+        local why = "Warbound: only your own characters can have it"
+        deny("auction", why) deny("trade", why)
+        allow("mail")   -- to your own characters only
+        if item.accountBankAllowed == false then deny("warbandBank", "Not eligible for Warband Bank") end
+    else
+        if item.accountBankAllowed == false then deny("warbandBank", "Not eligible for Warband Bank") end
+    end
+
+    if (item.sellPrice or 0) <= 0 then deny("vendor", "No vendor price") end
+    if P.MerchantRefused and P.MerchantRefused(item.itemID) then deny("vendor", "Vendors won't buy this item") end
+    if P.AuctionRefused and P.AuctionRefused(item.itemID) then
+        deny("auction", "The auction house refused it: " .. tostring(P.AuctionRefused(item.itemID).reason))
+    end
+    local rule = item.rule or (ns.DB and ns.DB.rules and ns.DB.rules.items and item.itemID and ns.DB.rules.items[item.itemID])
+    if rule and rule.neverSell then
+        deny("vendor", "Never sell rule") deny("auction", "Never sell rule")
+    end
+
+    -- Destroy: anything the player isn't protecting (the game's own DELETE
+    -- confirm covers uncommon and better). Use: something to learn or start.
+    if rule and rule.protect then deny("destroy", "Protected by your rule") end
+    if P.MYTHIC_KEYSTONE_ITEM_IDS and P.MYTHIC_KEYSTONE_ITEM_IDS[item.itemID] then deny("destroy", "Mythic Keystone") end
+    local kind, learned, cannotLearn
+    if P.GetCollectibleState then kind, learned, cannotLearn = P.GetCollectibleState(item) end
+    local useWhy
+    if kind and learned == false then useWhy = "learn the " .. kind
+    elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest"
+    elseif P.IsOpenable and P.IsOpenable(item) then useWhy = "open it"
+    elseif item.classID == 20 then
+        -- Housing items (class 20): decor goes into the House Chest, plans
+        -- unlock rooms and exteriors, the hatchet teaches lumber harvesting.
+        -- Dyes (subclass 1) are applied inside the house, not "used" from a bag.
+        if item.subclassID == 0 then useWhy = "add it to your House Chest"
+        elseif item.subclassID == 2 or item.subclassID == 3 or item.subclassID == 4 then useWhy = "unlock it in your house"
+        elseif item.subclassID == 5 then useWhy = "learn it" end
+    end
+    if useWhy then channels.use = true channels.useWhat = useWhy else deny("use", cannotLearn or "Nothing to learn or start") end
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy" }) do allow(channel) end
+    return channels
+end
+
+-- One line for diagnostics: "vendor yes | auction no (Warbound...) | ..."
+function P.ChannelsText(item)
+    local channels = P.ItemChannels(item)
+    local parts = {}
+    for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy", "use" }) do
+        parts[#parts + 1] = channel .. " " .. (channels[channel] and ("yes" .. (channel == "use" and channels.useWhat and (" (" .. channels.useWhat .. ")") or ""))
+            or ("no (" .. tostring(channels.why[channel]) .. ")"))
+    end
+    return table.concat(parts, " | ")
+end

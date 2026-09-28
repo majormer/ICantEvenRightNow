@@ -9,8 +9,96 @@ Release note rules:
 - Do not list mid-cycle test/build fixes as separate "Fixed" items unless that behavior was present in a previously released version.
 - Prefer "Added", "Changed", and "Improved" wording for features refined during the same unreleased development cycle.
 
-## [Unreleased]
+## [0.6.0] - 2026-09-28
 
+### Added
+
+- **Justify every item.** A Home card that walks you through your bank, Warband bank or bags one item at a time: what it is, why the addon thinks it's there, who could use it, what it can do (only the options that exist: sell, auction, destroy, keep, carry, use, defer, leave), a recommendation from the rules in place, and a Wowhead link ready to copy. Your choice is stored per item and every card acts on it: "sell" makes the item can-go for the vendor, "auction" makes it a candidate, "destroy" feeds a new Destroy Items That Can Go card (one click each; the game confirms uncommon or better), "defer" asks again after 30 days (a setting), "carry" keeps it in your bags. When you have more than one, type a number in the "Keep" box and Sell, Auction or Destroy apply to the rest: keep 60 oils and auction the other 560, keep one of five duplicate trinkets and sell four. The kept ones are the best copies (highest item level, bags before banks). Destroying or selling anything rare, a keepsake or a protected item asks twice. Keys 1-8; Escape closes it.
+- **Move Materials to Warband.** Materials your crafters use, from the character bank into the Warband bank where they can reach them.
+- **Pull Bank Upgrades reads the Warband bank.** An alt logging in sees the gear its main parked for it in the Warband bank (whichever bank holds more upgrades is reviewed). Gear that beats what you wear is never offered by Deposit to Warband, and reads "Upgrade for you: equip it". A Main or Leveling character also keeps its current-expansion potions, food and flasks in its bags.
+- **Housing.** Lumber (every expansion's) is "Lumber for crafting house decor": kept, moved with the crafter materials, never "no crafter uses it". Decor items in your bags are "add it to your House Chest", with what the chest already holds and whether the piece is new for your house (House XP). Room and exterior plans are "use it to unlock"; housing dyes are supplies. A "Housing" item type in the filters.
+
+- **One rule for where an item can go.** Every task now reads the same model of what an item's binding allows: soulbound and quest items can only be sold to a vendor (or destroyed); Warbound and Warbound-until-equipped items stay with your own characters (mail, Warband bank) and are never offered for auction or trade; BoE and unbound items can go anywhere. An item whose binding hasn't been confirmed yet is offered nowhere until it is. An item that can't be auctioned and that no character of yours can use is a vendor sale, whatever its auction price. Listings are confirmed with the auction house: a refusal ("Warbound items can only be given to other characters in your Warband", "cannot auction an item with used charges") is reported as "Not listed", remembered, and shown by `/icanteven refused`. `/icanteven explain <item>` shows the channels.
+
+- **A Keep on gear lapses once nobody needs it.** Gear you kept as an upgrade comes back to Justify every item ("Kept as an upgrade; nobody needs it now: decide again") once no character would upgrade with it. Off-spec pieces (a different primary stat than what you wear), keeps with a note or a kept count, and a Keep you answer a second time stay kept. An off-hand piece is no upgrade for a character wielding a two-hander.
+- **Escape closes the addon's windows.** Menus, dialogs and the main window close with Escape, one per press, the most recent first.
+- **Destroy what nothing takes.** Items that can go but that no vendor, auction or character takes (old class-hall trinkets with no sell price, toys you already learned) are offered by Destroy Items That Can Go, one click each, and each row says why ("you decided" or "nothing buys it"). Nothing is destroyed without your click, and nothing you didn't decide is ever pre-selected. An item a quest in your log uses is kept ("Used by ... in your quest log") and can't be destroyed: destroying it would drop the quest. General crafting reagents that no profession list covers (Artisan's Acuity, Restored Artifacts) are your call, with the character's professions named, never "no crafter uses it".
+- **Open it.** Bags, caches and other items with "<Right Click to Open>" say "open it", stay in your bags and offer Use.
+- **Pet battle supplies.** Battle-Training Stones, Battle-Stones, pet bandages, treats and charms are kept for any character that battles pets. Old-expansion scrolls count as spent consumables.
+- **Consolidate Warbound Items.** Warbound tokens, pet charms and cosmetics in a character bank now go to the Warband bank too, not just gear.
+- **Bags.** A spare bag or reagent bag is judged against the ones you use: equip it into an empty slot, swap it in when it's bigger, or let it go when it's no bigger than any of yours.
+- **Far-outgrown gear can go.** Gear a quarter or more below what its wearers use is outgrown, even a trinket, a weapon or a set piece: an item level 15 set bonus is never worth 130 item levels a slot. Trinkets and weapons close to what you wear stay your call.
+- **One auction character.** Tick "Auctions" on one character in the Characters tab and every other character hands its auctionable items to that one through the Warband bank: Auction Candidates reads "7 to hand to Kiosk", the trip goes to the bank instead of the auction house, and the auction character finds them under Waiting for You and lists them. Gold and returns land in one mailbox. Standing at an auction house on another character still lets you list there.
+- **List at the auction house with one button.** At the auction house, Auction Candidates reviews what's in your bags and lists it: each row shows the price it will post at (the freshest known price undercut by 1%, at most 5g, never below the vendor price), and "List 1 of N" posts the next selected item for 24 hours. The game allows one auction per click, so the rest stay selected; click again. Items with no price, or a price far above their usual one, are blocked with the reason so you set those yourself.
+
+- **Set bonuses and upgrade tracks.** Gear that's in a set or can be upgraded is judged with that in mind. A piece that would complete a set bonus is your call, with the trade spelled out ("completes Voidlight Bindings (2); costs 16 item levels in that slot"). An old class set replaced by the one you wear, with no upgrade path, can go, and Home asks about it. Gear below what you wear that can't be upgraded can go (trinkets and weapons stay your call). New keep choice "Keep for now": the addon asks again once you wear something better in that slot.
+
+- **Getting ready, then stable results.** After a reload, or when a bank, vendor or auction house opens, the addon waits for item details first and says "Getting ready... checking N items". Counts, the notice and actions appear once, complete, instead of changing while you watch. Details that arrive later are flagged ("Rescan to include them") rather than changing the screen. The bank or vendor notice says "Getting ready..." right away, and task lists show no rows until they're complete. Gear whose details never load is marked "Item details didn't load" instead of being judged on a guess.
+- **Home screen.** The console opens on Home, where every task is a card with a live count and value ("Deposit Old Items: 23 ready (4g 12s)"). Cards that need a bank or vendor say so, and clicking a card opens its review list. Home replaces the Summary tab and the task dropdown.
+- **Character roles.** A new Characters tab lists every character that has logged in with the addon. Give each one a role (Main / Active; Leveling, which also covers alts that craft; Crafting only; Utility), with what each role does shown on the tab, and the addon uses the roles to decide which characters can use an item. Unassigned characters are ignored. Each character is asked once, with a suggested role (and "Same as" your last configured alt); you can also accept all suggestions at once.
+- **Warband tabs.** Each Warband bank tab is its own source and destination, and "Warband (by tab settings)" sends each item to the tab whose Blizzard "assign to" settings match it. The addon never changes your tab settings.
+- Warband routing works with any number of Warband tabs (none, or up to five): general tabs fill one after another, the Transfer list shows each tab's free space, and when a tab you assigned to items is full the addon asks before using a general tab. With no Warband tab bought yet, Warband options are hidden and tasks say how to get one.
+- **Alt hand-offs.** Mark an item for another character from the row menu ("Send to an alt..."). The "Send to Alts" task deposits it, and that character sees "Waiting for You" to collect it.
+- **Why is this here?** Rows and tooltips explain why each item is being kept: appearance already collected, collectible not learned, quest status, a recipe you can still learn (or already know, or for a profession this character doesn't have), a crafter who uses it, gear a played character can wear, time held, and more. `/icanteven why` prints a read-only summary (`/icanteven why all` covers every character).
+- Gear in any character's saved Equipment Manager sets is kept (in the bags when it's the character's own set, never deposited), and max-level trinkets and weapons that someone can wear are left for you to decide rather than suggested for selling. Gear only counts for characters whose class can use that weapon type and primary stat.
+- Keep reasons on any item from the row menu: Keepsake, Keep for an alt, Keep for an event, or Investment with a 90-day reminder. They stop suggestions without blocking moves you make yourself.
+- New tasks: Deposit to Warband (items your other characters can use), Pull Items That Can Go (from the character bank or the Warband bank) and Sell Items That Can Go, Auction Candidates, Send to Alts, and Waiting for You.
+- **Auction values.** Prices come from Auctionator or TSM when installed, or from "Price My Items" at an auction house (looks up only items you own). Each price shows its source and age; old prices are marked, and gear prices Auctionator only knows for the base item are marked "approximate".
+- Setting: "Include current-expansion items in Auction Candidates" (off by default) for players who farm and sell current materials; items a crafter or played character uses, protected items, and keepsakes are still left out.
+- **Auctionator hand-offs.** The Auction Candidates card can run an exact search for every candidate in Auctionator's Shopping tab at the auction house, or save them as the Auctionator shopping list "I Can't Even: Auction Candidates" elsewhere. With Auctionator installed, "Check Prices in Auctionator" replaces the addon's own price lookup.
+- Item tooltips anywhere in the game can show how many your account holds and where ("Your account: 25 - Tailor bags 20, ..."). `/icanteven where <name>` searches every character.
+- Optional BetterBags categories: Protected, Never Sell, Sell Candidates, For the Warband, Old Content, and Waiting for You (off until you enable them).
+- Quick tasks for common transfers, and saved tasks that remember the complete setup (route, filters, Actionable only, search, item-level range, sort).
+- Transfer results can be sorted by name, actionability, item level, vendor value, expansion, or binding, and a Swap button reverses non-vendor routes.
+- At a bank or vendor, a small notice names the top ready task (Settings: notice, open the console, or nothing).
+- First-time tips (once per account), a "What's new" card for players upgrading, and a welcome back for characters returning after a week or more. Leveling characters that reach max level are offered a switch to Main.
+- Optional pre-selection when opening a task (off by default); blocked items and items worth keeping are never pre-selected.
+- While item details are still loading, lists say "Checking details for N items" and show those items as checking instead of guessing; lists update by themselves when the details arrive. `/icanteven undo` reverses the last move (it pre-selects the items; you confirm).
+- **Auction mail reminder.** Auction returns and sale gold wait in the mail, which is deleted after 30 days. The addon remembers when each character last visited the auction house and what its mailbox held, and warns on any character (Home notice and a chat line at login) 10 days before that mail could be deleted: "Kiosk: Auction returns and gold may be deleted in 4 days." Characters that visit an auction house are marked automatically; tick "Auctions" on the Characters tab for others. Setting: "Warn before auction mail expires" (on).
+- Setting: "Enhanced logging (for troubleshooting)" (off by default) records scans, bank/vendor detection, tasks, moves, sales, and errors in your saved data (last 2,000 lines). `/icanteven log` shows it; `/icanteven log clear` empties it. Attach it when reporting a problem.
+
+### Changed
+
+- Updated for World of Warcraft 12.1.0 (Curse of Ula'tek). The addon is now flagged as compatible with patches 12.0.7 and 12.1.0, so it no longer shows as out of date.
+- Each character now keeps its own bag and bank lists, and the Warband bank list is shared by all characters.
+- Upgrading keeps your item rules, saved presets, and settings. Old Move/Organize/Vendor tab filters become saved tasks named "Imported: ... filters", a removed "Never Move" rule becomes Protect, and anything that could not be carried over is listed (`/icanteven migration`).
+- Selling stops at 12 items per click (not counting grey junk, which is sold first) so every uncommon or better sale stays in the vendor's buyback; the rest stay selected for the next click.
+
+### Improved
+
+- **Trip order.** Home shows where to go next in the order that avoids shuffling items ("Trip: here: bank (4 tasks) -> auction house (8 to list) -> vendor (44 to sell)"). At a bank, pulls are listed before deposits because they free the space deposits need; deposit cards say when the Warband bank is short on space, and pull cards say when your bags are. When the Warband bank is full, the addon names what frees room: items that can go, the items waiting for your auction character to collect ("have Kiosk collect the 31 items waiting to be auctioned"), or another Warband tab.
+
+- **Price first, then sell.** Opening a sell task asks first when items in it could sell at the auction house but have no price from the last day, from any source (Auctionator, TSM, or the addon's own lookups), and says how to get one. "Sell anyway" stops asking for the session.
+- **Full scans count.** After an Auctionator full scan, items it found no listings for are marked "not listed at the auction house" and are no longer held back for pricing. Common and uncommon items listed at 5,000g or more are marked unconfirmed and left out of value totals (troll listings).
+- **Freshest price wins.** When several sources know an item's price, the most recent one is used.
+- With Auctionator or TSM installed, tradeable green-or-better items with no recent auction price are marked "scan at the auction house first", aren't counted as ready to sell, and aren't picked by Select Movable at a vendor.
+- **Sales are confirmed.** After you click Sell, the addon checks what the vendor actually bought and reports it ("Sold 7 of 9 (250g 64s). The merchant refused 2: ..."). Some items show a vendor price that no vendor pays; once refused, they're remembered and marked "Vendors won't buy this item" instead of being offered again (`/icanteven refused` lists them).
+
+- Identical stacks share one row, and an optional compact mode shows 9 rows per screen.
+- Items worth noticeably more at auction are flagged when selling to a vendor and are never pre-selected for vendor sales.
+- The Transfer view names the task you opened and shows "(modified)" after you change it; "Save as task" saves the current setup as a Home card.
+- Route editing lives in a compact Customize drawer; sorting and advanced refinements live in a separate Filters drawer, with removable filter chips.
+- Results show a source-to-selection funnel, empty states explain why nothing is listed, and the main button says what it will do (Deposit, Withdraw, Move, Sell with counts and value).
+- Live inventory changes refresh the list shortly after they happen, and it rescans when you open the console or a vendor.
+- The Home screen and Transfer list refresh quickly even with full bags and hundreds of items.
+- The addon download is over 90% smaller (about 3 MB down to about 0.2 MB) after resizing the addon-list icon to 256×256.
+
+### Fixed
+
+- Selling or moving an item now checks that the same item is still in its bag slot first. Previously, if your bags had changed since the last scan (sorting, looting, or a scan saved from an earlier session), the action could hit whatever item now occupied that slot, including a protected one. Items that have moved are skipped and the list refreshes.
+- Moves no longer report success when the item couldn't be picked up (for example, while an earlier move is still in progress), and are refused while you're holding an item on the cursor.
+- Several quick single-item transfers in a row no longer try to use the same empty target slot.
+- Bank-to-bank transfers no longer offer items that are already in the chosen destination, which previously did nothing but reported "moved".
+- Bank and vendor context detection now handles Midnight secret values without aborting UI refreshes.
+- Account-bank-compatible unbound items are no longer mislabeled as Warbound; binding detection now handles current `Enum.ItemBind` values explicitly.
+- Items known to be ineligible for Warband Bank are blocked before movement, and Bank (All Tabs) no longer displays a misleading alternate target.
+- Item cache warm-up retries are bounded, so item data that never loads can no longer cause background rescans to repeat indefinitely and stutter over a long session.
+- Upgrade checks exclude profession tools and other equippable item types that have no comparable character equipment slot.
+- Zero item-level values are normalized to an empty filter instead of appearing and counting as an active constraint.
+- Transfer classification text no longer masquerades as a destination-specific movement reason.
+- New item rules retain the item name, and legacy rules use their stored source text as a readable fallback when item data is unavailable.
+- Logging into a different character no longer shows the previous character's bank contents.
+- A stack moved onto a partial stack of the same item no longer comes up short: the game filled the partial stack and returned the rest to where it came from, while the move reported success. Stacks now join a partial stack only when all of it fits, and otherwise use an empty slot or are blocked with a reason.
 ## [0.5.0] - 2026-05-11
 
 ### Added

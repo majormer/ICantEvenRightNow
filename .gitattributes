@@ -1,0 +1,11 @@
+# Store all text with LF in the repository, whatever tool or OS wrote it.
+# Working copies are LF too. Batch files need CRLF to run correctly.
+* text=auto eol=lf
+
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.tga binary
+*.blp binary
+*.zip binary

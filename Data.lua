@@ -35,8 +35,31 @@ ns.Data.ItemTypes = {
     CURRENCY_LIKE = "CurrencyLike",
     EQUIPMENT = "Equipment",
     MATERIAL = "Material",
+    HOUSING = "Housing",
     UNKNOWN = "Unknown",
 }
+
+-- Housing lumber (class 7, subclass "Other", Warbound, 1,000-stack): one per
+-- expansion tier, used by every crafting profession for decor recipes at
+-- that tier's proficiency. Matched by ID because the subclass says nothing.
+-- Verified 2026-09-28 (ItemSparse build 12.1.0.69933, warcraft.wiki.gg).
+ns.Data.HousingLumber = {
+    [245586] = "Classic",            -- Ironwood Lumber
+    [242691] = "Outland",            -- Olemba Lumber
+    [251762] = "Northrend",          -- Coldwind Lumber
+    [251764] = "Cataclysm",          -- Ashwood Lumber
+    [251763] = "Pandaria",           -- Bamboo Lumber
+    [251766] = "Draenor",            -- Shadowmoon Lumber
+    [251767] = "Legion",             -- Fel-Touched Lumber
+    [251768] = "Battle for Azeroth", -- Darkpine Lumber
+    [251772] = "Shadowlands",        -- Arden Lumber
+    [251773] = "Dragonflight",       -- Dragonpine Lumber
+    [248012] = "The War Within",     -- Dornic Fir Lumber
+    [256963] = "Midnight",           -- Thalassian Lumber
+    [269010] = "any",                -- Essence of Lumber: trades for 20 lumber of your choice
+}
+-- Gathering professions have no decor recipes.
+ns.Data.GatheringSkillLines = { [182] = true, [186] = true, [393] = true, [356] = true }
 
 ns.Data.Actions = {
     BANK = "Bank",
@@ -91,57 +114,14 @@ ns.Data.DefaultDB = {
         mailboxOpen = false,
         inCombat = false,
     },
-    lastScan = {
-        bags = 0,
-        bank = 0,
-    },
-    scans = {
-        bags = {},
-        bank = {},
-    },
+    -- Roster and per-character snapshots (Characters.lua). Keyed "Name-Realm".
+    characters = {},
+    -- Account-wide Warband bank snapshot and tab data.
+    warband = { items = {}, scannedAt = 0, tabs = {} },
+    -- First date each item was seen per location (Reasons.lua).
+    timeHeld = {},
     ui = {
-        mode = "Dump to Bank",
-        expansionFilter = 0,
-        typeFilter = "All",
-        rarityFilter = "All",
-        locationFilter = "All",
-        recommendedOnly = true,
-        organizerShowAll = false,
-        vendorShowAll = false,
-        organizerSearch = "",
-        vendorSearch = "",
-        tabFilters = {
-            Move = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-            Organize = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-            Vendor = {
-                expansion = { include = 0 },
-                type = { include = "All" },
-                bind = { include = "All" },
-                location = { include = "All" },
-                name = { includeText = "", excludeText = "" },
-                hideBlocked = false,
-                advancedEnabled = false,
-                migratedFromLegacy = false,
-            },
-        },
+        tabFilters = {},
         showMinimapIcon = true,
         minimapIcon = {
             hide = false,
@@ -150,9 +130,27 @@ ns.Data.DefaultDB = {
         },
         showBankButton = false,
         showVendorButton = false,
-        search = "",
+        transferSort = "Name",
+        preselectQuickTasks = false, -- H3: off by default (player decision)
+        groupIdenticalRows = true,
+        compactRows = false,
+        contextNotice = "notice",    -- "notice" | "open" | "off" at a bank or vendor
+        whereTooltip = true,         -- W5: item tooltips show where the account holds the item
+        tipsEnabled = true,          -- O5: first-time tips (seen flags in db.tipsSeen, account-wide)
+        betterBagsCategories = false, -- Section 8: off until the player enables it
+        auctionIncludeCurrent = false, -- Auction Candidates may include current-expansion items (farmers)
+        enhancedLogging = false,     -- Troubleshooting: record actions into debugLog (Log.lua)
+        auctionMailReminder = true,  -- Warn before auction mail on any character is deleted (Mail.lua)
     },
+    debugLog = { lines = {}, nextIndex = 1, count = 0 }, -- Enhanced logging ring buffer (Log.lua)
+    vendorRefused = {}, -- [itemID] = { name, reason, at }: items vendors refused to buy (Transfer.lua)
+    knownPetSpecies = {}, -- [itemID] = speciesID, remembered because the client drops pet item data (Reasons.lua)
+    knownQuestItem = {}, -- [itemID] = questID, remembered because container quest info lags after a reload (Scanner.lua)
+    auctionRefused = {}, -- [itemID] = { name, reason, at }: items the auction house refused to list (Transfer.lua)
+    decisions = {}, -- [itemID] = { choice, at, until_, reason, note, by }: the player's triage decisions (Triage.lua)
     errorLog = {},  -- Persisted Lua error entries: { time, msg }. Capped at 50.
-    savedFilters = {},       -- User-named filter presets: array of { name, expansion, bind, type, slot, armorType, upgrade }
+    savedFilters = {},       -- User-named workflows; legacy filter-only presets remain supported.
     savedFiltersSeeded = false, -- Set true after default presets are written once
+    savedWorkflowSchemaVersion = 0,
+    -- schemaVersion, migrationBackup, migrationReports, legacy: managed by Migration.lua
 }

@@ -1,0 +1,513 @@
+local T = ...
+local F = require("fixtures")
+local I = F.ITEMS
+
+-- Fake Auctionator mirroring the installed v339 API (Source/API/v1).
+local function installAuctionator(w, opts)
+    opts = opts or {}
+    local fake = { searches = {}, lists = {} }
+    local function verify(callerID)
+        if type(callerID) ~= "string" or callerID == "" then error("Invalid callerID. Use the name of your add-on.") end
+    end
+    local api = {
+        GetAuctionPriceByItemLink = function(caller, link) verify(caller) return (opts.prices or {})[w.parseItemID(link)] end,
+        GetAuctionPriceByItemID = function(caller, id) verify(caller) return (opts.prices or {})[id] end,
+        GetAuctionAgeByItemLink = function(caller, link) verify(caller) return (opts.ages or {})[w.parseItemID(link)] end,
+        GetAuctionAgeByItemID = function(caller, id) verify(caller) return (opts.ages or {})[id] end,
+        IsAuctionDataExactByItemLink = function(caller, link)
+            verify(caller)
+            local exact = (opts.exact or {})[w.parseItemID(link)]
+            if exact == nil then return true end
+            return exact
+        end,
+        MultiSearchExact = function(caller, terms)
+            verify(caller)
+            if not w.ahOpen then error("Contact the maintainer of " .. caller .. " to resolve this problem. Details: Auction house is not open") end
+            for _, term in ipairs(terms) do
+                if term:match("[;^]") then error("Search term contains ; or ^") end
+            end
+            table.insert(fake.searches, terms)
+        end,
+        -- Mirrors v339 ValidateExtendedSearchTerms: string/number/boolean
+        -- fields only, no ; or ^, no quote-wrapped strings. Records names in
+        -- `searches` (like MultiSearchExact) and the full terms in `advanced`.
+        MultiSearchAdvanced = function(caller, terms)
+            verify(caller)
+            if not w.ahOpen then error("Details: Auction house is not open") end
+            local names = {}
+            for i, term in ipairs(terms) do
+                if type(term.searchString) ~= "string" then error("search term " .. i .. " must have searchString key") end
+                for key, value in pairs(term) do
+                    local t = type(value)
+                    if type(key) ~= "string" or (t ~= "string" and t ~= "number" and t ~= "boolean") then error("Bad search term " .. i) end
+                    if t == "string" and (value:match('^".*"$') or value:match("[;^]")) then error("Search term " .. i .. " contains ; or ^") end
+                end
+                table.insert(names, term.searchString)
+            end
+            fake.advanced = fake.advanced or {}
+            table.insert(fake.advanced, terms)
+            table.insert(fake.searches, names)
+        end,
+        ConvertToSearchString = function(caller, term)
+            verify(caller)
+            return term.isExact and ('"' .. term.searchString .. '"') or term.searchString
+        end,
+        CreateShoppingList = function(caller, name, strings)
+            verify(caller)
+            fake.lists[name] = strings
+        end,
+    }
+    -- Utilities.DBKeyFromLink mirrors v339: the callback runs at once only
+    -- when the item's data is loaded (Item:ContinueOnItemLoad).
+    local utilities = {
+        DBKeyFromLink = function(link, callback)
+            local id = w.parseItemID(link)
+            local def = id and w.items[id]
+            if def and def.cached then callback({ "g:" .. id .. ":" .. tostring(def.itemLevel), tostring(id) }) end
+        end,
+    }
+    -- Database mirrors v339 keys: "g:<id>:<level>" for gear at or above the
+    -- threshold (absent when opts.exact[id] == false), and "<id>" for the base item.
+    local database = {}
+    function database:GetPrice(key)
+        local id = tonumber(key:match("^g:(%d+):")) or tonumber(key)
+        if key:match("^g:") and (opts.exact or {})[id] == false then return nil end
+        -- opts.basePrices: the price across every item level (the "<id>" key).
+        if not key:match("^g:") and (opts.basePrices or {})[id] then return opts.basePrices[id] end
+        return (opts.prices or {})[id]
+    end
+    function database:GetPriceAge(key)
+        local id = tonumber(key:match("^g:(%d+):")) or tonumber(key)
+        return (opts.ages or {})[id]
+    end
+    rawset(w.env, "Auctionator", { API = { v1 = api }, Utilities = utilities, Database = database,
+        Constants = { ITEM_LEVEL_THRESHOLD = 168 } })
+    w.addonsLoaded.Auctionator = true
+    w.auctionator = fake
+    return fake
+end
+
+local function game(populate, opts)
+    return T.game({ player = { name = "Main", realm = "R", level = 90, classFile = "WARRIOR" },
+        setup = function(w) F.defineItems(w); F.addBank(w); installAuctionator(w, opts); populate(w) end })
+end
+
+local function scanned(g, itemID)
+    g:Core().ScanInventory("bags", true)
+    for _, item in ipairs(g:P().GetScanList("bags")) do
+        if item.itemID == itemID then return item end
+    end
+end
+
+local function homeWidget(g, name)
+    for _, widget in ipairs(g:UI().frame.panels.Home.cards) do
+        if widget:IsShown() and widget.card and widget.card.name == name then return widget end
+    end
+end
+
+T.test("gear priced from the base item is labelled approximate", function()
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end,
+        { prices = { [I.OLD_SWORD] = 2500000 }, ages = { [I.OLD_SWORD] = 1 }, exact = { [I.OLD_SWORD] = false } })
+    local price = g:P().GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.eq(price.exact, false)
+    T.contains(g:P().FormatPriceSource(price), "approximate")
+    -- Vendor protection still applies: better to warn than lose value.
+    T.ok(g:P().IsValueFlagged(scanned(g, I.OLD_SWORD), "Vendor"))
+    -- ...but it mixes every item level, so it is not a value or a candidate.
+    local sword = scanned(g, I.OLD_SWORD)
+    T.eq((g:P().GetItemValue(sword)), (sword.sellPrice or 0) * (sword.count or 1))
+    T.ok(not g:P().IsAuctionCandidate(sword))
+end)
+
+T.test("a confirmed price of the same day beats Auctionator's unconfirmed one", function()
+    -- Auctionator: one hopeful listing at 934g today against a 50g base price.
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end,
+        { prices = { [I.OLD_SWORD] = 9340000 }, basePrices = { [I.OLD_SWORD] = 500000 }, ages = { [I.OLD_SWORD] = 0 } })
+    local P = g:P()
+    local price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.ok(price.unconfirmed, "far above the usual price")
+    -- A price entered by hand today (the Undermine median) wins.
+    g:db().prices = g:db().prices or {}
+    g:db().prices["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 1225500, at = g.env.time() }
+    price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.eq(price.price, 1225500) T.no(price.unconfirmed)
+    T.ok(P.ListingPrice(scanned(g, I.OLD_SWORD)), "can be listed")
+    -- A price the player entered is trusted above the troll thresholds.
+    g:db().prices["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 450000000, at = g.env.time(), source = "manual" }
+    price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.eq(price.price, 450000000) T.no(price.unconfirmed, "45,000g entered by hand is not a troll listing")
+    T.contains(P.FormatPriceSource(price), "entered by you")
+end)
+
+T.test("exact prices and non-gear are not labelled approximate", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    local price = g:P().GetAuctionPrice(scanned(g, I.VALUABLE_ORE))
+    T.notContains(g:P().FormatPriceSource(price), "approximate")
+end)
+
+T.test("Auction Candidates: 'Check in Auctionator' searches every candidate at the AH", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(6, 1, I.OLD_SWORD, 1)
+    end, { prices = { [I.VALUABLE_ORE] = 90000, [I.OLD_SWORD] = 2500000 }, ages = { [I.VALUABLE_ORE] = 1, [I.OLD_SWORD] = 1 } })
+    g:openBank()
+    g:closeBank()
+    g:openAuctionHouse()
+    g:P().SetCharacterRole("Main-R", "main")
+    g:slash("")
+    local widget = homeWidget(g, "Auction Candidates")
+    T.ok(widget and widget.secondary:IsShown(), "secondary action shown")
+    T.eq(widget.secondary:GetText(), "Check in Auctionator")
+    g:click(widget.secondary)
+    local searched = g.world.auctionator.searches[1]
+    -- The BoE broadsword is wearable by this Main, so it is kept, not suggested.
+    T.same(searched, { "Obsidium Ore" }, "candidates by exact name; items a played character uses are excluded")
+    T.contains(g:printed(), "Searching 1 item in Auctionator's Shopping tab")
+end)
+
+T.test("away from the AH, candidates are saved as an Auctionator shopping list", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:slash("")
+    local widget = homeWidget(g, "Auction Candidates")
+    T.eq(widget.secondary:GetText(), "Save to Auctionator")
+    g:click(widget.secondary)
+    T.same(g.world.auctionator.lists["I Can't Even: Auction Candidates"], { '"Obsidium Ore"' })
+    T.eq(#g.world.auctionator.searches, 0, "no search attempted away from the AH")
+end)
+
+T.test("with Auctionator, price checks go to Auctionator instead of the own lookup", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(0, 2, I.OLD_SWORD, 1)
+        w:put(0, 3, I.BOUND_HELM, 1, { bound = true })
+    end)
+    g:Core().ScanInventory("bags", true)
+    g:openAuctionHouse()
+    local names = {}
+    for _, c in ipairs(g:P().GetTaskCards()) do names[c.name] = c end
+    T.eq(names["Price My Items"], nil, "own lookup hidden")
+    T.eq(names["Check Prices in Auctionator"].ready, 2, "only tradeable items without a price")
+    g.world:withHardwareEvent(function() g:P().OpenTask("Check Prices in Auctionator") end)
+    T.same(g.world.auctionator.searches[1], { "Cataclysm Broadsword", "Obsidium Ore" })
+    T.eq(g.world.ahQueries, nil, "the addon's own AH queries were not used")
+    T.eq(g:UI().activeTab, "Home", "stays on Home")
+end)
+
+T.test("names Auctionator would reject are cleaned", function()
+    local g = game(function(w)
+        w:defineItem(8201, { name = 'Odd;Name^"', classID = 7, subclassID = 7, maxStack = 20, sellPrice = 1, expansionID = 3 })
+        w:put(0, 1, 8201, 5)
+    end, { prices = { [8201] = 900000 }, ages = { [8201] = 1 } })
+    g:Core().ScanInventory("bags", true)
+    g:openAuctionHouse()
+    T.ok(g:P().CheckCandidatesInAuctionator())
+    T.same(g.world.auctionator.searches[1], { "OddName" })
+end)
+
+T.test("current-expansion and in-use items are never auction candidates", function()
+    local g = game(function(w)
+        w:defineItem(8301, { name = "Void-Touched Drums", classID = 0, subclassID = 8, maxStack = 20,
+            sellPrice = 100, expansionID = 11 })
+        w:put(0, 1, 8301, 39)                -- current expansion: keep
+        w:put(0, 2, I.VALUABLE_ORE, 20)      -- old, unused: candidate
+        w:put(0, 3, I.LINEN, 200)            -- old, but a crafter uses it: keep
+    end, { prices = { [8301] = 500000, [I.VALUABLE_ORE] = 90000, [I.LINEN] = 60000 },
+           ages = { [8301] = 1, [I.VALUABLE_ORE] = 1, [I.LINEN] = 1 } })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:db().characters["Main-R"].professions = { { name = "Tailoring", skillLine = 197 } }
+    g:Core().ScanInventory("bags", true)
+    local ids = {}
+    for _, item in ipairs(P.AuctionCandidateItems()) do ids[item.itemID] = true end
+    T.no(ids[8301], "current-expansion drums are not suggested for auction")
+    T.no(ids[I.LINEN], "linen your tailor uses is kept")
+    T.ok(ids[I.VALUABLE_ORE], "old unused ore is a candidate")
+end)
+
+T.test("Auction Candidates card shows the auction value, not the vendor value", function()
+    local g = game(function(w) w:put(6, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:openBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.eq(g:P().CardSummary(card), "1 in the bank (~171g 0s at auction)")
+end)
+
+T.test("items whose data hasn't loaded still get a readable name", function()
+    local g = game(function(w)
+        w:defineItem(8401, { name = "Slowly Loading Gem", classID = 7, maxStack = 20, cached = false, neverLoads = true })
+        w:put(0, 1, 8401, 3)
+    end)
+    local item = scanned(g, 8401)
+    T.eq(item.name, "Slowly Loading Gem", "name taken from the item link")
+    T.eq(g:P().ItemDisplayName("", nil, 42), "Item 42")
+    T.eq(g:P().ItemDisplayName(nil, "|cff|Hitem:1|h[]|h|r", 7), "Item 7")
+end)
+T.test("setting: include current-expansion items in Auction Candidates (off by default)", function()
+    local g = game(function(w)
+        w:defineItem(8501, { name = "Fresh Ore", classID = 7, subclassID = 7, maxStack = 200, sellPrice = 10, expansionID = 11 })
+        w:defineItem(8502, { name = "Fresh Cloth", classID = 7, subclassID = 5, maxStack = 200, sellPrice = 10, expansionID = 11 })
+        w:put(0, 1, 8501, 100)
+        w:put(0, 2, 8502, 100)
+    end, { prices = { [8501] = 50000, [8502] = 50000 }, ages = { [8501] = 1, [8502] = 1 } })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:db().characters["Main-R"].professions = { { name = "Tailoring", skillLine = 197 } }
+    g:Core().ScanInventory("bags", true)
+    local function candidates()
+        local ids = {}
+        for _, item in ipairs(P.AuctionCandidateItems()) do ids[item.itemID] = true end
+        return ids
+    end
+    T.eq(g:db().ui.auctionIncludeCurrent, false, "off by default")
+    T.no(candidates()[8501], "current ore excluded by default")
+    g:db().ui.auctionIncludeCurrent = true
+    local ids = candidates()
+    T.ok(ids[8501], "current ore included when enabled")
+    T.no(ids[8502], "cloth your tailor uses is still kept")
+end)
+T.test("Auction Candidates counts candidates in bags and in the bank", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(6, 1, I.OLD_POTION, 5)
+    end, { prices = { [I.VALUABLE_ORE] = 90000, [I.OLD_POTION] = 400000 },
+           ages = { [I.VALUABLE_ORE] = 1, [I.OLD_POTION] = 1 } })
+    g:openBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.eq(card.ready, 2)
+    T.contains(g:P().CardSummary(card), "1 in bags, 1 in the bank")
+end)
+T.test("Auction Candidates counts a Warband stack even when the same item is already a candidate in the bags", function()
+    local g = T.game({ player = { name = "Main", realm = "R", level = 90, classFile = "WARRIOR" },
+        setup = function(w)
+            F.defineItems(w)
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:addBankTab(2, 12, "Tab 1", 0, 20)
+            installAuctionator(w, { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+            w:put(0, 1, I.VALUABLE_ORE, 20)      -- bags
+            w:put(12, 1, I.VALUABLE_ORE, 20)     -- Warband bank
+            w:put(12, 2, I.VALUABLE_ORE, 20)
+        end })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:openBank()
+    g:Core().ScanInventory("all", true)
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.contains(P.CardSummary(card), "1 in bags, 1 in the Warband bank")
+    T.eq(#P.AuctionCandidateItems(), 1, "searches still see one item")
+    T.eq(#P.AuctionCandidateItems(true), 2, "one entry per place")
+    T.eq(card.task.preset.source, P.STORAGE_WARBAND_BANK, "the review pulls from the Warband bank")
+end)
+
+T.test("Auction Candidates with everything in the bags points at the auction house, not a bank", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    local card
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.eq(card.ready, 1)
+    local ok, needs = g:P().TaskRouteAvailable(card.task)
+    T.no(ok) T.eq(needs, "Visit the auction house")
+end)
+
+T.test("opening the auction house shows a notice for Auction Candidates", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openAuctionHouse()
+    local notice = g:UI().contextNoticeFrame
+    T.ok(notice and notice:IsShown(), "notice at the AH")
+    T.contains(notice.text:GetText(), "Auction Candidates: 1 in bags")
+    g:closeAuctionHouse()
+    T.no(notice:IsShown(), "hidden when the AH closes")
+end)
+T.test("at the AH the notice runs Check in Auctionator; bank-only tasks don't open a wrong route", function()
+    local g = game(function(w)
+        w:put(0, 1, I.VALUABLE_ORE, 20)
+        w:put(6, 1, I.OLD_POTION, 5)
+    end, { prices = { [I.VALUABLE_ORE] = 90000, [I.OLD_POTION] = 400000 },
+           ages = { [I.VALUABLE_ORE] = 1, [I.OLD_POTION] = 1 } })
+    g:openBank()
+    g:closeBank()
+    g:P().SetCharacterRole("Main-R", "main")
+    g:openAuctionHouse()
+    local notice = g:UI().contextNoticeFrame
+    T.eq(notice.open:GetText(), "Check in Auctionator")
+    g:click(notice.open)
+    T.eq(#g.world.auctionator.searches, 1, "search started from the notice")
+    -- At the auction house the task reviews the bags for listing (one button;
+    -- before 2026-09-27 it refused with "visit a bank").
+    T.ok(g:P().OpenTask("Auction Candidates"))
+    T.eq(g:UI().transferSource, "Bags")
+    T.eq(g:UI().transferDest, g:P().STORAGE_AUCTION_HOUSE)
+    g:slash("")
+    local widget
+    for _, w in ipairs(g:UI().frame.panels.Home.cards) do
+        if w:IsShown() and w.card and w.card.name == "Auction Candidates" then widget = w end
+    end
+    T.eq(widget.open:GetText(), "Review")
+    T.ok(widget.open:IsEnabled())
+    T.ok(widget.secondary:IsShown() and widget.secondary:IsEnabled(), "Auctionator action still available")
+end)
+T.test("items whose link lookup fails are still named, classified, and searchable", function()
+    local g = game(function(w)
+        w:defineItem(8601, { name = "Stubborn Ore", classID = 7, subclassID = 7, maxStack = 200, sellPrice = 5,
+            expansionID = 3, linkLookupFails = true })
+        w:put(0, 1, 8601, 50)
+    end, { prices = { [8601] = 80000 }, ages = { [8601] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    local item = scanned(g, 8601)
+    T.eq(item.name, "Stubborn Ore")
+    T.eq(item.expansionID, 3, "data read by item ID")
+    g:openAuctionHouse()
+    T.ok(g:P().CheckCandidatesInAuctionator())
+    T.same(g.world.auctionator.searches[1], { "Stubborn Ore" })
+end)
+
+T.test("items with unloaded data are never auction candidates", function()
+    local g = game(function(w)
+        w:defineItem(8701, { name = "Mystery Mat", classID = 7, maxStack = 20, sellPrice = 5, expansionID = 11,
+            cached = false, neverLoads = true })
+        w:put(0, 1, 8701, 10)
+    end, { prices = { [8701] = 900000 }, ages = { [8701] = 1 } })
+    g:Core().ScanInventory("bags", true)
+    T.eq(#g:P().AuctionCandidateItems(), 0, "unknown data is not treated as sellable")
+end)
+T.test("gear is searched at its own item level, one term per level", function()
+    local g = game(function(w)
+        w:defineItem(8901, { name = "Tarnished Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8901, 1)
+        w.equipped[16] = 305
+    end, { prices = { [8901] = 5000000 }, ages = { [8901] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    g:openAuctionHouse()
+    T.ok(g:P().CheckCandidatesInAuctionator())
+    local terms = g.world.auctionator.advanced[1]
+    T.eq(#terms, 1)
+    T.eq(terms[1].searchString, "Tarnished Blade")
+    T.eq(terms[1].minItemLevel, 260)
+    T.eq(terms[1].maxItemLevel, 260)
+    T.eq(terms[1].isExact, true)
+end)
+T.test("the auction house is not mistaken for a bank", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    g:openAuctionHouse()
+    g:Core().UpdateContext()
+    T.eq(g.ns.DB.context.bankOpen, false)
+    T.eq(g.ns.DB.context.auctionHouseOpen, true)
+end)
+T.test("the notice's value updates when auction prices change", function()
+    local prices = { [I.VALUABLE_ORE] = 900000 }
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, { prices = prices, ages = { [I.VALUABLE_ORE] = 1 } })
+    g:openAuctionHouse()
+    local notice = g:UI().contextNoticeFrame
+    T.ok(notice and notice:IsShown(), "notice shown at the AH")
+    local before = notice.text:GetText()
+    prices[I.VALUABLE_ORE] = 100000
+    g.world:fire("COMMODITY_SEARCH_RESULTS_UPDATED", I.VALUABLE_ORE)
+    g.world:advance(3)
+    T.ok(notice.text:GetText() ~= before, "value text refreshed")
+end)
+T.test("gear is priced at its own level even before its data loads", function()
+    local g = game(function(w)
+        w:defineItem(8902, { name = "Slow Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8902, 1)
+        w.equipped[16] = 305
+    end, { prices = { [8902] = 5000000 }, ages = { [8902] = 1 } })
+    local blade = scanned(g, 8902)
+    g.world.items[8902].cached = false
+    local price = g:P().GetAuctionPrice(blade)
+    T.ok(price, "priced from the scanned item level")
+    T.eq(price.exact, true)
+end)
+T.test("stale prices are not auction value, but still protect from vendoring", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
+        { prices = { [I.VALUABLE_ORE] = 900000 }, ages = { [I.VALUABLE_ORE] = 71 } })
+    local ore = scanned(g, I.VALUABLE_ORE)
+    T.eq(g:P().GetAuctionPrice(ore).fresh, false)
+    T.ok(not g:P().IsAuctionCandidate(ore), "stale price: not a candidate")
+    T.eq((g:P().GetItemValue(ore)), (ore.sellPrice or 0) * ore.count, "value falls back to vendor")
+    T.ok(g:P().IsValueFlagged(ore, "Vendor"), "vendor protection still warns")
+end)
+T.test("the auction report explains gear it leaves out", function()
+    local g = game(function(w)
+        w:defineItem(8903, { name = "Unpriced Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 260, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8903, 1)
+        w.equipped[16] = 305
+    end, {})
+    g:P().SetCharacterRole("Main-R", "main")
+    g:Core().ScanInventory("bags", true)
+    local text = table.concat(g:P().AuctionCandidateReport(), "\n")
+    T.contains(text, "left out: Unpriced Blade [260]: no auction price")
+end)
+
+T.test("gear below Auctionator's item-level threshold is priced as approximate", function()
+    local g = game(function(w)
+        w:defineItem(8904, { name = "Low Blade", classID = 2, subclassID = 7, equipLoc = "INVTYPE_WEAPON",
+            itemLevel = 165, requiredLevel = 70, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8904, 1)
+    end, { prices = { [8904] = 5000000 }, ages = { [8904] = 1 } })
+    local price = g:P().GetAuctionPrice(scanned(g, 8904))
+    T.eq(price.exact, false)
+    T.ok(not g:P().IsAuctionCandidate(scanned(g, 8904)))
+end)
+
+T.test("a level price far above the item's usual price is unconfirmed and not counted", function()
+    local g = game(function(w)
+        w:defineItem(8905, { name = "Pricey Gloves", classID = 4, subclassID = 4, equipLoc = "INVTYPE_HAND",
+            itemLevel = 192, requiredLevel = 80, bindType = 2, sellPrice = 100, expansionID = 3 })
+        w:put(0, 1, 8905, 1)
+        w.equipped[10] = 305
+    end, { prices = { [8905] = 250000000 }, ages = { [8905] = 1 } })
+    g:P().SetCharacterRole("Main-R", "main")
+    -- Level key 25,000g; base key (all levels) 500g.
+    local db = g.env.Auctionator.Database
+    local levelPrice = db.GetPrice
+    db.GetPrice = function(self, key) if key == "8905" then return 5000000 end return levelPrice(self, key) end
+    local gloves = scanned(g, 8905)
+    local price = g:P().GetAuctionPrice(gloves)
+    T.eq(price.unconfirmed, true)
+    T.ok(g:P().IsAuctionCandidate(gloves), "still a candidate")
+    T.eq((g:P().GetItemValue(gloves)), 100, "not counted as auction value")
+    T.contains(g:P().FormatPriceSource(price), "unconfirmed")
+end)
+T.test("a child of a hidden bank panel is not a bank", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    local panel = g.env.CreateFrame("Frame", "BankPanel", g.env.UIParent)
+    panel:Hide()
+    local child = g.env.CreateFrame("Button", "BankPanelCopperButton", panel)
+    child:Show()
+    g:Core().UpdateContext()
+    T.eq(g.ns.DB.context.bankOpen, false)
+end)
+T.test("forbidden frames don't break context detection", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    local forbidden = g.env.CreateFrame("Frame", "SomeBankishForbiddenFrame", g.env.UIParent)
+    forbidden.IsForbidden = function() return true end
+    forbidden.IsVisible = function() error("calling 'IsVisible' on bad self") end
+    forbidden.GetName = function() error("calling 'GetName' on bad self") end
+    local ok, err = pcall(g:Core().UpdateContext)
+    T.ok(ok, tostring(err))
+    T.eq(g.ns.DB.context.bankOpen, false)
+end)
+T.test("context detection never walks every frame", function()
+    local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end, {})
+    local calls = 0
+    local real = g.env.EnumerateFrames
+    g.env.EnumerateFrames = function(...) calls = calls + 1 return real(...) end
+    g:Core().UpdateContext()
+    g:Core().RefreshUI()
+    T.eq(calls, 0, "EnumerateFrames is too slow to run on every refresh")
+end)

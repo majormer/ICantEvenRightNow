@@ -15,6 +15,9 @@ Thumbs.db
 scripts/*
 !scripts/
 !scripts/Build-Release.ps1
+!scripts/Get-AddonFiles.ps1
+!scripts/Test-Addon.ps1
+!scripts/Link-ToWoW.ps1
 
 # Git artifacts from other repos
 .gitlab-ci.yml
@@ -32,7 +35,33 @@ build/
 !.env.example
 ICantEvenRightNowDB_backup.lua
 test_*.lua
+# ...but the offline test suite is tracked
+!tests/**/test_*.lua
 
-# Local Copilot agent customization file
+# AI assistant files (local only, never pushed)
+# Agent instructions
 /agents.md
 /AGENTS.md
+/CLAUDE.md
+/CLAUDE.local.md
+/GEMINI.md
+/.cursorrules
+/.windsurfrules
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+# Local AI context and lookups
+/.local/
+# Tool state and settings
+.claude/
+.cursor/
+.windsurf/
+.gemini/
+.codex/
+.continue/
+.aider*
+.copilot/
+.mcp.json
+
+# Local-only test fixtures (real SavedVariables copies; never committed)
+tests/fixtures/local/

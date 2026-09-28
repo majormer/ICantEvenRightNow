@@ -1,11 +1,11 @@
-## Interface: 120000, 120001, 120005
+## Interface: 120000, 120001, 120005, 120007, 120100
 ## Title: I Can't Even Right Now (With My Bags and Bank)
-## Notes: Intelligent inventory cleanup - bank old content items, recall relevant items, and manage inventory clutter
-## Author: majormer
-## Version: 0.5.0
+## Notes: Anti-hoarding cleanup for bags, bank and Warband bank: every item justifies its slot. Nothing moves until you click. A Finalomega Labs project.
+## Author: Finalomega Labs
+## Version: 0.6.0
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\ICantEvenRightNow\ICantEvenRightNow.png
-## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0
+## OptionalDeps: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0, BetterBags, Auctionator, TradeSkillMaster
 ## SavedVariables: ICantEvenRightNowDB
 
 ## X-Curse-Project-ID: 1534906
@@ -13,13 +13,29 @@
 ## X-Category: Inventory
 ## X-License: All Rights Reserved
 ## X-Website: https://github.com/majormer/ICantEvenRightNow
+## X-Support: https://ko-fi.com/finalomega
 
 Data.lua
 Debug.lua
 Shared.lua
+Log.lua
+Migration.lua
+Characters.lua
+Mail.lua
 Evaluator.lua
+ItemData.lua
+Reasons.lua
+Readiness.lua
+Warband.lua
 Filter.lua
 Scanner.lua
 Transfer.lua
+Tasks.lua
+Triage.lua
 UI.lua
+HomeUI.lua
+TriageUI.lua
+Value.lua
+Onboarding.lua
+Integrations.lua
 Core.lua

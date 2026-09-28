@@ -1,0 +1,977 @@
+-- I Can't Even Right Now (With My Bags and Bank) — Value Awareness
+-- Auction prices from Auctionator or TSM when installed, or from a paced
+-- lookup of the player's own items at the auction house. Every price carries
+-- its source and age. Prices are advice only: nothing is ever posted or bought.
+--
+-- APIs verified 2026-09-25 (see .local/docs/WoW_API_Notes.md):
+--   Auctionator.API.v1.GetAuctionPriceByItemLink/ID(callerID, x), GetAuctionAgeBy...
+--   TSM_API.GetCustomPriceValue(priceString, itemString), TSM_API.ToItemString(link)
+--   C_AuctionHouse.SendSearchQuery / Get(Commodity|Item)SearchResultInfo,
+--   IsThrottledMessageSystemReady; 5% auction cut.
+
+local ADDON_NAME, ns = ...
+
+local Core = ns.Core
+local P    = ns.Private
+
+local UI = P.UI
+local CALLER_ID = "ICantEvenRightNow"
+local AUCTION_CUT = 0.05
+local DAY = 24 * 3600
+
+local DEFAULT_FRESH_DAYS = { commodity = 3, item = 7 }
+local DEFAULT_MIN_GAIN = 5 * 10000          -- 5 gold over the vendor price
+local LOOKUP_INTERVAL = 0.35                -- seconds between own lookups
+
+local function Now() return time and time() or 0 end
+
+local function Settings()
+    local ui = ns.DB.ui
+    ui.priceFreshDays = ui.priceFreshDays or {}
+    return {
+        freshCommodity = ui.priceFreshDays.commodity or DEFAULT_FRESH_DAYS.commodity,
+        freshItem = ui.priceFreshDays.item or DEFAULT_FRESH_DAYS.item,
+        minGain = ui.minAuctionGain or DEFAULT_MIN_GAIN,
+    }
+end
+
+local TROLL_PRICE = 50000000        -- 5,000g (copper), common/uncommon items
+local TROLL_PRICE_ANY = 250000000   -- 25,000g, any quality
+
+local function IsCommodity(item)
+    return (item.maxStack or 1) > 1
+end
+
+local function Prices()
+    ns.DB.prices = ns.DB.prices or {}
+    return ns.DB.prices
+end
+
+-- Commodity prices are region-wide (shared by every character); other items
+-- are per realm.
+local function PriceKey(item)
+    if IsCommodity(item) then return "c:" .. tostring(item.itemID) end
+    local realm = GetRealmName and GetRealmName() or "?"
+    return "i:" .. tostring(item.itemID) .. ":" .. realm
+end
+
+-- ---------------------------------------------------------------------------
+-- Sources
+-- ---------------------------------------------------------------------------
+
+-- Gear price for this piece's own item level, read from Auctionator's price
+-- database by the same keys its API uses ("g:<itemID>:<level>" at or above
+-- Constants.ITEM_LEVEL_THRESHOLD, 168 in v339). Auctionator's own link lookup
+-- only uses the level key when the game reports the item's data as loaded,
+-- and in game that flag flipped for readable items, so prices jumped between
+-- level-specific and base (every level mixed, still called exact): ~14,002g
+-- vs ~3,838g for the same bags. Reading the level key directly is stable.
+-- Returns a price record, false when this is gear with no usable level key
+-- (base price only: approximate), or nil to use the API path.
+local UNCONFIRMED_PRICE_RATIO = 10
+
+local function AuctionatorGearPrice(item)
+    if not (item.classID == 2 or item.classID == 4) then return nil end
+    local db = Auctionator and Auctionator.Database
+    if not (db and db.GetPrice) then return nil end
+    local level = item.link and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link)
+    if type(level) ~= "number" or level <= 0 then level = item.itemLevel end
+    local constants = Auctionator.Constants
+    local threshold = constants and type(constants.ITEM_LEVEL_THRESHOLD) == "number" and constants.ITEM_LEVEL_THRESHOLD or 168
+    local function read(key)
+        local okPrice, price = pcall(db.GetPrice, db, key)
+        if not okPrice or type(price) ~= "number" or price <= 0 then return nil end
+        local age
+        if db.GetPriceAge then
+            local okAge, days = pcall(db.GetPriceAge, db, key)
+            if okAge then age = days end
+        end
+        return price, age
+    end
+    if type(level) == "number" and level >= threshold then
+        local price, age = read("g:" .. tostring(item.itemID) .. ":" .. tostring(level))
+        if price then
+            -- Auctionator records the lowest listing it saw, not what sells. A
+            -- level price far above the item's price across all levels is
+            -- often one hopeful listing (in game: 25,000g for a piece listed
+            -- at 100-2,500g elsewhere), so it is flagged as unconfirmed.
+            local base = read(tostring(item.itemID))
+            local unconfirmed = base and price > base * UNCONFIRMED_PRICE_RATIO or nil
+            return { price = price, source = "Auctionator", ageDays = age, exact = true, unconfirmed = unconfirmed }
+        end
+    end
+    local price, age = read(tostring(item.itemID))
+    if price then return { price = price, source = "Auctionator", ageDays = age, exact = false } end
+    return false
+end
+
+local function AuctionatorPrice(item)
+    local api = Auctionator and Auctionator.API and Auctionator.API.v1
+    if not api then return nil end
+    local gear = AuctionatorGearPrice(item)
+    if gear then return gear end
+    if gear == false then return nil end
+    local price, age
+    if item.link and api.GetAuctionPriceByItemLink then
+        local ok, value = pcall(api.GetAuctionPriceByItemLink, CALLER_ID, item.link)
+        if ok then price = value end
+        if api.GetAuctionAgeByItemLink then
+            local okAge, days = pcall(api.GetAuctionAgeByItemLink, CALLER_ID, item.link)
+            if okAge then age = days end
+        end
+    end
+    if not price and api.GetAuctionPriceByItemID then
+        local ok, value = pcall(api.GetAuctionPriceByItemID, CALLER_ID, item.itemID)
+        if ok then price = value end
+        if api.GetAuctionAgeByItemID then
+            local okAge, days = pcall(api.GetAuctionAgeByItemID, CALLER_ID, item.itemID)
+            if okAge then age = days end
+        end
+    end
+    if type(price) ~= "number" or price <= 0 then return nil end
+    -- For gear, Auctionator may only know the base item, not this item level.
+    -- Below its item-level threshold (168 in v339) it stores gear by base item
+    -- only and still reports that price as exact, so treat it as approximate.
+    local exact
+    if (item.classID == 2 or item.classID == 4) then
+        local constants = Auctionator.Constants
+        local threshold = constants and type(constants.ITEM_LEVEL_THRESHOLD) == "number" and constants.ITEM_LEVEL_THRESHOLD or 168
+        local level = item.link and C_Item.GetDetailedItemLevelInfo and C_Item.GetDetailedItemLevelInfo(item.link) or item.itemLevel
+        if not item.link or (type(level) == "number" and level < threshold) then
+            exact = false
+        elseif api.IsAuctionDataExactByItemLink then
+            local okExact, value = pcall(api.IsAuctionDataExactByItemLink, CALLER_ID, item.link)
+            if okExact and value ~= nil then exact = value and true or false end
+        end
+    end
+    return { price = price, source = "Auctionator", ageDays = age, exact = exact }
+end
+
+local function TSMPrice(item)
+    if not (TSM_API and TSM_API.GetCustomPriceValue and TSM_API.ToItemString) then return nil end
+    local ok, itemString = pcall(TSM_API.ToItemString, item.link or ("i:" .. tostring(item.itemID)))
+    if not ok or not itemString then return nil end
+    for _, source in ipairs({ "DBMarket", "DBRegionMarketAvg", "DBMinBuyout" }) do
+        local okPrice, value = pcall(TSM_API.GetCustomPriceValue, source, itemString)
+        if okPrice and type(value) == "number" and value > 0 then
+            local okRate, rate = pcall(TSM_API.GetCustomPriceValue, "DBRegionSaleRate", itemString)
+            return { price = value, source = "TSM", ageDays = nil, saleRate = okRate and rate or nil }
+        end
+    end
+    return nil
+end
+
+local function StoredPrice(item)
+    local entry = Prices()[PriceKey(item)]
+    if not entry then return nil end
+    -- entry.source == "manual": a price the player typed in (or pasted from
+    -- a market median); everything else came from the addon's own lookups.
+    return { price = entry.price, source = entry.source == "manual" and "entered by you" or "your scan",
+        ageDays = (Now() - (entry.at or 0)) / DAY }
+end
+
+function P.HasPriceSource()
+    local api = Auctionator and Auctionator.API and Auctionator.API.v1
+    return (api ~= nil) or (TSM_API ~= nil and TSM_API.GetCustomPriceValue ~= nil) or next(Prices()) ~= nil
+end
+
+-- Best available auction price for an item: { price, source, ageDays, fresh }.
+-- The freshest source wins (player's rule: any recent source counts,
+-- including the addon's own lookups). TSM reports no age; its market data
+-- counts as about a day old. On a tie the earlier source wins.
+local function GetAuctionPrice(item)
+    if not item or not item.itemID then return nil end
+    local result
+    for _, candidate in ipairs({ AuctionatorPrice(item) or false, TSMPrice(item) or false, StoredPrice(item) or false }) do
+        if candidate then
+            -- A confirmed price beats an unconfirmed one of the same day: in
+            -- game a median typed in by hand lost to Auctionator's "far above
+            -- usual" listing from the same day and the item stayed blocked.
+            local better = not result
+                or (candidate.ageDays or 1) < (result.ageDays or 1)
+                or (result.unconfirmed and not candidate.unconfirmed
+                    and math.floor(candidate.ageDays or 1) <= math.floor(result.ageDays or 1))
+            if better then result = candidate end
+        end
+    end
+    if not result then return nil end
+    -- A common or uncommon item at 5,000g+, or anything at 25,000g+, is
+    -- usually a troll listing (in game: Depleted Two-Handed Axe, a rare with
+    -- no vendor price, at 47,908g made up most of a ~61,332g "Auction
+    -- Candidates" total). Kept as a candidate, but not counted as value.
+    -- A price the player entered is taken as confirmed: a 45,000g pattern
+    -- median from Undermine Exchange was blocked as a troll listing (2026-09-28).
+    if not result.unconfirmed and result.source ~= "entered by you"
+        and ((item.quality or 0) <= 2 and result.price >= TROLL_PRICE or result.price >= TROLL_PRICE_ANY) then
+        result.unconfirmed = true
+    end
+    local settings = Settings()
+    local limit = IsCommodity(item) and settings.freshCommodity or settings.freshItem
+    result.fresh = result.ageDays == nil or result.ageDays <= limit
+    return result
+end
+P.GetAuctionPrice = GetAuctionPrice
+
+local function FormatAge(days)
+    if not days then return nil end
+    if days < 1 then return "today" end
+    local whole = math.floor(days + 0.5)
+    return whole .. " day" .. (whole == 1 and "" or "s")
+end
+
+function P.FormatPriceSource(price)
+    if not price then return "" end
+    local age = FormatAge(price.ageDays)
+    return price.source .. (age and (", " .. age) or "") .. (price.exact == false and ", approximate" or "")
+        .. (price.unconfirmed and ", unconfirmed: far above this item's usual price" or "")
+        .. (price.fresh and "" or ", stale")
+end
+
+-- ---------------------------------------------------------------------------
+-- Decisions
+-- ---------------------------------------------------------------------------
+
+local function CanBeAuctioned(item)
+    return P.ItemChannels(item).auction == true
+end
+P.CanBeAuctioned = CanBeAuctioned
+
+-- Net auction proceeds for the whole stack (after the 5% cut), or nil.
+-- Approximate gear prices (Auctionator only knows the base item, mixing every
+-- item level) and stale prices (in game: 71-day-old prices kept because a
+-- search found no current listings) are ignored unless allowUncertain is
+-- set. Items with stale prices are counted by the price-check card instead.
+local function AuctionNet(item, allowUncertain)
+    if not CanBeAuctioned(item) then return nil end
+    local price = GetAuctionPrice(item)
+    if not price then return nil end
+    if (price.exact == false or not price.fresh) and not allowUncertain then return nil end
+    return math.floor(price.price * (item.count or 1) * (1 - AUCTION_CUT)), price
+end
+
+-- Returns "auction" | "vendor" | nil, reason text.
+function P.AuctionAdvice(item, allowUncertain)
+    if not CanBeAuctioned(item) then return nil end   -- Warbound, soulbound, quest: the price is moot
+    local net, price = AuctionNet(item, allowUncertain)
+    if not net then return nil end
+    local vendor = (item.sellPrice or 0) * (item.count or 1)
+    local gain = net - vendor
+    if gain >= Settings().minGain then
+        local slow = price.saleRate and price.saleRate > 0 and price.saleRate < 0.02
+        return "auction", "About " .. P.FormatMoney(net) .. " after the auction cut vs "
+            .. P.FormatMoney(vendor) .. " at a vendor (" .. P.FormatPriceSource(price) .. ")"
+            .. (slow and "; rarely sells" or "")
+    end
+    return "vendor", "Auction gain under " .. P.FormatMoney(Settings().minGain)
+end
+
+-- Scan first (player's rule, 2026-09-26): a tradeable green-or-better item
+-- with no recent auction price shouldn't go to a vendor before an auction
+-- house scan says what it's worth. Only when a price source is installed
+-- (otherwise there's nothing to scan with).
+function P.NeedsPriceCheck(item)
+    if not item or not P.HasPriceSource() then return false end
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
+    if decision and decision.choice == "sell" then return false end
+    if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    if P.NotListedAtLastScan(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or not price.fresh
+end
+
+-- ---------------------------------------------------------------------------
+-- Auctionator full scans
+-- Auctionator's own scan timestamps aren't reliable (its summary-mode full
+-- scan only updates TimeOfLastBrowseScan, which browsing also sets), so the
+-- addon listens for "scan complete" on Auctionator's event bus (internal API,
+-- checked in v339: EventBus:Register(listener, events), events
+-- IncrementalScan.Events.ScanComplete and FullScan.Events.ScanComplete).
+-- After a full scan, an item with no price wasn't listed: there's no market
+-- to wait for, so "price it first" stops asking about it.
+-- ---------------------------------------------------------------------------
+
+local scanListener = {}
+function scanListener.ReceiveEvent(_, eventName)
+    ns.DB.fullAuctionScanAt = Now()
+    P.Log("auction", "Auctionator full scan finished (%s)", tostring(eventName))
+    if P.NoteLateData then P.NoteLateData() end
+end
+
+function P.HookAuctionatorScans()
+    if scanListener.hooked then return true end
+    local bus = Auctionator and Auctionator.EventBus
+    if not (bus and bus.Register) then return false end
+    local events = {}
+    for _, group in ipairs({ Auctionator.IncrementalScan, Auctionator.FullScan }) do
+        if type(group) == "table" and group.Events and group.Events.ScanComplete then
+            events[#events + 1] = group.Events.ScanComplete
+        end
+    end
+    if #events == 0 then return false end
+    scanListener.hooked = pcall(bus.Register, bus, scanListener, events)
+    return scanListener.hooked
+end
+
+if CreateFrame then
+    local hookFrame = CreateFrame("Frame")
+    hookFrame:RegisterEvent("PLAYER_LOGIN")
+    hookFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
+    hookFrame:SetScript("OnEvent", function() P.HookAuctionatorScans() end)
+end
+
+-- Days since the last completed full scan, or nil.
+function P.FullScanAgeDays()
+    local at = ns.DB and ns.DB.fullAuctionScanAt
+    return at and (Now() - at) / DAY or nil
+end
+
+-- Tradeable green-or-better item that a recent full scan didn't find listed
+-- (no price, or its price is older than the scan).
+function P.NotListedAtLastScan(item)
+    local scanAge = P.FullScanAgeDays()
+    if not scanAge or scanAge > Settings().freshItem then return false end
+    if not item or (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or (price.ageDays ~= nil and price.ageDays > math.ceil(scanAge))
+end
+
+-- Before a sell task: auctionable items whose best price (any source) is
+-- missing or older than PRICE_FIRST_DAYS (player's rule, 2026-09-26).
+local PRICE_FIRST_DAYS = 1
+P.PRICE_FIRST_DAYS = PRICE_FIRST_DAYS
+function P.NeedsRecentPrice(item)
+    if not item or (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
+    local scanAge = P.FullScanAgeDays()
+    if scanAge and scanAge <= PRICE_FIRST_DAYS and P.NotListedAtLastScan(item) then return false end
+    local price = GetAuctionPrice(item)
+    return not price or (price.ageDays or 1) > PRICE_FIRST_DAYS
+end
+
+-- Vendor protection (V3): true when selling to a vendor would give up a
+-- meaningful auction price. Uses stale prices too: better to warn than lose value.
+function P.IsValueFlagged(item, dest)
+    if dest ~= "Vendor" then return false end
+    -- The player decided to sell it to a vendor with the auction price in view.
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
+    if decision and decision.choice == "sell" then return false end
+    return (P.AuctionAdvice(item, true)) == "auction"
+end
+
+-- The price to list at: the freshest trusted price, undercut by 1% (at most
+-- 5g), in whole silver (PostItem silently fails on copper) and never below
+-- the vendor price. Nil with a reason when the addon shouldn't pick it (no
+-- price, or one far above the item's usual price).
+-- Player's rule (2026-09-27): listing is one button, not a walk through
+-- Auctionator; the game only allows one auction per click.
+local LISTING_UNDERCUT = 0.01
+local LISTING_UNDERCUT_CAP = 50000   -- 5g
+P.LISTING_DURATION = 2               -- 24 hours (1 = 12 h, 3 = 48 h)
+function P.ListingPrice(item)
+    local price = GetAuctionPrice(item)
+    if not price then return nil, "No auction price known" end
+    if price.unconfirmed then return nil, "Price unconfirmed (far above this item's usual price): set it yourself" end
+    local undercut = math.min(math.floor(price.price * LISTING_UNDERCUT), LISTING_UNDERCUT_CAP)
+    local unit = math.floor((price.price - undercut) / 100) * 100
+    local floor = math.ceil(((item.sellPrice or 0) + 1) / 100) * 100
+    if unit < floor then unit = floor end
+    if unit <= 0 then return nil, "No auction price known" end
+    return unit, price
+end
+
+-- Best value of an item for reports: auction (net) when it beats vendor.
+-- Unconfirmed prices (see AuctionatorGearPrice) are not counted as value.
+function P.GetItemValue(item)
+    local vendor = (item.sellPrice or 0) * (item.count or 1)
+    if not CanBeAuctioned(item) then return vendor, "vendor" end
+    local net, price = AuctionNet(item)
+    if net and net > vendor and not price.unconfirmed then return net, "auction" end
+    return vendor, "vendor"
+end
+
+-- Disenchant estimate from Auctionator or TSM, or nil.
+function P.GetDisenchantValue(item)
+    local api = Auctionator and Auctionator.API and Auctionator.API.v1
+    if api and item.link and api.GetDisenchantPriceByItemLink then
+        local ok, value = pcall(api.GetDisenchantPriceByItemLink, CALLER_ID, item.link)
+        if ok and type(value) == "number" and value > 0 then return value end
+    end
+    if TSM_API and TSM_API.GetCustomPriceValue and TSM_API.ToItemString then
+        local okString, itemString = pcall(TSM_API.ToItemString, item.link or ("i:" .. tostring(item.itemID)))
+        if okString and itemString then
+            local ok, value = pcall(TSM_API.GetCustomPriceValue, "Destroy", itemString)
+            if ok and type(value) == "number" and value > 0 then return value end
+        end
+    end
+    return nil
+end
+
+-- A character whose role receives materials and who has Enchanting.
+function P.FindEnchanter()
+    for _, char in ipairs(P.CharactersWith("receivesMaterials")) do
+        for _, prof in ipairs(char.professions or {}) do
+            if prof.skillLine == 333 then return char end
+        end
+    end
+    return nil
+end
+
+-- How many of this item the account holds across all snapshots.
+function P.CountAcrossAccount(itemID)
+    local total, places = 0, {}
+    for _, snapshot in ipairs(P.AllSnapshots()) do
+        local here = 0
+        for _, item in ipairs(snapshot.items) do
+            if item.itemID == itemID then here = here + (item.count or 1) end
+        end
+        if here > 0 then
+            total = total + here
+            local label = snapshot.scope == "warband" and "Warband bank"
+                or ((snapshot.character and snapshot.character.name or "?") .. " " .. snapshot.scope)
+            table.insert(places, { label = label, count = here, scannedAt = snapshot.scannedAt })
+        end
+    end
+    return total, places
+end
+
+-- Tooltip lines about value for a scanned item.
+function P.ValueTooltipLines(item)
+    local lines = {}
+    local price = GetAuctionPrice(item)
+    if price and CanBeAuctioned(item) then
+        table.insert(lines, "Auction: ~" .. P.FormatMoney(price.price * (item.count or 1)) .. " (" .. P.FormatPriceSource(price) .. ")")
+        local advice, reason = P.AuctionAdvice(item)
+        if advice == "auction" then table.insert(lines, "Better at auction: " .. reason) end
+    end
+    local disenchant = P.GetDisenchantValue(item)
+    if disenchant and (item.classID == 2 or item.classID == 4) then
+        local enchanter = P.FindEnchanter()
+        table.insert(lines, "Disenchant: ~" .. P.FormatMoney(disenchant)
+            .. (enchanter and (" (" .. enchanter.name .. ", Enchanter)") or ""))
+    end
+    local total, places = P.CountAcrossAccount(item.itemID)
+    if #places > 1 then
+        local parts = {}
+        for _, place in ipairs(places) do parts[#parts + 1] = place.label .. " " .. place.count end
+        table.insert(lines, "On your account: " .. total .. " (" .. table.concat(parts, ", ") .. ")")
+    end
+    return lines
+end
+
+-- ---------------------------------------------------------------------------
+-- Own lookup at the auction house ("Price my items")
+-- ---------------------------------------------------------------------------
+
+local lookup = { queue = {}, active = false, done = 0, total = 0, pending = nil }
+P.PriceLookupState = lookup
+
+-- Tradeable items the player owns (current character + Warband) needing a price.
+local function ItemsNeedingPrices()
+    local seen, list = {}, {}
+    for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
+        for _, item in ipairs(P.GetScanList(scope)) do
+            if item.itemID and not seen[item.itemID] and CanBeAuctioned(item) then
+                local price = GetAuctionPrice(item)
+                if not price or not price.fresh then
+                    seen[item.itemID] = true
+                    table.insert(list, item)
+                end
+            end
+        end
+    end
+    return list
+end
+P.ItemsNeedingPrices = ItemsNeedingPrices
+
+local function FinishLookup()
+    lookup.active = false
+    lookup.pending = nil
+    UI.inventoryStatus = "Priced " .. lookup.done .. " item" .. (lookup.done == 1 and "" or "s")
+    if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+end
+
+local function NextLookup()
+    if not lookup.active then return end
+    if not ns.DB.context.auctionHouseOpen then FinishLookup() return end
+    local item = table.remove(lookup.queue, 1)
+    if not item then FinishLookup() return end
+    local ready = not C_AuctionHouse.IsThrottledMessageSystemReady or C_AuctionHouse.IsThrottledMessageSystemReady()
+    if not ready then
+        table.insert(lookup.queue, 1, item)
+        C_Timer.After(LOOKUP_INTERVAL, NextLookup)
+        return
+    end
+    lookup.pending = item
+    local key = C_AuctionHouse.MakeItemKey(item.itemID)
+    local sorts = {}
+    if Enum and Enum.AuctionHouseSortOrder then
+        sorts = { { sortOrder = Enum.AuctionHouseSortOrder.Price, reverseSort = false } }
+    end
+    local ok = pcall(C_AuctionHouse.SendSearchQuery, key, sorts, false)
+    if not ok then
+        lookup.pending = nil
+        C_Timer.After(LOOKUP_INTERVAL, NextLookup)
+    end
+end
+
+local function RecordResult(itemID, unitPrice)
+    local item = lookup.pending
+    if not item or item.itemID ~= itemID then return end
+    lookup.pending = nil
+    lookup.done = lookup.done + 1
+    if type(unitPrice) == "number" and unitPrice > 0 then
+        Prices()[PriceKey(item)] = { price = unitPrice, at = Now() }
+    end
+    C_Timer.After(LOOKUP_INTERVAL, NextLookup)
+end
+
+-- Starts a paced lookup; must be called from a click while at the auction house.
+function P.StartPriceLookup()
+    if not ns.DB.context.auctionHouseOpen then
+        P.Print("Visit an auction house to look up prices.")
+        return false
+    end
+    lookup.queue = ItemsNeedingPrices()
+    lookup.total = #lookup.queue
+    lookup.done = 0
+    lookup.active = lookup.total > 0
+    if lookup.active then
+        UI.inventoryStatus = "Looking up " .. lookup.total .. " prices..."
+        NextLookup()
+    end
+    return lookup.active
+end
+
+function P.OnAuctionEvent(event, arg)
+    if event == "COMMODITY_SEARCH_RESULTS_UPDATED" then
+        local info = C_AuctionHouse.GetCommoditySearchResultInfo(arg, 1)
+        RecordResult(arg, info and info.unitPrice)
+    elseif event == "ITEM_SEARCH_RESULTS_UPDATED" then
+        local itemKey = arg
+        local info = itemKey and C_AuctionHouse.GetItemSearchResultInfo(itemKey, 1)
+        RecordResult(itemKey and itemKey.itemID, info and info.buyoutAmount)
+    elseif event == "AUCTION_HOUSE_CLOSED" then
+        if lookup.active then FinishLookup() end
+    end
+    -- Searches (ours or Auctionator's) update prices: refresh what shows a
+    -- value, once per burst of results.
+    if event ~= "AUCTION_HOUSE_CLOSED" and not P.priceRefreshPending then
+        P.priceRefreshPending = true
+        C_Timer.After(2, function()
+            P.priceRefreshPending = false
+            if not ns.DB.context.auctionHouseOpen then return end
+            if P.RefreshContextNotice then pcall(P.RefreshContextNotice) end
+            if P.UI.frame and P.UI.frame:IsShown() then Core.RefreshUI() end
+        end)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- Auctionator hand-offs (searches and shopping lists; Auctionator has no
+-- posting API, so posting stays in its Selling tab)
+-- ---------------------------------------------------------------------------
+
+local SHOPPING_LIST_NAME = "I Can't Even: Auction Candidates"
+P.AUCTIONATOR_LIST_NAME = SHOPPING_LIST_NAME
+
+local function AuctionatorAPI()
+    return Auctionator and Auctionator.API and Auctionator.API.v1 or nil
+end
+
+function P.HasAuctionator()
+    local api = AuctionatorAPI()
+    return api ~= nil and api.MultiSearchExact ~= nil
+end
+
+-- Auctionator rejects terms containing ; or ^ or wrapped in quotes.
+local function CleanName(name)
+    return (tostring(name or ""):gsub('[;^"]', ""):gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- Resolve a searchable name: the scanned name, else the client's current name
+-- for the item ID. Returns nil when no real name is known yet.
+local function SearchName(item)
+    local name = item.name
+    if not name or name == "" or name:match("^Item %d+$") then
+        name = C_Item and C_Item.GetItemNameByID and C_Item.GetItemNameByID(item.itemID)
+            or (GetItemInfo and GetItemInfo(item.itemID)) or nil
+    end
+    name = CleanName(name)
+    if name == "" then return nil end
+    return name
+end
+
+-- The item level a piece of gear actually has (upgrades and bonuses
+-- included), or nil for non-gear.
+local function GearItemLevel(item)
+    if not (P.IsGearItem and P.IsGearItem(item)) then return nil end
+    if item.link and C_Item and C_Item.GetDetailedItemLevelInfo then
+        local level = C_Item.GetDetailedItemLevelInfo(item.link)
+        if type(level) == "number" and level > 0 then return level end
+    end
+    if type(item.itemLevel) == "number" and item.itemLevel > 0 then return item.itemLevel end
+    return nil
+end
+
+-- Search terms for Auctionator: exact name, plus the item level for gear so
+-- the results show that piece instead of every item level of the same name.
+local function SearchTerms(items)
+    local seen, terms, skipped = {}, {}, 0
+    for _, item in ipairs(items) do
+        local name = SearchName(item)
+        if not name then
+            skipped = skipped + 1
+        else
+            local level = GearItemLevel(item)
+            local key = name .. ":" .. tostring(level)
+            if not seen[key] then
+                seen[key] = true
+                table.insert(terms, { searchString = name, isExact = true, minItemLevel = level, maxItemLevel = level })
+            end
+        end
+    end
+    table.sort(terms, function(a, b)
+        if a.searchString ~= b.searchString then return a.searchString < b.searchString end
+        return (a.minItemLevel or 0) < (b.minItemLevel or 0)
+    end)
+    return terms, skipped
+end
+
+-- An auction candidate is worth noticeably more at auction AND has no reason
+-- to be kept (current-expansion content, used by a crafter or played
+-- character, uncollected appearance, protected, keepsake, active quest...).
+-- Setting "auctionIncludeCurrent" (off by default) lets current-expansion
+-- items through for players who farm and sell current materials; every
+-- other reason to keep still excludes the item.
+function P.IsAuctionCandidate(item)
+    -- Without loaded item data the addon can't tell whether to keep it.
+    if item.expansionID == nil or not item.classID then return false end
+    -- The player's decision wins: "auction" needs only a channel and a price;
+    -- any other decision takes the item out of the candidates.
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
+    if decision and decision.choice ~= "defer" then
+        if decision.choice ~= "auction" then return false end
+        return CanBeAuctioned(item) and GetAuctionPrice(item) ~= nil
+    end
+    if (P.AuctionAdvice(item)) ~= "auction" then return false end
+    if not P.ExplainScanned then return true end
+    local explanation = P.ExplainScanned(item)
+    if explanation.disposition ~= "keep" then return true end
+    if not ns.DB.ui.auctionIncludeCurrent then return false end
+    for _, reason in ipairs(explanation.reasons) do
+        local def = P.REASONS[reason.id]
+        if def and def.disposition == "keep" and reason.id ~= "current_expansion" then return false end
+    end
+    return true
+end
+
+-- Auction candidates this character holds (bags, character bank, Warband bank).
+-- One entry per item (and item level) for searches and lists; with
+-- `perPlace`, one per item per place (bags / character bank / Warband bank)
+-- so counts and the pull route see a Warband stack even when another stack
+-- of the same item already sits in the bags (11 stacks of Phoenix Oil in the
+-- Warband bank were invisible behind one surplus stack in the bags, 2026-09-28).
+function P.AuctionCandidateItems(perPlace)
+    local list, seen = {}, {}
+    for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
+        for _, item in ipairs(P.GetScanList(scope)) do
+            -- Gear of the same name at different item levels sells separately.
+            local key = item.itemID and (tostring(item.itemID) .. ":" .. tostring(GearItemLevel(item)))
+            if key and perPlace then
+                key = key .. ":" .. (item.scope == P.BAG_SCOPE and "bags" or (P.IsWarbandStorage(item.storageKind) and "warband" or "bank"))
+            end
+            if key and not seen[key] and P.IsAuctionCandidate(item) then
+                seen[key] = true
+                table.insert(list, item)
+            end
+        end
+    end
+    return list
+end
+
+-- Diagnostic lines: each auction candidate with its price and value.
+-- Logged when the notice or report computes candidates (not on every refresh).
+local function LogCandidates(list)
+    if not P.IsLogging() then return end
+    for _, item in ipairs(list) do
+        local price = P.GetAuctionPrice(item)
+        P.Log("auction", "candidate %s (%s) x%s: %s each, %s", item.name, item.itemID, item.count or 1,
+            price and price.price or "?", price and P.FormatPriceSource(price) or "no price")
+    end
+end
+P.LogAuctionCandidates = LogCandidates
+
+function P.AuctionCandidateReport()
+    LogCandidates(P.AuctionCandidateItems())
+    local lines, total = {}, 0
+    -- Per place, as the Home card counts them (in game the card read "1 to
+    -- hand to Kiosk, 3 already in the Warband bank" while this listed 3).
+    for _, item in ipairs(P.AuctionCandidateItems(true)) do
+        local value = P.GetItemValue(item) or 0
+        total = total + value
+        local price = P.GetAuctionPrice(item)
+        local place = item.scope == P.BAG_SCOPE and "bags"
+            or (P.IsWarbandStorage(item.storageKind) and "Warband bank" or (item.storageKind or "bank"))
+        table.insert(lines, string.format("  %s%s x%d [%s]: %s each (%s) = %s", item.name or ("Item " .. tostring(item.itemID)),
+            GearItemLevel(item) and (" [" .. GearItemLevel(item) .. "]") or "", item.count or 1, place,
+            price and P.FormatMoney(price.price) or "?", price and P.FormatPriceSource(price) or "no price",
+            P.FormatMoney(value)))
+    end
+    table.insert(lines, 1, "Auction candidates: " .. (#lines) .. ", ~" .. P.FormatMoney(total) .. " after the auction cut.")
+    -- Why sellable gear in bags was left out (diagnostic).
+    local seen = {}
+    for _, item in ipairs(P.GetScanList(P.BAG_SCOPE)) do
+        local key = tostring(item.itemID) .. ":" .. tostring(GearItemLevel(item))
+        if P.IsGearItem and P.IsGearItem(item) and CanBeAuctioned(item) and not seen[key]
+            and not P.IsAuctionCandidate(item) then
+            seen[key] = true
+            local why
+            do
+                local price = GetAuctionPrice(item)
+                if not price then why = "no auction price"
+                elseif price.exact == false then why = "approximate price"
+                elseif not price.fresh then why = "stale price (" .. P.FormatPriceSource(price) .. ")"
+                else
+                    local advice, reason = P.AuctionAdvice(item)
+                    if advice ~= "auction" then why = "advice: " .. tostring(advice) .. " (" .. tostring(reason) .. ")"
+                    else why = "kept: " .. tostring(P.ExplainScanned and P.ExplainScanned(item).label) end
+                end
+            end
+            table.insert(lines, "  left out: " .. tostring(item.name) .. " [" .. tostring(GearItemLevel(item)) .. "]: " .. why)
+        end
+    end
+    return lines
+end
+
+-- At the auction house: run an exact search for every name in Auctionator's
+-- Shopping tab. Elsewhere: save them as a shopping list for next time.
+local function SendToAuctionator(items, listName)
+    local api = AuctionatorAPI()
+    if not api then return false, "Auctionator is not installed." end
+    local terms, skipped = SearchTerms(items)
+    P.Log("auction", "send %d term(s) to Auctionator (%s), %d skipped without names", #terms,
+        ns.DB.context.auctionHouseOpen and "search" or "shopping list", skipped)
+    local skippedNote = skipped > 0 and (" " .. skipped .. " item" .. (skipped == 1 and " was" or "s were")
+        .. " skipped because the game hasn't loaded their names yet; try again in a moment.") or ""
+    if #terms == 0 then return false, "Nothing to check." .. skippedNote end
+    if ns.DB.context.auctionHouseOpen and (api.MultiSearchAdvanced or api.MultiSearchExact) then
+        local ok, err
+        if api.MultiSearchAdvanced then
+            ok, err = pcall(api.MultiSearchAdvanced, CALLER_ID, terms)
+        else
+            local names, seen = {}, {}
+            for _, term in ipairs(terms) do
+                if not seen[term.searchString] then seen[term.searchString] = true table.insert(names, term.searchString) end
+            end
+            ok, err = pcall(api.MultiSearchExact, CALLER_ID, names)
+        end
+        if not ok then return false, "Auctionator search failed: " .. tostring(err) end
+        return true, "Searching " .. #terms .. " item" .. (#terms == 1 and "" or "s") .. " in Auctionator's Shopping tab." .. skippedNote
+    end
+    if not (api.CreateShoppingList and api.ConvertToSearchString) then
+        return false, "This Auctionator version can't create shopping lists."
+    end
+    local searchStrings = {}
+    for _, term in ipairs(terms) do
+        local ok, converted = pcall(api.ConvertToSearchString, CALLER_ID, term)
+        if ok and converted then table.insert(searchStrings, converted) end
+    end
+    local ok, err = pcall(api.CreateShoppingList, CALLER_ID, listName, searchStrings)
+    if not ok then return false, "Could not save the shopping list: " .. tostring(err) end
+    return true, "Saved " .. #searchStrings .. " item" .. (#searchStrings == 1 and "" or "s")
+        .. " to the Auctionator shopping list \"" .. listName .. "\"."
+end
+P.SendToAuctionator = SendToAuctionator
+
+function P.CheckCandidatesInAuctionator()
+    local ok, message = SendToAuctionator(P.AuctionCandidateItems(), SHOPPING_LIST_NAME)
+    P.Print(message)
+    return ok
+end
+
+-- With Auctionator installed, price checks are handed to it instead of the
+-- addon's own paced lookup.
+function P.CheckPricesInAuctionator()
+    local ok, message = SendToAuctionator(ItemsNeedingPrices(), SHOPPING_LIST_NAME)
+    P.Print(message)
+    return ok
+end
+
+-- ---------------------------------------------------------------------------
+-- Tasks and notices
+-- ---------------------------------------------------------------------------
+
+function P.RegisterValueTasks()
+    if not P.RegisterTask then return end
+    local AH_PRESET = { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
+        expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+        hideBlocked = true, sort = "Vendor Value" }
+    P.RegisterTask({
+        name = "Auction Candidates",
+        description = function()
+            local target = P.AuctionHandoffTarget and P.AuctionHandoffTarget()
+            if target then
+                return "Worth noticeably more at auction than at a vendor. Handed to " .. target.name
+                    .. " through the Warband bank; " .. target.name .. " lists them. At an auction house you can still list here."
+            end
+            return "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags; at the auction house it lists them."
+        end,
+        preset = { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+            expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+            hideBlocked = true, sort = "Vendor Value" },
+        predicate = function(item) return P.IsAuctionCandidate(item) end,
+        -- Review the bank that holds the most candidates (in game all 21 were
+        -- counted while the review only covered the character bank: the
+        -- Warband bank's axe could never be pulled).
+        presetFor = function()
+            -- At the auction house the review lists what's in the bags (also
+            -- on a character that isn't the auction character: being there
+            -- is the player's choice).
+            if ns.DB.context.auctionHouseOpen then return AH_PRESET end
+            local inBank, inWarband, inBags = 0, 0, 0
+            for _, item in ipairs(P.AuctionCandidateItems(true)) do
+                if item.scope ~= P.BAG_SCOPE then
+                    if P.IsWarbandStorage(item.storageKind) then inWarband = inWarband + 1 else inBank = inBank + 1 end
+                else
+                    inBags = inBags + 1
+                end
+            end
+            -- Another character lists: bag items go to the Warband bank for
+            -- it (by tab settings); bank items are pulled first, as below.
+            local target = P.AuctionHandoffTarget and P.AuctionHandoffTarget()
+            if target and inBags > 0 then
+                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_WARBAND_ROUTED,
+                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                    hideBlocked = true, sort = "Vendor Value" }
+            end
+            -- Items in the Warband bank already wait for the auction
+            -- character: never pull them back (in game the card offered
+            -- Review with both of Kiosk's items in the Warband bank, a route
+            -- that would have withdrawn them into Minormer's bags).
+            if target then
+                return { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                    hideBlocked = true, sort = "Vendor Value" }
+            end
+            -- Everything is already in the bags: the next stop is the auction
+            -- house, not a bank (the card read "Visit a bank" with 11 in bags).
+            if inBank + inWarband == 0 and inBags > 0 then return AH_PRESET end
+            return { name = "Auction Candidates",
+                source = inWarband > inBank and P.STORAGE_WARBAND_BANK or P.STORAGE_ALL_BANK_TABS, dest = "Bags",
+                expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+                hideBlocked = true, sort = "Vendor Value" }
+        end,
+        valueMode = "auction",
+        isAvailable = function() return P.HasPriceSource() end,
+        -- Counts candidates everywhere this character can post from: bags
+        -- are ready to post; bank items need withdrawing first (the review list).
+        count = function()
+            local inBags, inBank, inWarband, value, unconfirmed = 0, 0, 0, 0, 0
+            local target = not ns.DB.context.auctionHouseOpen and P.AuctionHandoffTarget and P.AuctionHandoffTarget()
+            for _, item in ipairs(P.AuctionCandidateItems(true)) do
+                if item.scope == P.BAG_SCOPE then
+                    inBags = inBags + 1
+                elseif P.IsWarbandStorage(item.storageKind) then
+                    inWarband = inWarband + 1
+                    -- Already where the auction character can reach it.
+                    if target and P.NoteHandoffDeposited then P.NoteHandoffDeposited(item, target.key) end
+                else
+                    inBank = inBank + 1
+                end
+                value = value + (P.GetItemValue(item) or 0)
+                local price = P.GetAuctionPrice(item)
+                if price and price.unconfirmed then unconfirmed = unconfirmed + 1 end
+            end
+            local total = inBags + inBank + inWarband
+            if total == 0 then return 0, nil, 0, "Nothing worth auctioning right now" end
+            local parts = {}
+            if target then
+                -- Bag and bank items still need the bank (deposit, or pull
+                -- then deposit); Warband ones already wait for the target.
+                local toHand = inBags + inBank
+                local summary
+                if toHand > 0 then
+                    summary = toHand .. " to hand to " .. target.name
+                        .. (inWarband > 0 and (", " .. inWarband .. " already in the Warband bank") or "")
+                else
+                    summary = inWarband .. " in the Warband bank, waiting for " .. target.name
+                end
+                -- Ready = what this character still has to move; items already in
+                -- the Warband bank are Kiosk's work (no Review for them here).
+                return toHand, nil, value, summary .. " (~" .. P.FormatMoney(value) .. " at auction"
+                    .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")", toHand
+            end
+            if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
+            if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
+            if inWarband > 0 then parts[#parts + 1] = inWarband .. " in the Warband bank" end
+            -- 5th value: candidates still in a bank (the only bank work here).
+            return total, nil, value, table.concat(parts, ", ") .. " (~" .. P.FormatMoney(value) .. " at auction"
+                .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")", inBank + inWarband
+        end,
+        secondary = {
+            label = function()
+                return ns.DB.context.auctionHouseOpen and "Check in Auctionator" or "Save to Auctionator"
+            end,
+            -- Not while another character lists: the shopping list belongs on
+            -- the auction character (the player, at the bank: "it will offer
+            -- to save to Auctionator when the items are going to Kiosk").
+            isAvailable = function()
+                if not ns.DB.context.auctionHouseOpen and P.AuctionHandoffTarget and P.AuctionHandoffTarget() then return false end
+                return P.HasAuctionator() and #P.AuctionCandidateItems() > 0
+            end,
+            run = function() P.CheckCandidatesInAuctionator() end,
+        },
+    })
+    P.RegisterTask({
+        name = "Price My Items",
+        description = "Look up auction prices for the items you own (only your items, paced).",
+        isAvailable = function() return ns.DB.context.auctionHouseOpen and not P.HasAuctionator() end,
+        count = function()
+            local count = #ItemsNeedingPrices()
+            return count, nil, 0
+        end,
+        open = function() P.StartPriceLookup() end,
+    })
+    P.RegisterTask({
+        name = "Check Prices in Auctionator",
+        description = "Search Auctionator for your items that have no recent price.",
+        isAvailable = function() return ns.DB.context.auctionHouseOpen and P.HasAuctionator() end,
+        count = function()
+            local count = #ItemsNeedingPrices()
+            return count, nil, 0
+        end,
+        open = function() P.CheckPricesInAuctionator() end,
+    })
+end
+
+-- Stale-price and no-source notices on Home (V2).
+P.RegisterHomeNotice(function()
+    if not P.HasPriceSource() then
+        if ns.DB.ui.priceSourceHintDismissed then return nil end
+        return {
+            id = "prices", priority = 80,
+            text = "Want auction values? Install Auctionator, or visit an auction house and use \"Price My Items\".",
+            buttons = { { label = "Got it", onClick = function()
+                ns.DB.ui.priceSourceHintDismissed = true
+                Core.RefreshUI()
+            end } },
+        }
+    end
+    local oldest
+    for _, entry in pairs(Prices()) do
+        if not oldest or (entry.at or 0) < oldest then oldest = entry.at or 0 end
+    end
+    local hasAddonSource = (Auctionator and Auctionator.API) or TSM_API
+    if oldest and not hasAddonSource then
+        local days = math.floor((Now() - oldest) / DAY)
+        if days > Settings().freshItem then
+            return {
+                id = "stale-prices", priority = 60,
+                text = "Your auction prices are " .. days .. " days old. Visit an auction house to refresh them.",
+                buttons = {},
+            }
+        end
+    end
+    return nil
+end)
+
+P.RegisterValueTasks()

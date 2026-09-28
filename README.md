@@ -1,51 +1,61 @@
 # I Can't Even Right Now (With My Bags and Bank)
 
-A World of Warcraft Retail addon for conservative inventory cleanup: scan your bags and bank, classify clutter, bank old content safely, recall useful items, organize bank storage, and review vendor candidates before anything moves.
+<img src="docs/images/finalomega-labs-horizontal-color-960.png" alt="Finalomega Labs" width="400">
+
+Project by Finalomega Labs.
+
+A World of Warcraft Retail addon that makes inventory cleanup a short, safe routine: it finds the items worth moving or letting go, explains why each one is there, knows which of your characters can use it, and waits for your click before anything moves.
 
 ## Overview
 
-I Can't Even Right Now (With My Bags and Bank) is a small cleanup console, not a bag replacement. It keeps recommendation, eligibility, and selection separate so the addon can explain what it thinks without turning that recommendation into an automatic action.
+I Can't Even Right Now (With My Bags and Bank) is a cleanup console, not a bag replacement. The addon does the finding, sorting, and explaining; you review the list and confirm.
 
-The addon is intentionally cautious. Unknown, quest, legendary, and protected items are blocked by default, and every movement or sell action requires explicit selection.
+It is cautious on purpose. Protected, quest, current-content, and ruled items are blocked by default, every move or sale needs an explicit selection and click, and selling stops at 12 items per click so every sale stays in the vendor's buyback.
 
 ## Features
 
-### Smart Inventory Classification
+### Home: tasks, not settings
 
-- **Expansion Detection** - Identifies old, current, and unknown-expansion items using Blizzard expansion metadata.
-- **Item Type Categorization** - Classifies reputation, quest, profession, seasonal, consumable, BoE, currency-like, equipment, material, and unknown items.
-- **Armor Type Filter** - Filter armor items by type (Cloth, Leather, Mail, Plate) for targeted gear management.
-- **Current-Content Protection** - Keeps current expansion and protected seasonal items, including Mythic Keystones, out of old-content cleanup flows.
-- **Explainable Decisions** - Shows recommendation, reason, blocking status, and rule state before you act.
-- **Saved Filter Presets** - Save named combinations of Expansion, Binding, Type, Slot, and Upgrade filters for one-click reload across sessions.
+- The console opens on **Home**, where every task is a card with a live count and value ("Deposit Old Items: 23 ready").
+- Cards that need a bank or vendor say so ("12 waiting: Visit a bank"). Click a card to open its review list.
+- Built-in tasks: Deposit Old Items, Pull Bank Upgrades, Pull Auctionable BoEs, Sell Old Consumables, Deposit to Warband, Consolidate Warbound Items, Pull Items That Can Go, Sell Items That Can Go, Auction Candidates, Send to Alts, Waiting for You, Price My Items.
+- **Save as task** turns any custom setup (route, filters, search, item level, sort) into your own card.
+- At a bank or vendor, a small notice names the task that's ready (or the console opens, or nothing; your choice).
 
-### Cleanup Console UI
+### Your characters and who benefits
 
-The addon has four tabs:
+- The **Characters** tab lists every character that has logged in with the addon.
+- Give each a role: **Main / Active**, **Leveling**, **Crafter**, or **Utility**. Unassigned characters are ignored, so dozens of unsorted alts never flood decisions.
+- Roles come with suggestions (max level, gaining levels, professions) that learn from your own choices; accept them one by one or all at once.
+- Hints name who benefits: "Upgrade for Tankalt (Leveling)", "Used by Stitcher (Tailoring)".
 
-1. **Summary** - Inventory scope counts: items in bags, items in bank, old-content counts, Warband bank items, active rules, and last scan timestamps.
-2. **Transfer** - Move items between any combination of Bags, Private Bank, Warband Bank, Vendor, or individual Bank tabs. Filter by Expansion, Binding, Type, Slot, Upgrade, item level, or name. Save named filter presets to reload common setups instantly. Per-item block reasons and an actionable-only toggle keep the list focused.
-3. **Rules** - Item-ID overrides: Protect, Ignore, or Never Sell. Each rule shows its origin and can be removed individually.
-4. **Settings** - Configure the minimap launcher and inspect quick-access status.
+### Warband bank
 
-Quick access uses a minimap launcher. The minimap launcher uses LibDataBroker/LibDBIcon when available so minimap button organizers can collect it.
+- Each Warband tab is its own source and destination.
+- **Warband (by tab settings)** sends each item to the tab whose own Blizzard "assign to" settings match it. The addon never changes your tab settings.
+- **Alt hand-offs:** mark an item "Send to an alt...", deposit it with Send to Alts, and that character sees **Waiting for You**.
+- Item tooltips can show how many your account holds and where; `/icanteven where <name>` searches every character.
 
-### Context-Aware Behavior
+### Why is this here?
 
-Actions are enabled only when the related game context is available:
+- Every row explains why the item is being kept: appearance already collected, collectible not learned, quest in progress or already done, a crafter who uses it, gear a played character can wear, current-expansion content, time held, and more.
+- Tooltips add what letting it go would cost ("You keep the appearance. Worth 4g at a vendor.").
+- Mark items as Keepsake, Keep for an alt, Keep for an event, or Investment (with a reminder) to stop suggestions.
+- `/icanteven why` prints a read-only summary grouped into Can go, Your call, and Worth keeping.
 
-- Bags, private bank, reagent bank, and warband bank scanning
-- Bank-open checks for movement and organization
-- Merchant-open checks for selling
-- Combat-state checks before sensitive actions
-- Optional minimap launcher for opening the cleanup console
+### Value awareness
 
-### Safety-First Design
+- Auction prices from Auctionator or TSM when installed, or from **Price My Items** at an auction house (only items you own, paced).
+- With Auctionator: search all auction candidates in its Shopping tab with one click (or save them as a shopping list), and hand price checks to Auctionator. Gear prices known only for the base item are marked "approximate".
+- Each price shows its source and age. Items worth noticeably more at auction are flagged at vendors and never pre-selected for selling.
 
-- **Scoped Selection** - Select visible or recommended rows instead of using broad destructive actions.
-- **Explicit Confirmation** - The addon acts only on selected rows.
-- **Manual Actions Allowed** - In Move tab, manual bank/recall actions are available regardless of recommendation when rules, context, and capacity allow it.
-- **Rule Overrides** - Item-ID rules let you protect favorites or teach the addon how to handle edge cases.
+### Safety
+
+- Explicit selection and a click before every move or sale; pre-selection is an optional setting, off by default.
+- Every action re-checks the slot first; items that moved since the last scan are skipped.
+- Protect, Ignore, and Never Sell rules always win.
+- Bank, vendor, and combat checks gate every action.
+- Selling stops at 12 per click (the buyback limit).
 
 ## Installation
 
@@ -57,55 +67,33 @@ Actions are enabled only when the related game context is available:
 3. Ensure the folder is named `ICantEvenRightNow`.
 4. Restart WoW or type `/reload` in-game.
 
+Upgrading from an earlier version keeps your rules, saved presets, and settings. A "What's new" card explains what changed, and `/icanteven migration` shows exactly what was carried over.
+
 ## Usage
 
 ### Slash Commands
 
-- `/icanteven` or `/icant` - Open the cleanup console.
+- `/icanteven` or `/icant` - Open Home.
+- `/icanteven transfer` - Open the Transfer view.
+- `/icanteven characters` - Open the Characters tab (roles).
+- `/icanteven why [all]` - Explain why items are being kept (read-only).
+- `/icanteven where <name>` - Find an item across all your characters and the Warband bank.
 - `/icanteven scan [bags|bank|all]` - Scan inventory.
-- `/icanteven summary` - Open the Summary tab.
-- `/icanteven transfer` - Open the Transfer tab.
-- `/icanteven dump [expansion]` - Pre-configure Transfer to bank old content and open it.
-- `/icanteven recall [expansion]` - Pre-configure Transfer to recall from bank and open it.
-- `/icanteven organize` - Pre-configure Transfer for bank organization and open it.
-- `/icanteven vendor` - Pre-configure Transfer for vendor selling and open it.
+- `/icanteven dump [expansion]` / `recall [expansion]` / `vendor` - Pre-configure a route and open it.
 - `/icanteven rules` - Open the Rules tab.
-- `/icanteven settings` or `/icanteven options` - Open the Settings tab.
+- `/icanteven settings` - Open Settings.
+- `/icanteven migration` - Show the upgrade report.
 - `/icanteven minimap` - Show or hide the minimap button.
-- `/icanteven buttons` - Print quick-access launcher status.
-- `/icanteven bankdiag` or `/icanteven bankids` - Print resolved bank container diagnostics.
-- `/icanteven errors` - View logged Lua errors.
-- `/icanteven clearerrors` - Clear the error log.
-- `/icanteven debug` - Toggle debug output.
-- `/icanteven diag` - Run a diagnostic dump.
+- `/icanteven errors` / `clearerrors` - View or clear logged Lua errors.
+- `/icanteven bankdiag`, `diag`, `debug`, `buttons` - Diagnostics.
 
 ### Typical Workflow
 
-1. Open the console with `/icanteven`.
-2. Scan bags, bank, or all available storage.
-3. In the Transfer tab, choose a Source and Destination.
-4. Apply filters — Expansion, Binding, Type, Slot, Upgrade, or item level — to narrow the list.
-5. Load a saved filter preset or save the current filter combination for reuse.
-6. Select the rows you want to act on.
-7. Transfer or sell selected items.
-8. Add Rules for any item you want handled differently next time.
-
-## Recent Changes
-
-**0.5.0** (2026-05-10):
-- Added Armor Type filter for gear (Cloth/Leather/Mail/Plate)
-- Transfer tab is now the default landing tab
-- Fixed Upgrade filter crash (API change in patch 12.x)
-- Fixed Slot and Armor Type filter forward-reference errors
-- Fixed Transfer tab scrollbar and selection issues
-- Improved source/destination validation with context notices
-
-**0.4.0** (2026-05-09):
-- Replaced paginated list with scrollable FauxScrollFrame
-- Added Item Level, Slot, and Upgrade filters
-- Added saved filter presets ("Favorites")
-- Split Core.lua into focused modules for maintainability
-- Renamed "Bind" filter to "Binding"
+1. Walk up to a bank. A notice names the ready task, or open Home with `/icanteven`.
+2. Click a card, for example **Deposit Old Items** or **Deposit to Warband**.
+3. Review the list; each row says why the item is there and what happens to it.
+4. Select (or use Select Movable) and click Deposit.
+5. At a vendor, use **Sell Items That Can Go**; selling stops at 12 per click.
 
 ## Technical Details
 
@@ -113,49 +101,58 @@ Actions are enabled only when the related game context is available:
 
 ```text
 ICantEvenRightNow/
-├── ICantEvenRightNow.toc  # Addon metadata
-├── ICantEvenRightNow.png  # Addon icon/art
-├── Data.lua               # Static data tables and defaults
+├── ICantEvenRightNow.toc  # Addon metadata (load order)
+├── Data.lua               # Static data and saved-variable defaults
 ├── Debug.lua              # Debug utilities
-├── Shared.lua             # Constants, bag ID resolution, context detection, storage helpers
-├── Evaluator.lua          # Binding detection, item classification, decision building
-├── Filter.lua             # Filter state, matching logic, option builders, saved presets, upgrade detection
-├── Scanner.lua            # Container scanning and bank diagnostics
-├── Transfer.lua           # Movement execution and vendor selling
-├── UI.lua                 # UI construction and refresh (FauxScrollFrame, tab frames)
-├── Core.lua               # Addon lifecycle, events, slash commands, UI coordination
+├── Shared.lua             # Constants, bag IDs, storage kinds, context detection
+├── Migration.lua          # Versioned, backed-up upgrade of saved data
+├── Characters.lua         # Roster, roles, suggestions, per-character snapshots
+├── Evaluator.lua          # Binding detection, item classification, decisions
+├── Reasons.lua            # "Why is this here?" detectors, time held, keep reasons
+├── Warband.lua            # Warband tab routing and the alt hand-off queue
+├── Filter.lua             # Filter state and matching, quick tasks, saved tasks
+├── Scanner.lua            # Container scanning
+├── Transfer.lua           # Block reasons, slot verification, moves and sales
+├── Tasks.lua              # Task cards: counts, availability, pre-selection
+├── UI.lua                 # Console frame, Transfer, Rules, Settings
+├── HomeUI.lua             # Home, Characters, notices, hand-off picker, where-is-it
+├── Value.lua              # Auction prices, freshness, vendor protection
+├── Onboarding.lua         # What's new, tips, welcome back
+├── Integrations.lua       # Optional BetterBags categories
+├── Core.lua               # Lifecycle, events, slash commands
+├── tests/                 # Offline test suite (not packaged)
 └── docs/
 ```
 
-The addon uses a modular architecture introduced in 0.4.0. Modules communicate through a shared namespace (`ns.Private`) with clear separation of concerns: Shared provides utilities, Evaluator classifies items, Filter manages filter state, Scanner handles container scanning, Transfer executes movements, UI builds the interface, and Core coordinates everything.
+Modules share symbols through `ns.Private`. The offline test suite (`tests/`) runs the addon against a simulated WoW client; `scripts/Test-Addon.ps1` runs it together with the static checks.
 
 ### Key Concepts
 
-- **Source / Destination** - Where items are coming from and going to. The player sets both explicitly.
-- **Filter** - Narrows the Transfer list by Expansion, Binding, Type, Slot, Upgrade potential, item level, or name search.
-- **Saved Filter Preset** - A named combination of categorical filters that can be saved and reloaded in one click.
-- **Block Reason** - Why a specific item cannot be transferred right now (bank closed, vendor closed, no slots, Protect rule, etc.).
-- **Rule** - An item-ID override: Protect, Ignore, or Never Sell.
-
-Transfer intent is always player-driven. The addon classifies and explains; the player decides.
+- **Task** - A route (source and destination) plus filters for a common job, shown as a Home card.
+- **Role** - Who a character is (Main, Leveling, Crafter, Utility); decides who benefits from an item.
+- **Reason** - Why an item is being kept, with a disposition: keep, can go, or your call.
+- **Block Reason** - Why an item cannot be moved right now (bank closed, no slots, Protect rule, item moved since the scan, and so on).
+- **Rule** - An item-ID override: Protect, Ignore, Never Sell, or a keep reason.
 
 ### Saved Variables
 
-- `ICantEvenRightNowDB` - Stores rules, UI state, context state, scan data, error log, and saved filter presets.
+- `ICantEvenRightNowDB` (account-wide) - Rules, saved tasks, settings, the character roster with per-character snapshots, the Warband snapshot, hand-offs, prices, time held, and migration backups.
 
 ## Compatibility
 
-- **Game Version:** World of Warcraft Retail (12.x / Midnight)
+- **Game Version:** World of Warcraft Retail 12.1 (Midnight)
 - **Dependencies:** None required
-- **Optional:** LibStub, LibDataBroker-1.1, and LibDBIcon-1.0 for standard minimap launcher integration
+- **Optional:** LibDataBroker-1.1 and LibDBIcon-1.0 (minimap launcher), Auctionator or TradeSkillMaster (auction prices), BetterBags (categories)
 - **Conflicts:** None known
 
 ## Support
 
-Bug reports and feature requests are welcome through the GitHub issue tracker.
+Bug reports and feature requests are welcome through the [GitHub issue tracker](https://github.com/majormer/ICantEvenRightNow/issues). The user guide lives in the [wiki](https://github.com/majormer/ICantEvenRightNow/wiki).
 
 Optional support is available on Ko-fi: <https://ko-fi.com/finalomega>
 
 ## License
 
-Source code is MIT licensed. The addon artwork and Finalomega brand assets are all rights reserved and are not licensed for reuse. See [LICENSE](LICENSE) for details.
+I Can't Even Right Now (With My Bags and Bank) is a Finalomega Labs project. Source code is MIT licensed. The addon artwork and the Finalomega Labs brand assets are all rights reserved and are not licensed for reuse. See [LICENSE](LICENSE) for details.
+
+© 2026 Finalomega Labs. All rights reserved.

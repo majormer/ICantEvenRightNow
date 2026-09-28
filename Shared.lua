@@ -16,7 +16,6 @@ local P    = ns.Private
 -- Display / identity constants
 -- ---------------------------------------------------------------------------
 P.DISPLAY_NAME     = "I Can't Even Right Now (With My Bags and Bank)"
-P.ICON_TEXTURE     = "Interface\\AddOns\\ICantEvenRightNow\\ICantEvenRightNow.png"
 P.MINIMAP_LDB_NAME = "ICantEvenRightNow"
 
 -- ---------------------------------------------------------------------------
@@ -28,6 +27,14 @@ P.STORAGE_REAGENT_BANK  = "Reagent Bank"
 P.STORAGE_WARBAND_BANK  = "Warband Bank"
 P.STORAGE_ALL_BANK_TABS = "Bank (All Tabs)"
 P.BANK_TAB_PREFIX       = "BankTab:"
+P.WARBAND_TAB_PREFIX    = "WarbandTab:"
+-- Destination that sends each item to the Warband tab whose own Blizzard
+-- "assign to" settings match it (Warband.lua).
+P.STORAGE_WARBAND_ROUTED = "Warband (by tab settings)"
+-- Destination at the auction house: list the item (one auction per click).
+P.STORAGE_AUCTION_HOUSE = "Auction House"
+-- Destination for decided items: destroy (bags only, one per click).
+P.STORAGE_DESTROY = "Destroy"
 
 -- ---------------------------------------------------------------------------
 -- Scope constants (used in scanned item records)
@@ -72,7 +79,7 @@ P.VENDOR_ACTION_SELL   = "Sell at Vendor"
 -- ---------------------------------------------------------------------------
 P.ORGANIZE_PAGE_SIZE = 6
 P.VENDOR_PAGE_SIZE   = 6
-P.TAB_ORDER = { "Transfer", "Summary", "Rules", "Settings" }
+P.TAB_ORDER = { "Home", "Transfer", "Characters", "Rules", "Settings" }
 
 P.MYTHIC_KEYSTONE_ITEM_IDS = {
     [138019] = true,
@@ -98,8 +105,10 @@ P.BANK_FRAME_NAMES = {
     "WarbandBankPanelFrame", "BetterBagsBankFrame", "BetterBags_BankFrame",
     "BetterBagsBank",
 }
+-- No bare "bank" pattern: in game some unrelated frame containing "bank" in
+-- its name was shown at the auction house and made the addon think a bank was open.
 P.BANK_FRAME_PATTERNS = {
-    "betterbagsbagbank", "bank", "bagnonframebank", "combuctorframebank",
+    "betterbagsbagbank", "bagnonframebank", "combuctorframebank",
     "litebagbank", "inventorianbank", "bankpanel", "accountbank",
     "warbandbank", "adibagsbank", "sortedbank",
 }
@@ -115,7 +124,7 @@ P.UI = {
     bankButton = nil,
     vendorButton = nil,
     tabs = {},
-    activeTab = "Summary",
+    activeTab = "Home",
     rows = {},
     ruleRows = {},
     selected = {},
@@ -127,6 +136,13 @@ P.UI = {
     transferVisible = {},
     transferSource = "Bags",
     transferDest = "Bank (All Tabs)",
+    activeQuickWorkflowName = nil,
+    activeSavedFilterName = nil,
+    transferCustomizeOpen = false,
+    settingsCommandHelpOpen = false,
+    transferContextMessage = nil,
+    refreshingTransferControls = false,
+    inventoryStatus = nil,
     visible = {},
     bankContextOpen = false,
     bankContextClosed = false,
@@ -145,6 +161,8 @@ local STORAGE_REAGENT_BANK  = P.STORAGE_REAGENT_BANK
 local STORAGE_WARBAND_BANK  = P.STORAGE_WARBAND_BANK
 local STORAGE_ALL_BANK_TABS = P.STORAGE_ALL_BANK_TABS
 local BANK_TAB_PREFIX       = P.BANK_TAB_PREFIX
+local WARBAND_TAB_PREFIX    = P.WARBAND_TAB_PREFIX
+local STORAGE_WARBAND_ROUTED = P.STORAGE_WARBAND_ROUTED
 local BAG_SCOPE             = P.BAG_SCOPE
 local BANK_SCOPE            = P.BANK_SCOPE
 local BANK_FRAME_NAMES      = P.BANK_FRAME_NAMES
@@ -307,6 +325,10 @@ P.PRIVATE_BANK_IDS = PRIVATE_BANK_IDS
 -- Shared mutable bank tab cache. Use wipe() to clear; never replace with a new table.
 P.BANK_TAB_DATA = {}
 local BANK_TAB_DATA = P.BANK_TAB_DATA
+-- Warband (account) tabs: { bagID, name, flags }. Live while at a banker;
+-- a copy is kept in the account snapshot (ns.DB.warband.tabs) for later display.
+P.WARBAND_TAB_DATA = {}
+local WARBAND_TAB_DATA = P.WARBAND_TAB_DATA
 
 -- Reagent Bank was removed in Patch 11.2.0 (TOC 110200, released August 5 2025).
 -- Source: https://warcraft.wiki.gg/wiki/Patch_11.2.0
@@ -330,8 +352,56 @@ local function GetBankTabLabel(tab)
     return "Bank Tab " .. tostring(tab.bagID)
 end
 
-P.BankTabStorageKey = BankTabStorageKey
-P.GetBankTabLabel   = GetBankTabLabel
+local function WarbandTabStorageKey(bagID)
+    return WARBAND_TAB_PREFIX .. tostring(bagID)
+end
+
+-- Known Warband tabs: live data at a banker, else the account snapshot copy.
+-- How many Warband tabs the account has bought: a number once a bank visit
+-- has read it (0 = none bought yet; the first costs gold), or nil if unknown.
+function P.WarbandTabsPurchased()
+    if #WARBAND_TAB_DATA > 0 then return #WARBAND_TAB_DATA end
+    local warband = ns.DB and ns.DB.warband
+    if warband and warband.tabsKnownAt then return #(warband.tabs or {}) end
+    return nil
+end
+
+local function GetWarbandTabs()
+    if #WARBAND_TAB_DATA > 0 then return WARBAND_TAB_DATA end
+    return ns.DB and ns.DB.warband and ns.DB.warband.tabs or {}
+end
+
+local function GetWarbandTabLabel(tab)
+    if tab.name and tab.name ~= "" then return "Warband: " .. tab.name end
+    return "Warband Tab " .. tostring((tab.bagID or 0) - 11)
+end
+
+local function IsWarbandTabStorage(storageKind)
+    return type(storageKind) == "string" and storageKind:sub(1, #WARBAND_TAB_PREFIX) == WARBAND_TAB_PREFIX
+end
+
+-- True for every storage kind that needs the bank to be open.
+local function NeedsBankStorage(storage)
+    if storage == nil or storage == "Bags" or storage == "Vendor" or storage == "Auction House" or storage == "Destroy" then return false end
+    return storage == STORAGE_PRIVATE_BANK or storage == STORAGE_REAGENT_BANK
+        or storage == STORAGE_WARBAND_BANK or storage == STORAGE_ALL_BANK_TABS
+        or storage == STORAGE_WARBAND_ROUTED or IsWarbandTabStorage(storage)
+        or storage:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX
+end
+
+-- True for storage kinds that are part of the Warband bank.
+local function IsWarbandStorage(storage)
+    return storage == STORAGE_WARBAND_BANK or storage == STORAGE_WARBAND_ROUTED or IsWarbandTabStorage(storage)
+end
+
+P.BankTabStorageKey    = BankTabStorageKey
+P.GetBankTabLabel      = GetBankTabLabel
+P.WarbandTabStorageKey = WarbandTabStorageKey
+P.GetWarbandTabs       = GetWarbandTabs
+P.GetWarbandTabLabel   = GetWarbandTabLabel
+P.IsWarbandTabStorage  = IsWarbandTabStorage
+P.NeedsBankStorage     = NeedsBankStorage
+P.IsWarbandStorage     = IsWarbandStorage
 
 -- ===========================================================================
 -- Storage utilities
@@ -349,6 +419,16 @@ local function GetStorageDisplayName(storageKind)
     if storageKind == STORAGE_WARBAND_BANK  then return "Warband Bank" end
     if storageKind == STORAGE_ALL_BANK_TABS then return STORAGE_ALL_BANK_TABS end
     if storageKind == "Vendor"              then return "Vendor" end
+    if storageKind == "Auction House"       then return "Auction House" end
+    if storageKind == "Destroy"             then return "Destroy" end
+    if storageKind == STORAGE_WARBAND_ROUTED then return STORAGE_WARBAND_ROUTED end
+    if IsWarbandTabStorage(storageKind) then
+        local bagID = tonumber(storageKind:sub(#WARBAND_TAB_PREFIX + 1))
+        for _, tab in ipairs(GetWarbandTabs()) do
+            if tab.bagID == bagID then return GetWarbandTabLabel(tab) end
+        end
+        return "Warband Tab"
+    end
     if storageKind and storageKind:sub(1, #BANK_TAB_PREFIX) == BANK_TAB_PREFIX then
         local bagID = tonumber(storageKind:sub(#BANK_TAB_PREFIX + 1))
         if bagID then
@@ -364,7 +444,11 @@ end
 local function GetStorageBagIDs(storageKind)
     if storageKind == STORAGE_PRIVATE_BANK  then return PRIVATE_BANK_IDS end
     if storageKind == STORAGE_REAGENT_BANK  then return REAGENT_BANK_IDS end
-    if storageKind == STORAGE_WARBAND_BANK  then return WARBAND_BANK_IDS end
+    if storageKind == STORAGE_WARBAND_BANK or storageKind == STORAGE_WARBAND_ROUTED then return WARBAND_BANK_IDS end
+    if IsWarbandTabStorage(storageKind) then
+        local bagID = tonumber(storageKind:sub(#WARBAND_TAB_PREFIX + 1))
+        if bagID then return { bagID } end
+    end
     if storageKind == STORAGE_ALL_BANK_TABS then
         if #BANK_TAB_DATA > 0 then
             local ids = {}
@@ -396,11 +480,25 @@ local function RefreshBankTabData()
     if not (C_Bank and C_Bank.FetchPurchasedBankTabData) then return end
     if not (Enum and Enum.BankType) then return end
     local tabs = C_Bank.FetchPurchasedBankTabData(Enum.BankType.Character)
-    if not tabs then return end
-    for _, tab in ipairs(tabs) do
+    for _, tab in ipairs(tabs or {}) do
         local entry = { bagID = tab.ID, name = tab.name or "", flags = tab.depositFlags or 0 }
         table.insert(BANK_TAB_DATA, entry)
         STORAGE_BY_BAG_ID[tab.ID] = BankTabStorageKey(tab.ID)
+    end
+    -- Warband tabs (W2). Only readable at a banker; cached for later display.
+    wipe(WARBAND_TAB_DATA)
+    local accountTabs = Enum.BankType.Account ~= nil and C_Bank.FetchPurchasedBankTabData(Enum.BankType.Account) or nil
+    if accountTabs then
+        local cached = {}
+        for _, tab in ipairs(accountTabs) do
+            local entry = { bagID = tab.ID, name = tab.name or "", flags = tab.depositFlags or 0 }
+            table.insert(WARBAND_TAB_DATA, entry)
+            table.insert(cached, { bagID = entry.bagID, name = entry.name, flags = entry.flags })
+        end
+        if ns.DB and ns.DB.warband then
+            ns.DB.warband.tabs = cached
+            ns.DB.warband.tabsKnownAt = time and time() or 0
+        end
     end
     -- Notify UI to rebuild source/dest dropdowns (defined later in UI.lua).
     if Core.RefreshTransferDropdowns then
@@ -452,6 +550,16 @@ end
 local function LocationKey(item)
     return table.concat({ item.scope or "?", tostring(item.bagID), tostring(item.slot), tostring(item.itemID) }, ":")
 end
+
+-- A readable item name: the cached name, else the name inside the hyperlink,
+-- else "Item <id>". Never returns an empty string.
+local function ItemDisplayName(name, link, itemID)
+    if type(name) == "string" and name ~= "" then return name end
+    local fromLink = type(link) == "string" and link:match("%[(.-)%]") or nil
+    if fromLink and fromLink ~= "" then return fromLink end
+    return "Item " .. tostring(itemID or "?")
+end
+P.ItemDisplayName = ItemDisplayName
 
 local function SlotKey(bagID, slot)
     return tostring(bagID) .. ":" .. tostring(slot)
@@ -517,7 +625,13 @@ local function GetTransferSourceOptions()
         else
             table.insert(opts, { text = STORAGE_PRIVATE_BANK, value = STORAGE_PRIVATE_BANK })
         end
-        table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+        -- No Warband option until a tab is bought (verified: the first tab costs gold).
+        if #WARBAND_TAB_DATA > 0 then
+            table.insert(opts, { text = STORAGE_WARBAND_BANK, value = STORAGE_WARBAND_BANK })
+        end
+        for _, tab in ipairs(WARBAND_TAB_DATA) do
+            table.insert(opts, { text = GetWarbandTabLabel(tab), value = WarbandTabStorageKey(tab.bagID) })
+        end
     end
     return opts
 end
@@ -525,13 +639,17 @@ end
 local function GetTransferDestOptions()
     local opts = GetTransferSourceOptions()
     local bankOpen = ns.DB and ns.DB.context and ns.DB.context.bankOpen
-    if bankOpen then
-        -- bank options already included by GetTransferSourceOptions
+    if bankOpen and #WARBAND_TAB_DATA > 0 then
+        table.insert(opts, { text = STORAGE_WARBAND_ROUTED, value = STORAGE_WARBAND_ROUTED })
     end
     local vendorOpen = ns.DB and ns.DB.context and ns.DB.context.vendorOpen
     if vendorOpen then
         table.insert(opts, { text = "Vendor", value = "Vendor" })
     end
+    if ns.DB and ns.DB.context and ns.DB.context.auctionHouseOpen then
+        table.insert(opts, { text = "Auction House", value = "Auction House" })
+    end
+    table.insert(opts, { text = "Destroy", value = "Destroy" })
     return opts
 end
 
@@ -542,10 +660,29 @@ P.GetTransferDestOptions   = GetTransferDestOptions
 -- Bank context detection
 -- ===========================================================================
 
+local function CanReadValue(value)
+    return not issecretvalue or not issecretvalue(value)
+end
+
+-- Is this frame visible on screen? IsVisible, not IsShown: a child keeps its
+-- own shown flag while its parent is hidden (in game, BankPanelCopperButton
+-- read as shown away from any bank). Forbidden frames error on any method
+-- call ("bad self"), which broke every refresh in game, so they are skipped
+-- and the call is protected.
+local function IsFrameVisible(frame)
+    if type(frame) ~= "table" or not frame.IsVisible then return false end
+    if frame.IsForbidden then
+        local okForbidden, forbidden = pcall(frame.IsForbidden, frame)
+        if not okForbidden or forbidden then return false end
+    end
+    local ok, shown = pcall(frame.IsVisible, frame)
+    return ok and CanReadValue(shown) and shown and true or false
+end
+
 local function GetShownGlobalFrame(names)
     for _, name in ipairs(names) do
         local frame = _G[name]
-        if frame and frame.IsShown and frame:IsShown() then return frame end
+        if IsFrameVisible(frame) then return frame end
     end
     return nil
 end
@@ -554,12 +691,14 @@ local function GetShownNamedFrameByPattern(namePatterns)
     if not EnumerateFrames then return nil end
     local frame = EnumerateFrames()
     while frame do
-        if frame.GetName and frame.IsShown and frame:IsShown() then
-            local name = frame:GetName()
-            if name then
-                local lowerName = name:lower()
-                for _, pattern in ipairs(namePatterns) do
-                    if lowerName:find(pattern, 1, true) then return frame end
+        if frame.GetName and IsFrameVisible(frame) then
+            do
+                local okName, name = pcall(frame.GetName, frame)
+                if okName and CanReadValue(name) and name then
+                    local lowerName = name:lower()
+                    for _, pattern in ipairs(namePatterns) do
+                        if lowerName:find(pattern, 1, true) then return frame end
+                    end
                 end
             end
         end
@@ -570,22 +709,24 @@ end
 
 local function IsGlobalFrameShown(name)
     local frame = _G[name]
-    return frame and frame.IsShown and frame:IsShown() or false
+    if not frame or not frame.IsShown then return false end
+    local ok, shown = pcall(frame.IsShown, frame)
+    return ok and CanReadValue(shown) and shown or false
 end
 
 local function IsBankViewableByAPI()
     if not C_Bank then return false end
     if C_Bank.AreAnyBankTypesViewable then
         local ok, viewable = pcall(C_Bank.AreAnyBankTypesViewable)
-        if ok and viewable then return true end
+        if ok and CanReadValue(viewable) and viewable then return true end
     end
     if C_Bank.FetchViewableBankTypes then
         local ok, bankTypes = pcall(C_Bank.FetchViewableBankTypes)
-        if ok and type(bankTypes) == "table" then
+        if ok and CanReadValue(bankTypes) and type(bankTypes) == "table" then
             for _, bankType in pairs(bankTypes) do
                 if bankType ~= nil then return true end
             end
-        elseif ok and bankTypes ~= nil then
+        elseif ok and CanReadValue(bankTypes) and bankTypes ~= nil then
             return true
         end
     end
@@ -594,7 +735,7 @@ local function IsBankViewableByAPI()
             local bankType = rawget(Enum.BankType, key)
             if bankType ~= nil then
                 local ok, viewable = pcall(C_Bank.IsBankTypeViewable, bankType)
-                if ok and viewable then return true end
+                if ok and CanReadValue(viewable) and viewable then return true end
             end
         end
     end
@@ -603,7 +744,7 @@ local function IsBankViewableByAPI()
             local bankType = rawget(Enum.BankType, key)
             if bankType ~= nil then
                 local ok, canView = pcall(C_Bank.CanViewBank, bankType)
-                if ok and canView then return true end
+                if ok and CanReadValue(canView) and canView then return true end
             end
         end
     end
@@ -616,7 +757,7 @@ local function IsBankStorageAccessible()
         for _, ids in ipairs({ PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }) do
             for _, bagID in ipairs(ids or {}) do
                 local ok, freeSlots = pcall(CContainer.GetContainerNumFreeSlots, bagID)
-                if ok and type(freeSlots) == "number" and freeSlots >= 0 then return true end
+                if ok and CanReadValue(freeSlots) and type(freeSlots) == "number" and freeSlots >= 0 then return true end
             end
         end
     end
@@ -624,7 +765,7 @@ local function IsBankStorageAccessible()
         for _, ids in ipairs({ PRIVATE_BANK_IDS, REAGENT_BANK_IDS, WARBAND_BANK_IDS }) do
             for _, bagID in ipairs(ids or {}) do
                 local ok, info = pcall(CContainer.GetContainerItemInfo, bagID, 1)
-                if ok and info ~= nil then return true end
+                if ok and CanReadValue(info) and info ~= nil then return true end
             end
         end
     end
@@ -649,17 +790,23 @@ local function IsPlayerBankInteractionActive()
     for _, interactionType in ipairs(types) do
         if interactionType ~= nil then
             local ok, active = pcall(C_PlayerInteractionManager.IsInteractingWithNpcOfType, interactionType)
-            if ok and active then return true end
+            if ok and CanReadValue(active) and active then return true end
         end
     end
     return false
 end
 
+-- Bank storage "accessible" is not used: away from a bank, bank bags still
+-- answer GetContainerNumFreeSlots (0 each), which read as an open bank.
+-- No scan of every frame by name pattern: it ran on every refresh and, with
+-- protected calls per frame, hit WoW's "script ran too long" limit in game
+-- (the game stalled while loading). The banker interaction, the bank API and
+-- the named bank windows cover a real bank. /icanteven ctx still reports the
+-- pattern scan as a diagnostic.
 local function IsBankContextDetected()
     return IsPlayerBankInteractionActive()
-        or (GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)) ~= nil
+        or GetShownGlobalFrame(BANK_FRAME_NAMES) ~= nil
         or IsBankViewableByAPI()
-        or IsBankStorageAccessible()
 end
 
 P.GetShownGlobalFrame           = GetShownGlobalFrame

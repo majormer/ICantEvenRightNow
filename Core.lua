@@ -25,8 +25,8 @@ local WARBAND_BANK_IDS   = P.WARBAND_BANK_IDS
 
 local Print                      = P.Print
 local SafeCopyDefaults           = P.SafeCopyDefaults
-local MigrateLegacyTabFilters    = P.MigrateLegacyTabFilters
 local SeedDefaultSavedFilters    = P.SeedDefaultSavedFilters
+local MigrateSavedFiltersToWorkflows = P.MigrateSavedFiltersToWorkflows
 local NormalizeLegacyBankStorageKinds = P.NormalizeLegacyBankStorageKinds
 local RefreshBankTabData         = P.RefreshBankTabData
 local IsBankContextDetected      = P.IsBankContextDetected
@@ -49,9 +49,20 @@ function Core.UpdateContext()
     context.bankOpen = UI.bankContextOpen or IsBankContextDetected()
     context.reagentBankOpen = IsGlobalFrameShown("ReagentBankFrame")
     context.vendorOpen = UI.vendorContextOpen or (IsGlobalFrameShown("MerchantFrame") and not UI.vendorContextClosed)
-    context.auctionHouseOpen = IsGlobalFrameShown("AuctionHouseFrame")
+    context.auctionHouseOpen = UI.auctionContextOpen or IsGlobalFrameShown("AuctionHouseFrame")
     context.mailboxOpen = IsGlobalFrameShown("MailFrame")
     context.inCombat = InCombatLockdown() and true or false
+    if P.IsLogging and P.IsLogging() then
+        local signature = table.concat({ tostring(context.bankOpen), tostring(context.vendorOpen),
+            tostring(context.auctionHouseOpen), tostring(context.mailboxOpen), tostring(context.inCombat) }, ",")
+        if signature ~= UI.lastLoggedContext then
+            UI.lastLoggedContext = signature
+            P.Log("context", "bank=%s (event=%s interaction=%s window=%s api=%s) vendor=%s ah=%s mail=%s combat=%s",
+                context.bankOpen, UI.bankContextOpen, P.IsPlayerBankInteractionActive(),
+                P.GetShownGlobalFrame(P.BANK_FRAME_NAMES) and P.GetShownGlobalFrame(P.BANK_FRAME_NAMES):GetName() or "none",
+                P.IsBankViewableByAPI(), context.vendorOpen, context.auctionHouseOpen, context.mailboxOpen, context.inCombat)
+        end
+    end
     if context.bankOpen then
         UI.hadBankContext = true
     end
@@ -71,6 +82,7 @@ function Core.LogError(msg)
     if not ns.DB.errorLog then ns.DB.errorLog = {} end
     local log = ns.DB.errorLog
     table.insert(log, { time = date("%Y-%m-%d %H:%M:%S"), msg = tostring(msg) })
+    if P.Log then P.Log("error", "%s", msg) end
     while #log > ERROR_LOG_MAX do table.remove(log, 1) end
 end
 
@@ -106,8 +118,10 @@ function Core.HandleSlashCommand(msg)
     local cmd, arg1 = (msg or ""):match("^(%S*)%s*(.-)$")
     cmd = (cmd or ""):lower()
 
-    if cmd == "" then
-        Core.ShowTransferUI()
+    if cmd == "" or cmd == "home" then
+        Core.ShowHomeUI()
+    elseif cmd == "characters" or cmd == "roles" then
+        Core.ShowCharactersUI()
     elseif cmd == "scan" then
         Core.ScanInventory(arg1)
     elseif cmd == "summary" then
@@ -121,20 +135,28 @@ function Core.HandleSlashCommand(msg)
     elseif cmd == "dump" then
         UI.transferSource = "Bags"
         UI.transferDest = STORAGE_ALL_BANK_TABS
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "recall" then
         UI.transferSource = STORAGE_ALL_BANK_TABS
         UI.transferDest = "Bags"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.SetExpansionFilterFromText(arg1)
         Core.ShowMoveUI()
     elseif cmd == "organize" or cmd == "organizer" then
         UI.transferSource = STORAGE_ALL_BANK_TABS
         UI.transferDest = "Bags"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.ShowOrganizeUI()
     elseif cmd == "vendor" or cmd == "sell" then
         UI.transferSource = "Bags"
         UI.transferDest = "Vendor"
+        UI.transferSelected = {}
+        UI.activeSavedFilterName = nil
         Core.ShowVendorUI()
     elseif cmd == "settings" or cmd == "options" then
         Core.CreateUI()
@@ -164,7 +186,8 @@ function Core.HandleSlashCommand(msg)
         Print("IsBankViewableByAPI=" .. tostring(IsBankViewableByAPI()))
         Print("IsBankStorageAccessible=" .. tostring(IsBankStorageAccessible()))
         local frameResult = GetShownGlobalFrame(BANK_FRAME_NAMES) or GetShownNamedFrameByPattern(BANK_FRAME_PATTERNS)
-        Print("FrameDetected=" .. tostring(frameResult ~= nil) .. " (" .. tostring(frameResult) .. ")")
+        local frameName = frameResult and frameResult.GetName and frameResult:GetName() or nil
+        Print("FrameDetected=" .. tostring(frameResult ~= nil) .. " (" .. tostring(frameName) .. ")")
         Print("IsBankContextDetected=" .. tostring(IsBankContextDetected()))
         Print("context.bankOpen=" .. tostring(ns.DB.context.bankOpen))
         if C_Container and C_Container.GetContainerNumFreeSlots then
@@ -185,6 +208,26 @@ function Core.HandleSlashCommand(msg)
         Print("Debug mode: " .. (Debug.IsDebugEnabled() and "ON" or "OFF"))
     elseif cmd == "diag" then
         Debug.RunDiagnosticDump()
+    elseif cmd == "auction" then
+        for _, line in ipairs(P.AuctionCandidateReport()) do Print(line) end
+    elseif cmd == "itemdata" then
+        -- Which scanned stacks lack item data, and what the client says now.
+        local bags = P.GetScanList(BAG_SCOPE) or {}
+        local missing = {}
+        for _, item in ipairs(bags) do
+            if item.expansionID == nil or item.classID == nil or (item.name or ""):match("^Item %d+$") then
+                table.insert(missing, item)
+            end
+        end
+        Print("Item data: " .. #missing .. " of " .. #bags .. " bag stacks are missing details.")
+        for i = 1, math.min(5, #missing) do
+            local item = missing[i]
+            local byLink = item.link and C_Item.GetItemInfo(item.link)
+            local byID = C_Item.GetItemInfo(item.itemID)
+            local cached = C_Item.IsItemDataCachedByID and C_Item.IsItemDataCachedByID(item.itemID)
+            Print(string.format("  %d %s: link=%s byLink=%s byID=%s cached=%s", item.itemID, tostring(item.name),
+                item.link and "yes" or "no", tostring(byLink), tostring(byID), tostring(cached)))
+        end
     elseif cmd == "errors" then
         local log = ns.DB and ns.DB.errorLog
         if not log or #log == 0 then
@@ -200,11 +243,64 @@ function Core.HandleSlashCommand(msg)
                 Print("(showing 10 most recent of " .. #log .. " total; /icanteven clearerrors to wipe)")
             end
         end
+    elseif cmd == "log" then
+        local sub = (arg1 or ""):lower()
+        if sub == "clear" then
+            P.ClearLog()
+            Print("Enhanced log cleared.")
+        elseif sub == "on" or sub == "off" then
+            P.SetLogging(sub == "on")
+            Print("Enhanced logging " .. sub .. ".")
+            Core.RefreshUI()
+        else
+            local lines = P.GetLogLines(tonumber(arg1) or 20)
+            Print("Enhanced logging is " .. (P.IsLogging() and "on" or "off") .. "; " .. #P.GetLogLines()
+                .. " line(s) saved (/icanteven log on|off|clear|<count>).")
+            for _, line in ipairs(lines) do Print(line) end
+        end
+    elseif cmd == "refused" then
+        for _, line in ipairs(P.RefusedItemsReport((arg1 or ""):lower() == "clear")) do Print(line) end
+    elseif cmd == "export" then
+        -- Offline triage (undocumented): the classified inventory, saved on reload.
+        local count = P.ExportInventory(arg1)
+        Print("Exported " .. count .. " item(s) (" .. ((arg1 or "") ~= "" and arg1 or "all") .. "). /reload to write the saved file.")
+    elseif cmd == "decide" then
+        Print(P.DecideCommand(arg1))
+    elseif cmd == "decisions" then
+        if not P.ShowDecisionPasteBox() then Print("No UI available.") end
+    elseif cmd == "undo" then
+        Print(P.PrepareUndo())
     elseif cmd == "clearerrors" then
         if ns.DB then ns.DB.errorLog = {} end
         Print("Error log cleared.")
+    elseif cmd == "why" then
+        -- Read-only: explains why items are being kept. "/icanteven why all" covers every known character.
+        local scope = (arg1 or ""):lower() == "all" and "all" or "current"
+        if scope == "current" then pcall(Core.ScanInventory, ns.DB.context.bankOpen and "all" or BAG_SCOPE, true) end
+        if (arg1 or ""):lower() == "items" then
+            -- Per-item detail goes to the enhanced log only (hundreds of lines).
+            if not P.IsLogging() then P.SetLogging(true) Print("Enhanced logging turned on.") end
+            local lines = P.WhyItemLines("current")
+            for _, line in ipairs(lines) do P.Log("why", "%s", line) end
+            Print(#lines .. " item line(s) written to the enhanced log (/icanteven log, or the saved file after /reload).")
+        else
+            local lines = P.WhyReportLines(scope)
+            for _, line in ipairs(lines) do Print(line) end
+            for _, line in ipairs(lines) do P.Log("why", "%s", line) end
+        end
+    elseif cmd == "where" then
+        for _, line in ipairs(P.WhereIsLines(arg1)) do Print(line) end
+    elseif cmd == "explain" then
+        for _, line in ipairs(P.ExplainLines(arg1)) do Print(line) P.Log("explain", "%s", line) end
+    elseif cmd == "migration" then
+        local report = P.LatestMigrationReport()
+        if not report then
+            Print("No settings migration has run on this installation.")
+        else
+            for _, line in ipairs(P.MigrationReportLines(report)) do Print(line) end
+        end
     else
-        Print("Commands: /icanteven, scan [bags|bank|all], summary, transfer, move, dump, recall, organize, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors")
+        Print("Commands: /icanteven (Home), transfer, characters, why [all], explain <item>, scan [bags|bank|all], dump, recall, vendor, rules, settings, minimap, buttons, bankdiag, debug, diag, errors, clearerrors, migration")
     end
 end
 
@@ -213,19 +309,77 @@ end
 -- ===========================================================================
 
 function Core.OnAddonLoaded()
-    ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, ICantEvenRightNowDB)
+    -- Migrate before defaults are applied, so older saves are recognized by
+    -- their own keys rather than by defaults filled in afterwards.
+    local migrated, report, migrationErr = P.RunMigrations(ICantEvenRightNowDB)
+    ICantEvenRightNowDB = SafeCopyDefaults(Data.DefaultDB, migrated)
     ns.DB = ICantEvenRightNowDB
-    MigrateLegacyTabFilters()
+    if migrationErr then
+        Print("Your saved settings could not update automatically; they were left unchanged. Details: /icanteven errors")
+        Core.LogError("Migration failed: " .. tostring(migrationErr))
+    elseif report and P.MigrationNeedsAttention(report) then
+        Print("Updated your settings from " .. tostring(report.fromVersion)
+            .. ". Some items need attention: /icanteven migration")
+    end
+    if report then
+        P.Log("migration", "from %s to %s: %s", report.fromVersion, report.toVersion,
+            migrationErr and ("failed: " .. tostring(migrationErr)) or "ok")
+    end
+    P.Log("load", "%s %s loaded", ADDON_NAME, C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata(ADDON_NAME, "Version") or "?")
     SeedDefaultSavedFilters()
+    if P.IsBetterBagsLoaded and P.IsBetterBagsLoaded() then pcall(P.OnBetterBagsLoaded) end
+    MigrateSavedFiltersToWorkflows()
     ns.DB.ui.showBankButton = false
     ns.DB.ui.showVendorButton = false
-    NormalizeLegacyBankStorageKinds(ns.DB.scans.bank)
+    P.EnsureCurrentCharacter()
+    NormalizeLegacyBankStorageKinds(P.GetCurrentCharacter().scans.bank)
     Core.RegisterSlashCommands()
     Core.UpdateContext()
     Core.UpdateQuickAccessButtons()
     ScheduleQuickAccessRefresh()
     Print("Loaded. Type /icanteven to open the cleanup console.")
 end
+
+-- ===========================================================================
+-- Debounced inventory refresh
+-- ===========================================================================
+
+local inventoryRefreshScheduled = false
+local refreshBagsPending = false
+local refreshBankPending = false
+
+local function ScheduleInventoryRefresh(scope)
+    if scope == "bags" or scope == "all" then refreshBagsPending = true end
+    if scope == "bank" or scope == "all" then refreshBankPending = true end
+    UI.inventoryStatus = "Inventory changed — refreshing..."
+    if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+    if inventoryRefreshScheduled then return end
+
+    inventoryRefreshScheduled = true
+    C_Timer.After(0.25, function()
+        inventoryRefreshScheduled = false
+        Core.UpdateContext()
+
+        local scanBags = refreshBagsPending
+        local scanBank = refreshBankPending and ns.DB.context.bankOpen
+        refreshBagsPending = false
+        refreshBankPending = false
+
+        if scanBags and scanBank then
+            pcall(Core.ScanInventory, "all", true)
+        elseif scanBank then
+            pcall(Core.ScanInventory, "bank", true)
+        elseif scanBags then
+            pcall(Core.ScanInventory, "bags", true)
+        end
+
+        UI.inventoryStatus = "Updated just now"
+        if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+    end)
+end
+
+Core.ScheduleInventoryRefresh = ScheduleInventoryRefresh
 
 -- ===========================================================================
 -- Event frame
@@ -238,16 +392,28 @@ eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("BANKFRAME_OPENED")
 eventFrame:RegisterEvent("BANKFRAME_CLOSED")
 eventFrame:RegisterEvent("BANK_TAB_SETTINGS_UPDATED")
+eventFrame:RegisterEvent("BANK_TABS_CHANGED")
+eventFrame:RegisterEvent("PLAYERBANKSLOTS_CHANGED")
+eventFrame:RegisterEvent("PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED")
+eventFrame:RegisterEvent("BAG_UPDATE_DELAYED")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_SHOW")
 eventFrame:RegisterEvent("PLAYER_INTERACTION_MANAGER_FRAME_HIDE")
 eventFrame:RegisterEvent("MERCHANT_SHOW")
 eventFrame:RegisterEvent("MERCHANT_CLOSED")
 eventFrame:RegisterEvent("AUCTION_HOUSE_SHOW")
 eventFrame:RegisterEvent("AUCTION_HOUSE_CLOSED")
+eventFrame:RegisterEvent("COMMODITY_SEARCH_RESULTS_UPDATED")
+eventFrame:RegisterEvent("ITEM_SEARCH_RESULTS_UPDATED")
 eventFrame:RegisterEvent("MAIL_SHOW")
 eventFrame:RegisterEvent("MAIL_CLOSED")
+eventFrame:RegisterEvent("MAIL_INBOX_UPDATE")
+eventFrame:RegisterEvent("EQUIPMENT_SETS_CHANGED")
 eventFrame:RegisterEvent("PLAYER_REGEN_DISABLED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_LEVEL_UP")
+eventFrame:RegisterEvent("SKILL_LINES_CHANGED")
+eventFrame:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
 
 eventFrame:SetScript("OnEvent", function(_, event, ...)
     if event == "ADDON_LOADED" then
@@ -256,11 +422,76 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
             Core.OnAddonLoaded()
         elseif ns.DB and addonName and addonName:lower():find("betterbags", 1, true) then
             ScheduleQuickAccessRefresh()
+            if addonName == "BetterBags" and P.OnBetterBagsLoaded then pcall(P.OnBetterBagsLoaded) end
         end
         return
     end
 
     if not ns.DB or not ns.DB.context then return end
+
+    if event == "PLAYER_LOGOUT" then
+        if P.CompactSnapshots then pcall(P.CompactSnapshots) end
+        return
+    end
+
+    if event == "PLAYER_REGEN_ENABLED" and P.OnCombatEnded then P.OnCombatEnded() end
+
+    -- Auction house context and paced price lookups (Value.lua).
+    if event == "EQUIPMENT_SETS_CHANGED" then
+        if P.RecordEquipmentSets then pcall(P.RecordEquipmentSets) end
+        if UI.frame and UI.frame:IsShown() then Core.RefreshUI() end
+        return
+    end
+    if event == "MAIL_INBOX_UPDATE" then
+        pcall(P.RecordInbox)
+        return
+    end
+    if event == "AUCTION_HOUSE_SHOW" then
+        pcall(P.NoteAuctionHouseVisit)
+        UI.auctionContextOpen = true
+        Core.UpdateContext()
+        pcall(Core.ScanInventory, BAG_SCOPE, true)
+        pcall(P.OnContextOpened)
+    elseif event == "AUCTION_HOUSE_CLOSED" then
+        UI.auctionContextOpen = false
+        P.HideContextNotice()
+    end
+    if event == "COMMODITY_SEARCH_RESULTS_UPDATED" or event == "ITEM_SEARCH_RESULTS_UPDATED"
+        or event == "AUCTION_HOUSE_CLOSED" then
+        if P.OnAuctionEvent then pcall(P.OnAuctionEvent, event, ...) end
+        if event ~= "AUCTION_HOUSE_CLOSED" then return end
+    end
+
+    -- Keep the roster's facts (level, professions) current for this character.
+    -- Gear levels are often not loaded at login; read them again shortly after.
+    if event == "PLAYER_ENTERING_WORLD" and P.BeginSettling then
+        C_Timer.After(1, function() pcall(P.BeginSettling, "login", false) end)
+    end
+    if event == "PLAYER_ENTERING_WORLD" and P.RefreshEquipped then
+        for _, delay in ipairs({ 5, 20 }) do
+            C_Timer.After(delay, function()
+                local ok, read = pcall(P.RefreshEquipped)
+                P.Log("character", "equipped levels read after %ds: %s slot(s)", delay, ok and read or "error")
+            end)
+        end
+    end    -- Once per login: auction mail about to be deleted on any character.
+    if event == "PLAYER_LOGIN" and P.MailAtRisk then
+        C_Timer.After(8, function()
+            local ok, risks = pcall(P.MailAtRisk)
+            if not ok then return end
+            for _, risk in ipairs(risks) do
+                Print((risk.character.key == P.currentCharacterKey and "Your mailbox" or risk.character.name)
+                    .. ": " .. P.MailRiskText(risk) .. ".")
+            end
+        end)
+    end
+    if event == "PLAYER_LOGIN" or event == "PLAYER_LEVEL_UP" or event == "SKILL_LINES_CHANGED"
+        or event == "PLAYER_EQUIPMENT_CHANGED" then
+        -- PLAYER_LEVEL_UP passes the new level; UnitLevel can lag behind it.
+        P.EnsureCurrentCharacter(event == "PLAYER_LEVEL_UP" and (...) or nil)
+        if event ~= "PLAYER_LOGIN" then return end
+    end
+
 
     local interactionType = ...
     local bankInteraction = IsBankInteractionType(interactionType)
@@ -305,11 +536,25 @@ eventFrame:SetScript("OnEvent", function(_, event, ...)
         RefreshBankTabData()
         Core.RefreshTransferDropdowns()
         pcall(Core.ScanInventory, "all", true)
+        pcall(P.OnContextOpened)
+    elseif vendorContextOpened then
+        Core.ScanInventory(BAG_SCOPE, true)
+        pcall(P.OnContextOpened)
+    end
+    if bankContextClosed or vendorContextClosed then
+        P.HideContextNotice()
     end
 
     if event == "BANK_TAB_SETTINGS_UPDATED" then
         RefreshBankTabData()
-        Core.RefreshUI()
+        ScheduleInventoryRefresh("bank")
+    elseif event == "BANK_TABS_CHANGED" then
+        RefreshBankTabData()
+        ScheduleInventoryRefresh("bank")
+    elseif event == "PLAYERBANKSLOTS_CHANGED" or event == "PLAYER_ACCOUNT_BANK_TAB_SLOTS_CHANGED" then
+        ScheduleInventoryRefresh("bank")
+    elseif event == "BAG_UPDATE_DELAYED" then
+        ScheduleInventoryRefresh("bags")
     end
 
     ScheduleQuickAccessRefresh()

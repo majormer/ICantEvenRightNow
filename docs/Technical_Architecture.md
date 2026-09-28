@@ -2,290 +2,160 @@
 
 ## 1. Purpose and Architecture Style
 
-I Can't Even Right Now is a standalone WoW Retail addon focused on conservative inventory management.
+I Can't Even Right Now is a standalone WoW Retail addon for low-friction, conservative inventory management.
 
 Architecture characteristics:
 
-- Multi-module runtime: `Shared` → `Evaluator` → `Filter` → `Scanner` → `Transfer` → `UI` → `Core`
-- Static configuration and defaults in `Data.lua`
-- Optional diagnostics in `Debug.lua`
-- SavedVariables persistence in `ICantEvenRightNowDB`
-- UI-first interaction model with explicit selection before actions
-- All inter-module symbols exposed on `ns.Private` (aliased as `P` in each module)
+- Multi-module runtime in TOC order: `Data` → `Debug` → `Shared` → `Migration` → `Characters` → `Evaluator` → `Reasons` → `Warband` → `Filter` → `Scanner` → `Transfer` → `Tasks` → `UI` → `HomeUI` → `Value` → `Onboarding` → `Integrations` → `Core`
+- Account-wide SavedVariables (`ICantEvenRightNowDB`) with an explicit `schemaVersion` and stepwise migrations
+- All inter-module symbols on `ns.Private` (aliased as `P`)
+- Offline test suite (`tests/`) that loads the TOC files into a simulated WoW client
 
 Design intent:
 
-- Transfer intent is always player-driven (Source + Destination chosen explicitly)
-- Prefer explainability over automation
-- Keep risky actions conservative and contextual
+- The addon finds, explains, and routes; the player reviews and clicks. Nothing moves or sells without explicit selection and a click.
+- Prefer explanation over automation: every row says why an item is there and what an action will do.
+- Roles decide who benefits; unassigned characters never count.
 
 ## 2. Runtime Modules
 
-### `Data.lua`
-
-Primary responsibilities:
-
-- Expansion definitions and current expansion marker
-- Item type and action constants
-- Curated item overrides
-- Profession subclass mapping
-- Default DB schema (`DefaultDB`)
-
-### `Debug.lua`
-
-Primary responsibilities:
-
-- Debug mode toggles
-- Diagnostic dump helpers
-
-### `Shared.lua`
-
-Primary responsibilities:
-
-- Display/identity constants and storage-kind string constants
-- Filter sentinel values and scope constants
-- Bag ID resolution: `BAG_IDS`, `PRIVATE_BANK_IDS`, `REAGENT_BANK_IDS`, `WARBAND_BANK_IDS`, `NORMAL_BAG_IDS`
-- Bank tab data refresh (`RefreshBankTabData`, `BANK_TAB_DATA`)
-- Context detection: `IsBankContextDetected`, `IsPlayerBankInteractionActive`, `IsBankViewableByAPI`, `IsBankStorageAccessible`
-- Storage helpers: `GetStorageBagIDs`, `GetStorageDisplayName`, `GetStorageKindForBagID`
-- Utility functions: `Print`, `FormatTimestamp`, `LocationKey`, `SlotKey`, `SafeCopyDefaults`
-- Expansion helpers: `IsCurrentExpansion`, `IsOldExpansion`, `IsUnknownExpansion`, `GetExpansionName`
-
-### `Evaluator.lua`
-
-Primary responsibilities:
-
-- Binding detection (`GetBindingDetails`): soulbound, warband-bound, BoE, WuE, BoP classification
-- Item classification: `GetItemTypeTag`, `GetAllDecisions`, `BuildDecision`
-- Curated item lookups (`FindCuratedItem`)
-- Rule helpers (`EnsureRule`)
-- Preferred bank storage routing (`GetPreferredBankStorage`)
-- Shared-value item detection (`IsTransferableSharedValueItem`)
-
-### `Filter.lua`
-
-Primary responsibilities:
-
-- Filter state management (`EnsureTabFilters`, lazy init per tab)
-- Filter mutations: `SetFilterInclude`, `SetFilterSearch`, `SetFilterHideBlocked`, `SetFilterItemLevel`, `SetFilterSlot`, `SetFilterUpgrade`, `SetFilterArmorType`, `ResetTabFilters`
-- Filter matching: `MatchesTabFilters`, `PlanMatchesTabFilters`
-- Option builders: `GetExpansionOptions`, `GetBindFilterOptions`, `GetTypeFilterOptions`, `GetSlotFilterOptions`, `GetUpgradeFilterOptions`, `GetArmorTypeFilterOptions`
-- Upgrade detection: `GetEquippedItemLevel` using `C_Item.GetCurrentItemLevel`, `INVTYPE_TO_SLOTS` mapping
-- Slot label mapping: `EQUIPLOC_TO_SLOT_LABEL`
-- Armor type label mapping: `ARMOR_SUBCLASS_LABEL`, `GetArmorTypeFilterLabel`
-- Saved filter presets: `SeedDefaultSavedFilters`, `GetSavedFiltersOptions`, `FindSavedFilter`, `ApplySavedFilter`, `SaveFilter`, `DeleteSavedFilter`
-- Label helpers: `GetExpansionFilterLabel`, `GetMultiSelectLabel`, `BuildFilterSummary`
-
-### `Scanner.lua`
-
-Primary responsibilities:
-
-- Container scanning: `ScanContainerBag`, `ScanBags`, `ScanBank`
-- Cache-warm rescan scheduling (`ScheduleRescanAfterMove`)
-- Optimistic scan removal (`RemoveMovedItemsFromScan`)
-- Bank diagnostics slash helpers
-
-### `Transfer.lua`
-
-Primary responsibilities:
-
-- Transfer candidate generation (`GetTransferCandidates`)
-- Block reason evaluation (`GetTransferBlockReason`)
-- Free slot finding (`FindFreeSlot`)
-- Movement execution: `ExecuteTransferOne`, `ExecuteTransferSelected`
-- Vendor sell execution (via `C_Container.UseContainerItem` from hardware event context)
-- Source/Destination option builders: `GetTransferSourceOptions`, `GetTransferDestOptions`
-- Dropdown refresh (`RefreshTransferDropdowns`) on context change
-
-### `UI.lua`
-
-Primary responsibilities:
-
-- All frame construction (`BuildSummaryTab`, `BuildTransferTab`, `BuildRulesTab`, `BuildSettingsTab`)
-- Per-tab refresh: `Core.RefreshSummary`, `Core.RefreshTransfer`, `Core.RefreshRules`
-- Transfer tab: FauxScrollFrame scrollable list (8 visible rows, `ROW_HEIGHT = 42`)
-- Transfer tab filter row: Expansion, Type, Binding, Slot, Upgrade dropdowns
-- Transfer tab presets row: Load dropdown, name EditBox, Save and Remove buttons
-- Quick-access minimap launcher construction and updates
-- Context notice display
-
-### `Core.lua`
-
-Primary responsibilities:
-
-- Addon lifecycle (`Core.OnAddonLoaded`)
-- DB initialisation: `SafeCopyDefaults(Data.DefaultDB, ...)` + `MigrateLegacyTabFilters` + `SeedDefaultSavedFilters`
-- Event registration and dispatch
-- Context detection updates (`Core.UpdateContext`)
-- Inventory scanning entry point (`Core.ScanInventory`)
-- Transfer execution entry points (`Core.ExecuteTransferOne`, `Core.ExecuteTransferSelected`)
-- Slash command registration and handling
-- UI coordination (`Core.CreateUI`, `Core.RefreshUI`)
+| Module | Responsibilities |
+|---|---|
+| `Data.lua` | Expansions, item types, curated items, profession-to-subclass map, `DefaultDB` |
+| `Debug.lua` | Debug toggle and diagnostic dump |
+| `Shared.lua` | Storage-kind constants (incl. `WarbandTab:<bagID>` and `Warband (by tab settings)`), bag ID resolution (`Enum.BagIndex`), character and Warband tab data (`RefreshBankTabData`), storage helpers, `NeedsBankStorage`, bank context detection, shared UI state |
+| `Log.lua` | Enhanced logging (off by default): `P.Log(category, fmt, ...)` into a 2,000-line ring buffer at `ICantEvenRightNowDB.debugLog`; `P.GetLogLines`, `P.ClearLog`, `P.SetLogging`. Keep calls out of hot loops. |
+| `Migration.lua` | `SCHEMA_VERSION`, source-version inference, copy-then-swap migration steps, `migrationBackup`, `legacy` parking, migration report |
+| `Characters.lua` | Roster keyed `Name-Realm`, character facts (class, armor type, level history, professions, equipped item levels), roles and capabilities, role suggestions, per-character and Warband snapshots (`GetScanList`, `AllSnapshots`) |
+| `Mail.lua` | Auction mail reminder: `auctionAt` on AUCTION_HOUSE_SHOW, `mail` inbox summary on MAIL_INBOX_UPDATE, `auctionFlag`; `P.MailDeadline`, `P.MailAtRisk` (10-day window), `P.MailRiskText`. Home notice `auction-mail` (priority 40, 12 when 3 days or less). |
+| `Evaluator.lua` | Binding detection, item type classification, decisions (`BuildDecision`, `GetAllDecisions`) |
+| `Reasons.lua` | "Why is this here?" detectors, time held per location, keep reasons, `ExplainItem`, `/icanteven why` report, who-benefits hints, reason-driven tasks |
+| `ItemData.lua` | The one place that asks the game for item details. `P.ItemDataState(item)` is "ready", "loading", "failed" (gave up after 8 s; retried by Rescan via `P.RetryFailedItemData` or when the data arrives) or "missing". `P.ItemStats` and `P.ItemAppearance` return their answer plus that state, cached per item link and invalidated when the item loads. Listens to ITEM_DATA_LOAD_RESULT and GET_ITEM_INFO_RECEIVED. Gear whose stats failed to load gets the `details_unavailable` reason (no verdict), never a guess. Also `P.ItemSetID` (item info, by item ID) and `P.ItemTooltipFacts` (tooltip: set name and bonus thresholds, "Classes:", "Upgrade Level: Track n/m"; state "unknown" when unreadable, never treated as "can't be upgraded"). |
+| `Readiness.lua` | Getting ready, then stable results. `P.BeginSettling(reason, wantsNotice)` on login and context open prefetches stats and item data and waits (at most 8 s) while `P.ItemDataPending` holds for relevant items; meanwhile `P.IsSettling()` is true, card summaries read "Getting ready...", Transfer actions are disabled and the context notice is deferred. `P.ReadinessText()` feeds the Home header and Transfer footer. Data arriving later calls `P.NoteLateData()` (flagged, not applied); Rescan calls `P.ClearLateData()`. |
+| `Warband.lua` | Warband tab routing by `depositFlags`, alt hand-off queue |
+| `Filter.lua` | Filter state and matching, upgrade detection, quick tasks (`QUICK_WORKFLOWS`), saved tasks |
+| `Scanner.lua` | Container scanning (incl. quest info), bounded item-data retries, time-held and hand-off upkeep after scans |
+| `Transfer.lua` | Block reasons, target bags, slot verification, target-slot reservations, moves and sales (12 per click) |
+| `Tasks.lua` | Task list (quick, saved, registered), card evaluation (ready/waiting/value), per-refresh evaluation cache, pre-selection |
+| `UI.lua` | Console frame and tabs, Transfer view (grouped/compact rows, filters, Save as task), Rules, Settings, minimap launcher, widget kit (`P.UIKit`) |
+| `HomeUI.lua` | Home cards and notices, Characters tab, bank/vendor notice, hand-off picker, where-is-it (slash and item tooltip) |
+| `Value.lua` | Auction prices (Auctionator, TSM, own paced lookup), freshness, vendor protection, auction advice, value tooltips |
+| `Onboarding.lua` | What's New (with migration summary), first-time tips, welcome back, max-level role check, Warband settings hint |
+| `Integrations.lua` | Optional BetterBags categories |
+| `Core.lua` | Lifecycle, migration and defaults, event wiring, slash commands |
 
 ## 3. SavedVariables Data Model
 
-Root object: `ICantEvenRightNowDB`
+Root: `ICantEvenRightNowDB` (account-wide).
 
-Key sections:
+| Key | Contents |
+|---|---|
+| `schemaVersion` | Current schema (2). Set by `Migration.lua` |
+| `rules.items[itemID]` | `protect`, `ignore`, `neverSell`, `keepReason` (`keepsake`/`alt`/`event`/`investment`), `keepUntil`, `name`, `notes`, `createdFrom`, `expansionOverride`, `typeOverride` |
+| `characters["Name-Realm"]` | `name`, `realm`, `className`, `classFile`, `armorSubclass`, `level`, `levelHistory`, `professions`, `equipped[slot]`, `role`, `roleSetAt`, `firstSeen`, `lastSeen`, `scans = { bags, bank }`, `lastScan = { bags, bank }`, onboarding flags |
+| `warband` | `items` (account snapshot), `scannedAt`, `tabs` (`bagID`, `name`, `flags`) |
+| `timeHeld[locationKey]` | `since` and `items[itemID] = firstSeen`; keys `char:<Name-Realm>:bags`, `char:<Name-Realm>:bank`, `warband` |
+| `handoff` | `nextID`, `entries` (`itemID`, `name`, `count`, `from`, `to`, `at`, `state`, `depositedAt`) |
+| `prices[key]` | `price`, `at`; `c:<itemID>` (commodities, region-wide) or `i:<itemID>:<realm>` |
+| `savedFilters` | Saved tasks (route, filters, Actionable only, search, item level, sort); legacy filter-only presets still load |
+| `ui` | Transfer filters (`tabFilters.Transfer`), sort, minimap, and settings (`preselectQuickTasks`, `groupIdenticalRows`, `compactRows`, `contextNotice`, `whereTooltip`, `tipsEnabled`, `betterBagsCategories`, price thresholds) |
+| `tipsSeen`, `whatsNewSeen` | Onboarding state (account-wide) |
+| `migrationBackup[fromVersion]` | Copy of rules, saved presets, and UI settings taken before migrating |
+| `migrationReports` | What each migration carried over, converted, or could not port |
+| `legacy` | Parked obsolete keys (old UI filters, legacy tab filters, removed rule fields) |
+| `errorLog` | Capped Lua error log |
 
-- `rules.items`: Item-ID-specific behavior overrides
-- `context`: Live interaction/combat state flags
-- `lastScan`: Timestamps for bags and bank scans
-- `scans.bags` and `scans.bank`: Last scanned item records
-- `ui`: UI preferences and active filter state (`ui.tabFilters`)
-- `savedFilters`: Array of named filter presets `{ name, expansion, bind, type, slot, upgrade }`
-- `savedFiltersSeeded`: Bool — true after default presets are written once
-- `errorLog`: Capped array of Lua error entries `{ time, msg }`
+## 4. Storage Model
 
-Rule schema (per itemID):
-
-- `protect`
-- `neverSell`
-- `ignore`
-- `expansionOverride`
-- `notes`
-- `createdFrom`
-
-Filter state schema (per tab, under `ui.tabFilters[tabName]`):
-
-- `expansion.include`: expansion ID, `EXPANSION_FILTER_ALL`, `EXPANSION_FILTER_NOT_CURRENT`, or `EXPANSION_FILTER_UNKNOWN`
-- `bind.include`: `BIND_FILTER_ALL`, `"BoE"`, `"WuE"`, `"Soulbound"`, `"Warbound"`, `"BoP"`
-- `type.include`: `"All"` or multi-select table
-- `slot.include`: `"All"` or multi-select table of slot labels
-- `upgrade.include`: `"All"`, `"Upgrade"`, or `"Not Upgrade"`
-- `armorType.include`: `ARMOR_FILTER_ALL` or armor subclass ID (Cloth, Leather, Mail, Plate)
-- `itemLevel.min`, `itemLevel.max`: optional numeric bounds (equippable gear only)
-- `name.includeText`, `name.excludeText`: search strings
-- `hideBlocked`: bool
-
-## 4. Container and Storage Model
-
-Storage tiers represented internally:
-
-- Bags
-- Private Bank
-- Reagent Bank (only when distinct IDs are present in the client)
-- Warband Bank
-- Bank (All Tabs) — convenience aggregate for source/dest selection
-- Bank: [named tab] — individual bank tabs resolved from `C_Bank` API
-
-Container IDs are resolved from `Enum.BagIndex` and refreshed in `RefreshBankTabData`. Overlap removal and compatibility fallbacks are handled in `Shared.lua`.
+- Bags: `Enum.BagIndex` 0 to 5 (normal moves use 0 to 4).
+- Character bank tabs: 6 to 11 (`BankTab:<bagID>` when tab data is known).
+- Warband bank tabs: 12 to 16 (`WarbandTab:<bagID>`); scanned items keep `storageKind = "Warband Bank"`.
+- `Bank (All Tabs)` and `Warband Bank` are aggregates; `Warband (by tab settings)` resolves per item to one tab.
 
 ## 5. Scan Pipeline
 
-Entry point: `Core.ScanInventory(scope, quiet)`
+Entry point: `Core.ScanInventory(scope, quiet)`.
 
-High-level sequence:
+1. Refresh context; resolve scope (`bags`, `bank`, `all`); bank scans require the bank.
+2. Scan container slots (`C_Container`), including quest info (`GetContainerItemQuestInfo`, completion via `C_QuestLog`) captured for the owning character.
+3. Enrich binding details (`GetBindingDetails`).
+4. Store bags and character bank on the current character; Warband items on the account snapshot.
+5. Record time held per location; clean up stale hand-offs.
+6. If item data is missing from the client cache, schedule a bounded retry (`ScheduleItemDataRetry`).
 
-1. Refresh context
-2. Resolve scan scope (`bags`, `bank`, `all`)
-3. Validate required context (bank must be open for bank scan)
-4. Scan container slots using `C_Container` APIs
-5. Build per-item records with metadata from `GetItemInfo`
-6. Enrich binding details via `GetBindingDetails`
-7. Save scan results to `ns.DB.scans`
-8. Schedule cache-warm rescan when item info is incomplete
-
-Scan record fields include:
-
-- identity: `itemID`, `name`, `link`, `icon`, `quality`, `count`
-- location: `scope`, `bagID`, `slot`, `storageKind`, `location`
-- item metadata: `itemLevel`, `equipLoc`, `classID`, `subclassID`, `maxStack`, `sellPrice`, `expansionID`
-- binding metadata: `isBound`, `isSoulbound`, `isWarbandBound`, `accountBankAllowed`, `bindingScope`
+Rescans run when the console opens, at bank and vendor open, and (debounced) on bag and bank slot events.
 
 ## 6. Transfer Pipeline
 
-Entry point: player selects Source, Destination, and filters in the Transfer tab.
+`GetTransferCandidates(source, dest)` builds plans (`item`, `key`, `movable`, `blocked`).
 
-`GetTransferCandidates(source, dest)` produces a list of plan objects:
+`GetTransferBlockReason` checks: combat; same route; bank or vendor context; vendor-sellable; Warband eligibility; Protect / Ignore / Never Sell rules; equipped and keystone blocks; already in the destination; routing (for `Warband (by tab settings)`); and room in the target bags (cached empty-slot and partial-stack checks per refresh).
 
-- `plan.item`: the scanned item record
-- `plan.movable`: bool — can this item be transferred right now
-- `plan.blocked`: string — human-readable block reason if not movable
-- `plan.key`: unique location key for selection tracking
+Execution (`ExecuteTransferOne`, `ExecuteTransferSelected`):
 
-`GetTransferBlockReason(item, source, dest)` checks in order:
+- `VerifySourceSlot` confirms the scanned item is still in the slot, unlocked, and the cursor is empty; stale slots are skipped and trigger a rescan.
+- Moves confirm the pickup before dropping; target slots used by recent moves stay reserved for two seconds.
+- Vendor sales use `C_Container.UseContainerItem` from a click, at most 12 per click (buyback limit); the rest stay selected.
+- Successful moves notify the hand-off queue and schedule a fallback rescan.
 
-1. Protect rule
-2. Context (bank closed, vendor closed, combat)
-3. Source/dest scope mismatch
-4. Never Sell rule (when dest is Vendor)
-5. Free slot availability
-6. Filter applicability
+## 7. Tasks and Home
 
-Execution calls `C_Container.PickupContainerItem` for moves or `C_Container.UseContainerItem` for vendor sells (hardware event context required for vendor).
+- Tasks come from quick tasks (`Filter.lua`), registered tasks (`P.RegisterTask` from Reasons, Value, Warband), and saved tasks.
+- `P.EvaluateTask` counts plans that match the task's filters and predicate: ready (movable now) and waiting (blocked only by context), plus value.
+- `P.GetTaskCards` evaluates all tasks inside a shared evaluation cache (one candidate list per route, one explanation per item).
+- Home shows cards (ready first, then waiting, then empty) and the top notice from `P.RegisterHomeNotice` providers (What's New, welcome back, role question, tips, price and hand-off reminders, opt-ins).
+- `P.OpenTask(name)` applies the task's route and filters, optionally pre-selects safe items, and opens the Transfer view.
 
-After execution: `ScheduleRescanAfterMove` + `Core.RefreshUI`.
+## 8. Reasons
 
-## 7. Filter System
+`P.ExplainItem(item, ctx)` returns all detected reasons and a primary one. Dispositions: keep, free (can go), review (your call), info. Keep always outranks free; a due investment reminder ranks between them. Gear and materials are never called free until roles are assigned.
 
-All filter state lives in `ns.DB.ui.tabFilters[tabName]`, lazily initialised by `EnsureTabFilters`.
+## 9. Value
 
-Matching is stateless: `MatchesTabFilters(item, tabName)` and `PlanMatchesTabFilters(plan, tabName)` read the DB directly.
+`P.GetAuctionPrice` prefers Auctionator (with age), then TSM, then stored own-lookup prices, and marks freshness (commodities 3 days, items 7 days by default). `P.AuctionAdvice` compares auction net (after 5% cut) with vendor value against a minimum gain (5g). `P.IsValueFlagged` protects vendor sales. The own lookup (`P.StartPriceLookup`) queries only owned, tradeable items, one at a time when the throttle is ready, from a click at the auction house.
 
-Saved filter presets:
+## 10. UI Model
 
-- Stored in `ns.DB.savedFilters` as an ordered array
-- Each preset stores: `name`, `expansion`, `bind`, `type`, `slot`, `armorType`, `upgrade`
-- ilvl range and search text are intentionally excluded (too query-specific for reuse)
-- `SeedDefaultSavedFilters` writes two defaults on first load: "Old Gear Dump" and "Upgrade Check"
-- Applying a preset calls `ApplySavedFilter(preset, tabName)`, then `Core.RefreshUI`
+Tabs: Home, Transfer, Characters, Rules, Settings.
 
-## 8. UI Model
+- Home: context line, scan ages, notice strip, six task cards per page.
+- Transfer: task title with "(modified)", route summary, search, Filters and Customize drawers (route, Save as task), grouped or compact rows with reason text, result funnel, contextual action button.
+- Characters: roster with role dropdowns, suggestions, Accept all suggestions.
+- Rules: Protect, Ignore, Never Sell, and keep reasons.
+- Settings: minimap launcher, workflow options, bank/vendor notice mode, tips, BetterBags, command reference.
 
-Tabbed frame (4 tabs):
+## 11. Testing
 
-- Summary
-- Transfer
-- Rules
-- Settings
+- `tests/run.lua` (plain Lua 5.1) runs `tests/**/test_*.lua`.
+- `tests/harness/wow.lua` simulates the client: containers and item cache, cursor and locks, asynchronous server moves, bank tabs, vendor with 12-item buyback, auction house lookups, quests, collections, timers, events, and hardware-event gating for protected calls.
+- `tests/harness/frames.lua` records a headless widget tree so UI flows are driven by simulated clicks.
+- `scripts/Test-Addon.ps1` runs the suite with the static checks; the pre-commit hook runs it on every commit.
+- A real save can be placed in `tests/fixtures/local/` (git-ignored) to exercise migration.
 
-UI state is persisted in DB filters and toggles.
+## 12. Constraints
 
-Transfer tab layout:
+- Transfer intent stays manual: no automated execution.
+- Game behavior (secret values, protected actions, server timing, UI rendering) still needs in-game verification; the offline suite reflects the API as documented.
+- Characters are known only after logging in once with the addon enabled.
 
-1. Source / Destination dropdowns (context-gated: bank options hidden unless bank is open; vendor hidden unless vendor is open)
-2. Preset row: "Preset:" dropdown to load a saved filter, name EditBox, Save and Remove buttons
-3. Filter rows: Expansion, Type, Binding, Slot, Armor Type, Upgrade dropdowns; ilvl min/max inputs; Search text
-4. Action row: "Actionable only" toggle, Transfer All, Transfer Selected, Deselect All buttons
-5. Scrollable item list: FauxScrollFrame, 8 visible rows, each row shows item link, item level, binding, and block reason
+## Triage decisions (`Triage.lua`, `TriageUI.lua`)
 
-Interaction model:
+`db.decisions[itemID] = { choice, at, until_, reason, note, by }` holds the player's decision per item (sell, auction, destroy, keep, use, defer; keep with note "carry" = stays in the bags). Reasons `decided_*` (rank 0.5) make the decision the primary verdict; `IsAuctionCandidate`, `IsValueFlagged`, `NeedsPriceCheck`, `CanGoAndSellable`, `IsHeadedOut` and the pull tasks read it. Sell/auction/destroy decisions are swept once the item is missing from two scans at least two minutes apart (a pull in progress looks the same as "gone"). A decision may carry `keepCount` ("keep N, the rest go"): `P.DecisionSurplus(itemID)` ranks every stack of the item across the account (highest item level, then bags before the character bank before the Warband bank, then larger stacks) and marks the stacks beyond the first N units as surplus; `P.EffectiveDecision(item)` returns the outward decision for a surplus stack and a synthetic keep (`keptCopy`) for the others, keyed by `P.StackKey` (`owner|scope|bag|slot`; the scanner writes `owner`). Every consumer reads `EffectiveDecision`, so pulls, sells and listings act on the surplus only. A decision the game refuses (vendor won't buy, auction house refused) is `decision_blocked` (review) and returns to the queue. `TriageUI.lua` is the screen (queue by location, options from the channels, recommendation from the verdict and the rules, confirm steps, Wowhead edit boxes, keyboard) and registers the "Justify every item" card. The Destroy destination (`P.STORAGE_DESTROY`) is bags only, one item per click (`PickupContainerItem` + `DeleteCursorItem`).
 
-- Source/Destination determines candidates; filters narrow them
-- "Actionable only" hides blocked rows for focused batch operations
-- Hard blockers come from Protect rules, context, capacity, and Never Sell rules
-- Per-row block reason text explains why an item cannot be transferred
+## Housing (`Data.HousingLumber`, `P.HousingEntry`)
 
-Quick access behavior:
+Item class 20 "Housing" (Decor 0, Housing Dye 1, Room 2, Room Customization 3, Exterior Customization 4, Service Item 5) gets the `Housing` type tag. Decor and the hatchet have a `use` channel ("add it to your House Chest" / "learn it"); plans are "unlock it in your house"; dyes have no use channel (applied inside the house). `P.HousingEntry(item)` (ItemData.lua) reads `C_HousingCatalog.GetCatalogEntryInfoByItem` plus the chest counts, cached per scan, and feeds the `decor_item` reason ("New for your house: +N House XP" or "You already hold N in the House Chest", "the chest is full"). Lumber is keyed by item ID in `Data.HousingLumber` (one per expansion tier plus Essence of Lumber): `CraftersFor` returns every character with a non-gathering profession, and the reason is `housing_material` (keep) even with no crafter set up. Research: `.local/docs/Housing_Research_2026-09-28.md` (local).
 
-- Minimap launcher supported
-- Bank/vendor launcher buttons intentionally disabled
+## What can happen to an item (`P.ItemChannels`, Evaluator.lua)
 
-## 9. Slash Command Surface
+One function decides which channels an item can take; every task, block reason and candidate rule reads it. Rules from [Bind](https://warcraft.wiki.gg/wiki/Bind) and [Warbound until Equipped](https://warcraft.wiki.gg/wiki/Warbound_until_Equipped).
 
-Core command groups:
+| Binding | Vendor | Auction | Mail | Trade | Warband bank |
+|---|---|---|---|---|---|
+| Soulbound (bound, not Warbound) | if it has a price | no | no | no | only if the game allows it |
+| Quest item | no | no | no | no | no |
+| Warbound, Warbound until equipped | if it has a price | no | own characters only | no | yes (unless the game refuses) |
+| BoE / unbound | if it has a price | yes | yes | yes | yes (unless the game refuses) |
+| Binding not confirmed yet | if it has a price | no | no | no | as scanned |
 
-- open and scan: `/icanteven`, `/icanteven scan [bags|bank|all]`
-- tab navigation: `summary`, `transfer`, `rules`, `settings`
-- mode presets: `dump [expansion]`, `recall [expansion]`, `organize`, `vendor`
-- quick access: `minimap`, `buttons`
-- diagnostics: `debug`, `diag`, `bankdiag`
-- error log: `errors`, `clearerrors`
-
-## 10. Strengths and Constraints
-
-### Strengths
-
-- Conservative defaults reduce accidental destructive actions
-- Good explainability (block reasons surfaced per item)
-- Single Transfer tab replaces the old three-tab Move/Organize/Vendor split
-- Filter system is comprehensive: Expansion, Binding, Type, Slot, Armor Type, Upgrade, ilvl, Search
-- Saved filter presets reduce repetitive setup for common workflows
-- Works across modern and shifting bank API layouts
-
-### Constraints
-
-- Transfer intent is always manual (no automated execution)
-- Depends on asynchronous WoW data settlement and frame timing
-- Filter semantics are comprehensive but can require multiple dropdowns for precise targeting
+Overrides: a vendor refusal (`ns.DB.vendorRefused`) or an auction-house refusal (`ns.DB.auctionRefused`) closes that channel; a Never Sell rule closes vendor and auction. No auction channel means no auction advice, no value flag and no price check (`Value.lua`), so an item no character can use is a vendor sale whatever its auction price. Listings are confirmed 1.5 s after posting: an item still in the bag was refused, and the game's error message is remembered.

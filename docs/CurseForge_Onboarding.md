@@ -38,14 +38,14 @@ The workflow will create the packaged addon zip and publish it through the packa
 If CurseForge requires a manual file upload (for example, first-project review), build a local zip with:
 
 ```powershell
-.\scripts\Build-Release.ps1 -Version 0.2.0
+.\scripts\Build-Release.ps1
 ```
 
 Upload the generated file from `build/` as a Retail release.
 
 ## Release Checklist
 
-1. Verify the addon in-game after `./scripts/Copy-ToWoW.ps1` and `/reload`.
+1. Verify the addon in-game after `./scripts/Link-ToWoW.ps1` (one-time junction) and `/reload`.
 2. Update `CHANGELOG.md` from `[Unreleased]` to the release version and date.
 3. Confirm `## Version:` in `ICantEvenRightNow.toc` matches the tag.
 4. Confirm `## Interface:` in `ICantEvenRightNow.toc` includes current Retail interface version(s).

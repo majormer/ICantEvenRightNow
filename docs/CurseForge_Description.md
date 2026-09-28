@@ -1,123 +1,140 @@
 # I Can't Even Right Now (With My Bags and Bank)
 
-I Can't Even Right Now (With My Bags and Bank) is a conservative inventory cleanup console for World of Warcraft Retail.
+*A Finalomega Labs project.*
 
-It helps you scan your bags, bank, and warband bank, then move or sell items on your terms. You pick where items come from, where they go, and which ones to act on. Nothing moves or sells automatically.
+**Your bank is not a museum.**
 
-## Who This Addon Is For
+Somewhere in your bank is a stack of Titan Training Matrices that stopped doing anything two expansions ago. Next to it: a ring from a questline you finished in 2024, 31 archaeology crates, and three copies of a trinket "just in case." Your Warband bank is full, and your alts are wearing worse gear than what's sitting in it.
 
-- Players with crowded bags who want safer cleanup than one-click auto-sort tools.
-- Alt-heavy players who manage bank and warband storage regularly.
-- Anyone who wants clear reasoning before moving or selling items.
+I Can't Even Right Now is an **anti-hoarding addon**. Every item in your bags, bank and Warband bank has to justify its slot. The addon tells you what each one is for, which of your characters could use it, and what it's worth, and then helps you bank it, hand it to an alt, sell it, auction it, or let it go. Nothing moves until you click.
 
-If you want full automation with zero review, this addon is probably not a fit. If you want visibility and control, it is designed for exactly that.
+<!-- Screenshot: the Justify every item screen on one item -->
 
-## Features
+## Justify every item
 
-- Four-tab cleanup console: Summary, Transfer, Rules, and Settings.
-- Scan bags, private bank (all tabs or individual), and warband bank storage.
-- Unified Transfer tab: pick any Source and Destination — Bags, Bank tabs, Warband Bank, or Vendor — and act on exactly that combination.
-- Filter by expansion, binding, item type, slot, upgrade potential, item level, or name search within any transfer.
-- Saved filter presets: save and reload common filter combinations instantly.
-- Scrollable item list with per-item block reasons.
-- Actionable-only toggle: hide blocked rows and focus on what you can move right now.
-- Per-item block reasons explain exactly why an item cannot be moved (bank closed, vendor closed, no slots, item rule, equipped, etc.).
-- Protect current-content, quest, legendary, and rule-protected items by default.
-- Per-item rules: Protect, Ignore, Never Sell. Rules always win.
-- Context checks for bank access, vendor access, and combat state gate all actions.
-- Summary tab shows inventory scope counts: items in bags, items in bank, old-content in bags and bank, warband bank items, active rules, and unclassified items.
-- Error log captures Lua errors to SavedVariables for diagnostics.
+The heart of the addon. Open **Justify every item** and go through your bank, Warband bank or bags one item at a time:
 
-## First 5 Minutes (Quick Start)
+- **What it is and why it's here:** "Appearance already collected." "Starts a quest you already completed." "Used by Stitcher (Tailoring)." "Upgrade for Tankalt."
+- **What you can actually do with it:** only the options that exist for that item. Soulbound items can't be auctioned, so the addon won't offer it.
+- **A recommendation,** with the reason and a Wowhead link.
+- **Your decision sticks.** Choose sell, auction, keep, carry, use, destroy or "ask me in 30 days", and every task acts on it from then on. Keep 60 of 620 oils and auction the rest? Type 60 in the Keep box.
 
-1. Open the console with `/icanteven`.
-2. Click `Scan Bags` on the Transfer tab.
-3. Open your bank, then click `Scan Bank`.
-4. Set **From** to your source (e.g. Bags) and **To** to your destination (e.g. Bank (All Tabs)).
-5. Filter by expansion and item type, select rows, then click **Transfer Selected**.
+Kept something as an upgrade that nobody needs anymore? It comes back and asks again.
 
-Tip: use the Actionable Only checkbox to hide anything currently blocked so you only see what you can act on right now.
+## Bag space and bank space, in a few clicks
 
-## Common Workflows
+<!-- Screenshot: Home with the trip line -->
 
-### 1) Legacy Bag Cleanup
+Type `/icanteven` and Home shows what's ready, with counts and value: "Deposit Old Items: 23 ready", "Sell Items That Can Go: 14 (38g)". It even plans the trip: *here: bank (4 tasks) → auction house (8 to list) → vendor (44 to sell)*.
 
-- Open bank.
-- Transfer tab → From: Bags, To: Bank (All Tabs).
-- Filter Expansion to an old expansion.
-- Review rows and click Transfer Selected.
+Built-in tasks cover the usual chores:
 
-### 2) AH Prep (Find Auctionable Gear)
+- Bank old-expansion items; pull upgrades and auctionable BoEs back out
+- Sell what can go, junk and spent consumables included
+- Move crafting materials to where your crafters can reach them
+- Destroy what nothing will take (one click each, and only what you decided or what truly has no buyer)
 
-- Open bank.
-- Transfer tab → From: Bank (All Tabs), To: Bags.
-- Filter Binding to BoE (not Type).
-- Select and recall only what you want to list.
+Save any custom transfer as your own task.
 
-### 3) Vendor Pass
+## Warband bank and alts
 
-- At a vendor with items in your bags.
-- Transfer tab → From: Bags, To: Vendor.
-- Filter by Expansion (Not current) and Type (Consumable) for conservative selling.
-- Review rows — Never Sell rules block protected items automatically — then Sell Selected.
+- Give each character a role (Main, Leveling, Crafting only, Utility), and the addon knows who can use what: "Upgrade for Tankalt (Leveling)", "Used by Stitcher (Tailoring)".
+- **Warband (by tab settings)** sends each item to the tab whose Blizzard "assign to" settings match it. Your tab settings are never changed.
+- Hand an item to a specific alt, and that character sees **Waiting for You** when it logs in.
+- Item tooltips can show how many your whole account holds, and where. `/icanteven where <name>` finds it.
 
-### 4) Warband Storage Shuffle
+## Sell and auction without the guesswork
 
-- Transfer tab → From: Bags, To: Warband Bank (or vice versa).
-- No special mode needed; it is just another Source/Destination pair.
+- Prices from Auctionator or TSM, or look up your own items at the auction house. Each price shows its source and age.
+- Items worth more at auction are flagged at the vendor and never pre-selected for selling.
+- **One-button listing:** at the auction house, each item shows the price it will post at. Click once per auction (the game allows one per click).
+- **One auction character:** tick "Auctions" on one character, and every other character hands its auctionables to that one through the Warband bank. All your gold and returns end up in one mailbox, and a reminder warns you before auction mail expires.
 
-## Per-Item Rules
+## Transmog, collectibles and quests
 
-Rules apply regardless of what Source or Destination you choose.
+The addon checks what letting go would cost you before it suggests anything:
 
-- **Protect** — blocks item from any transfer.
-- **Ignore** — blocks item and marks it as intentionally skipped.
-- **Never Sell** — blocks the item when Vendor is the destination; other transfers are unaffected.
+- Appearances you haven't collected, pets you have room for, toys and recipes you haven't learned
+- Items a quest in your log uses; destroying those would drop the quest, so the addon won't
+- Set pieces, gear on an upgrade track, and anything in a saved equipment set
 
-Add rules from the Rules tab or via the rule menu on any Transfer row. Remove them at any time.
+## Safety first
 
-## Slash Commands
+- Nothing moves, sells, lists or gets destroyed without your selection and click.
+- Every action re-checks the bag slot first; items that moved are skipped.
+- Protect, Ignore and Never Sell rules always win.
+- Selling stops at 12 items per click, so every sale stays in the vendor's buyback.
+- Results are honest: "22 moved, 3 blocked: Warband tab full" rather than a quiet partial move.
+- Moves can be undone with `/icanteven undo`.
 
-- `/icanteven` or `/icant` — open the cleanup console.
-- `/icanteven scan [bags|bank|all]` — scan storage.
-- `/icanteven summary`, `transfer`, `rules`, `settings` — open a specific tab.
-- `/icanteven dump <expansion>` — pre-configure Transfer for a Bags → Bank dump filtered to that expansion.
-- `/icanteven recall <expansion>` — pre-configure Transfer for a Bank → Bags recall filtered to that expansion.
-- `/icanteven vendor` — pre-configure Transfer for a Bags → Vendor sell pass.
-- `/icanteven minimap` — toggle the minimap launcher.
-- `/icanteven buttons` — show launcher status.
-- `/icanteven bankdiag` or `/icanteven bankids` — print bank container diagnostics.
-- `/icanteven errors` — show captured Lua errors.
-- `/icanteven clearerrors` — clear the error log.
+<!-- Screenshot: a transfer result ("22 moved, 3 blocked") -->
 
-## Filters Explained
+## Plays well with others
 
-- **Expansion filter**: Items by expansion (current, old, unknown)
-- **Binding filter**: Items by bind type (BoE, WuE, Soulbound, Warbound, BoP)
-- **Type filter**: Items by category (Consumable, Reputation, Quest, etc.)
-- **Slot filter**: Gear by equipment slot (Head, Chest, Finger, etc.)
-- **Upgrade filter**: Gear that beats your currently equipped item level
-- **Item Level filter**: Gear by minimum/maximum item level
-- **Armor Type filter**: Armor by material type (Cloth, Leather, Mail, Plate)
+This addon decides what should stay. It doesn't replace the addons you already use:
 
-## New User FAQ
+- **Junk sellers** (Scrap, Dejunk): keep them for greys. This addon handles everything that isn't grey.
+- **Bag addons** (Baganator, BetterBags, ArkInventory): keep your look. Optional BetterBags categories show Protected, Never Sell, Sell Candidates, For the Warband, Old Content and Waiting for You.
+- **Price addons** (Auctionator, TSM): used for prices when installed, never required.
 
-### Why do I see no rows?
+## First 5 minutes
 
-Most often this is one of these:
+1. Type `/icanteven`. Answer one question: what is this character? A suggestion is ready.
+2. Visit a bank. A small notice names what's ready; open it.
+3. Review the list, click **Select Movable**, then **Deposit**.
+4. Visit a vendor and use **Sell Items That Can Go**.
+5. When you have ten minutes, open **Justify every item**.
 
-- You have not scanned the relevant storage yet (use Scan Bags or Scan Bank).
-- The required context is not open (bank must be open to use bank sources/destinations; vendor must be open to sell).
-- Your current filters or the Actionable Only toggle are hiding matching rows.
+## Slash commands
 
-### Will this sell or move things automatically?
+- `/icanteven` or `/icant`: open Home
+- `/icanteven characters`: roles
+- `/icanteven why [all]`: why items are being kept
+- `/icanteven where <name>`: find an item across your characters and Warband bank
+- `/icanteven explain <name>`: everything the addon knows about one item
+- `/icanteven undo`: pre-select the last move to reverse it
+- `/icanteven transfer`, `rules`, `settings`, `migration`, `minimap`, `errors`
 
-No. Actions require your explicit row selection and a button click.
+## FAQ
 
-### Can I protect items permanently?
+**Will it sell, move or destroy things automatically?**
+No. Every action needs your selection and a click. Pre-selecting items when a task opens is an optional setting, off by default, and destroys are never pre-selected unless you decided on them.
 
-Yes. Add a Protect or Never Sell rule from any Transfer row's rule menu, or from the Rules tab.
+**Does it post auctions?**
+Yes, at the auction house: each item shows the price it will post at, and each click posts one auction (the game's rule). Items with no price, or a price far above their usual one, are blocked with the reason so you can price them yourself.
 
-## Philosophy
+**Do I need Auctionator or TSM?**
+No. They make prices better, but the addon can look up prices for your own items at the auction house.
 
-This addon is cautious on purpose. It is not a bag replacement and it is not an automatic cleanup tool. It gives you a clearer view of your inventory, explains why each item is blocked or movable, and lets you decide exactly what to transfer.
+**Can I undo something?**
+Moves: `/icanteven undo` pre-selects the last batch so you can move it back. Sales: the addon sells 12 per click so everything stays in the vendor's buyback. Destroys can't be undone, which is why each one takes its own click.
+
+**Why does it say "Getting ready..."?**
+After a reload, or when a bank or vendor opens, the game can take a moment to deliver item details. The addon waits for them instead of guessing, then shows one stable result.
+
+**Something sold that I didn't sell. Was it this addon?**
+The addon only sells from its own Sell button. If you also run an auto-seller, it may have acted first; the addon reports what it actually sold.
+
+**Why doesn't it know about my other characters?**
+Each character appears after logging in once with the addon enabled. After that, you can set its role from any character.
+
+**I only play one character. Is it still useful?**
+Yes. Roles matter most with alts, but banking, selling, auction pricing and Justify every item work the same with one character.
+
+## Upgrading from 0.5
+
+Your rules, saved presets and settings carry over. A "What's new" card explains the changes, and `/icanteven migration` lists exactly what was carried over.
+
+## The idea
+
+The addon finds, explains and routes. You decide. It asks at most one question per character, and skipping any question is always safe.
+
+## Support and credits
+
+- Guide and FAQ: https://github.com/majormer/ICantEvenRightNow/wiki
+- Bugs and requests: https://github.com/majormer/ICantEvenRightNow/issues
+- Optional support on Ko-fi: https://ko-fi.com/finalomega
+
+I Can't Even Right Now (With My Bags and Bank) is a Finalomega Labs project. Source code is MIT licensed; the addon artwork and the Finalomega Labs brand assets are all rights reserved and are not licensed for reuse outside official Finalomega Labs releases.
+
+© 2026 Finalomega Labs. All rights reserved.
