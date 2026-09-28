@@ -72,8 +72,13 @@ local INVTYPE_TO_SLOTS = {
     INVTYPE_SHIELD         = {17},
     INVTYPE_WEAPONOFFHAND  = {17},
     INVTYPE_HOLDABLE       = {17},
-    INVTYPE_RANGED         = {18},
-    INVTYPE_RANGEDRIGHT    = {18},
+    -- Bows, guns, crossbows and wands go in the main hand: the ranged slot
+    -- (18) was removed from the game. Mapped to 18, every ranged weapon
+    -- compared against an empty slot and read "Upgrade for Dorftastic"
+    -- (a level 83 Hunter) down to item level 13 (2026-09-28).
+    INVTYPE_RANGED         = {16},
+    INVTYPE_RANGEDRIGHT    = {16},
+    INVTYPE_THROWN         = {16},
 }
 
 -- Returns true if the item can be equipped (has a valid equipLoc).

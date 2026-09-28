@@ -438,3 +438,32 @@ T.test("an off-hand piece is no upgrade next to a two-hander, and its plain keep
         if c.name == "Pull Bank Upgrades" then T.eq(c.ready, 0, "no off-hand upgrade under a staff") end
     end
 end)
+
+-- In game (2026-09-28) a level 83 Hunter's bags and bank read "Upgrade for
+-- Dorftastic" on ranged weapons down to item level 13: ranged weapons were
+-- mapped to the removed ranged slot (18), never recorded, so level 0.
+T.test("ranged weapons compare against the main hand (the ranged slot is gone)", function()
+    local HUNTER = { name = "Main", realm = "R", level = 83, classFile = "HUNTER" }
+    local g = T.game({ player = HUNTER, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(9301, { name = "Worn Bow", classID = 2, subclassID = 2, quality = 3, equipLoc = "INVTYPE_RANGED",
+            itemLevel = 139, requiredLevel = 70, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 50 } })
+        w:defineItem(9302, { name = "Old Crossbow", classID = 2, subclassID = 18, quality = 4, equipLoc = "INVTYPE_RANGEDRIGHT",
+            itemLevel = 15, requiredLevel = 10, bindType = 1, sellPrice = 100, expansionID = 3,
+            stats = { ITEM_MOD_AGILITY_SHORT = 5 } })
+        w:defineItem(9303, { name = "Better Gun", classID = 2, subclassID = 3, quality = 3, equipLoc = "INVTYPE_RANGEDRIGHT",
+            itemLevel = 160, requiredLevel = 70, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 60 } })
+        w:put(0, 1, 9302, 1)
+        w:put(0, 2, 9303, 1)
+        w.equippedItems[16], w.equipped[16] = 9301, 139
+    end })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "leveling")
+    P.RefreshEquipped()
+    g:Core().ScanInventory("bags", true)
+    T.ok(P.GetCurrentCharacter().twoHander, "a bow fills both hands")
+    T.no((P.WhoBenefits(scanned(g, 9302)) or ""):find("Upgrade", 1, true), "item level 15 is no upgrade over 139")
+    T.contains(P.WhoBenefits(scanned(g, 9303)) or "", "Upgrade for you")
+end)
