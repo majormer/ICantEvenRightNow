@@ -87,7 +87,9 @@ local REASONS = {
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
     pet_battle_supply    = { disposition = "keep",   label = "Pet battle supply: levels or heals your battle pets" },
-    open_container       = { disposition = "keep",   label = "Holds loot: open it", rank = 0.9 },
+    -- bags: it's opened from the bags (in game Deposit Old Items offered
+    -- Glowheart's five satchels for the bank, 2026-09-28).
+    open_container       = { disposition = "keep",   label = "Holds loot: open it", rank = 0.9, bags = true },
     bag_equip            = { disposition = "keep",   label = "A bag for an empty bag slot: equip it" },
     bag_upgrade          = { disposition = "keep",   label = "Bigger than a bag you use: swap it in" },
     bag_outgrown         = { disposition = "free",   label = "No bigger than any bag you use" },

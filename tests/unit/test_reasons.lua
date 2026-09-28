@@ -491,6 +491,7 @@ T.test("a bag of loot says open it, and Use is offered", function()
     T.ok(channels.use)
     T.eq(channels.useWhat, "open it")
     T.eq(game:P().TriageOptions(item).recommended, "use")
+    T.ok(game:P().IsHeadedOut(item), "stays in the bags: it is opened from there")
 end)
 
 -- In game (Glowheart, 2026-09-28) Battle-Training Stones and a Scroll of
