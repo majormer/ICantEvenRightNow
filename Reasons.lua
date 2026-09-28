@@ -569,6 +569,23 @@ function P.PlayerEquippedLevel(equipLoc)
     return LowestEquipped(char, slots)
 end
 
+-- Gear far below what every wearer uses in that slot (a quarter or more
+-- lower): a set bonus or a spec fit can't make up for that. In game
+-- (Dorftastic, level 83 Hunter, 2026-09-28) item level 15 Firelands epics
+-- stayed "your call": five set pieces ("costs 130 item levels in that
+-- slot") and four bows, because weapons and set pieces were never outgrown.
+local FAR_BELOW_RATIO = 0.75
+local function FarBelowWearers(item, users)
+    local slots = P.INVTYPE_TO_SLOTS and P.INVTYPE_TO_SLOTS[item.equipLoc or ""]
+    if not slots or not item.itemLevel or item.itemLevel <= 0 or #users == 0 then return false end
+    for _, char in ipairs(users) do
+        local lowest = LowestEquipped(char, slots)
+        if not lowest or lowest <= 0 or item.itemLevel > lowest * FAR_BELOW_RATIO then return false end
+    end
+    return true
+end
+P.FarBelowWearers = FarBelowWearers
+
 local function UpgradeUsers(item, ownerKey)
     local users = {}
     for _, char in ipairs(GearUsers(item, ownerKey)) do
@@ -885,9 +902,16 @@ local function ExplainItem(item, ctx)
                 local facts = P.ItemTooltipFacts and P.ItemTooltipFacts(item) or { state = "unknown" }
                 local setID = P.ItemSetID and P.ItemSetID(item)
                 local setReason, setEvidence
-                if setID and facts.state == "ready" then setReason, setEvidence = SetVerdict(item, setID, facts, users) end
+                local farBelow = facts.state == "ready" and FarBelowWearers(item, users)
+                if setID and facts.state == "ready" and not farBelow then
+                    setReason, setEvidence = SetVerdict(item, setID, facts, users)
+                end
                 if setReason then
                     add(setReason, (setReason ~= "set_completes" and keptForNow or "") .. setEvidence)
+                elseif farBelow and (not facts.upgradable or not CanOutgrowWearers(item, facts, users)) then
+                    add("outgrown_no_upgrade", (keptForNow or "") .. "Wearable by " .. Names(users, "name")
+                        .. ", but far below what they wear (item level " .. item.itemLevel .. ")"
+                        .. (setID and "; no set bonus makes up for that" or ""))
                 elseif IsSituational(item) then
                     -- Item level is a weak test for these: an on-use effect or a
                     -- spec, role or content fit can matter more (player's point).

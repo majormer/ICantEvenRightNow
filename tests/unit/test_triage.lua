@@ -467,3 +467,34 @@ T.test("ranged weapons compare against the main hand (the ranged slot is gone)",
     T.no((P.WhoBenefits(scanned(g, 9302)) or ""):find("Upgrade", 1, true), "item level 15 is no upgrade over 139")
     T.contains(P.WhoBenefits(scanned(g, 9303)) or "", "Upgrade for you")
 end)
+
+-- In game (Dorftastic, level 83 Hunter wearing 139, 2026-09-28) item level 15
+-- Firelands epics stayed "your call": set pieces ("costs 130 item levels in
+-- that slot") and bows (weapons were never outgrown).
+T.test("gear far below what its wearers use is outgrown, set piece or weapon", function()
+    local HUNTER = { name = "Main", realm = "R", level = 83, classFile = "HUNTER" }
+    local g = T.game({ player = HUNTER, setup = function(w)
+        F.defineItems(w)
+        w:defineItem(9401, { name = "Worn Bow", classID = 2, subclassID = 2, quality = 3, equipLoc = "INVTYPE_RANGED",
+            itemLevel = 139, requiredLevel = 70, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 50 } })
+        w:defineItem(9402, { name = "Ancient Epic Bow", classID = 2, subclassID = 2, quality = 4, equipLoc = "INVTYPE_RANGED",
+            itemLevel = 15, requiredLevel = 10, bindType = 1, sellPrice = 300, expansionID = 3,
+            stats = { ITEM_MOD_AGILITY_SHORT = 5 } })
+        w:defineItem(9403, { name = "Nearly As Good Bow", classID = 2, subclassID = 2, quality = 3, equipLoc = "INVTYPE_RANGED",
+            itemLevel = 130, requiredLevel = 70, bindType = 1, sellPrice = 100, expansionID = 11,
+            stats = { ITEM_MOD_AGILITY_SHORT = 45 } })
+        w:put(0, 1, 9402, 1)
+        w:put(0, 2, 9403, 1)
+        w.equippedItems[16], w.equipped[16] = 9401, 139
+    end })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "leveling")
+    P.RefreshEquipped()
+    g:Core().ScanInventory("bags", true)
+    local e = P.ExplainScanned(scanned(g, 9402))
+    T.eq(e.primary.id, "outgrown_no_upgrade", "item level 15 against 139 can go")
+    T.contains(e.evidence, "far below")
+    T.ok(P.ExplainScanned(scanned(g, 9403)).primary.id ~= "outgrown_no_upgrade",
+        "a weapon close to the worn one stays your call")
+end)

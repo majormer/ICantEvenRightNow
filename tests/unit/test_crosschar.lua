@@ -305,7 +305,9 @@ T.test("equipment sets keep items; max-level trinkets and weapons are your call,
     T.eq(explain(8301).disposition, "review")
     T.eq(explain(8302).primary.id, "equipment_set")
     T.contains(explain(8302).evidence, "Main's M+ set")
-    T.eq(explain(8303).primary.id, "outgrown_gear", "leveling weapons below max level stay ordinary")
+    -- 180 against a worn 300 is far below (2026-09-28: item level 15 bows on a
+    -- level 83 Hunter stayed "your call"); it can go like other outgrown gear.
+    T.eq(explain(8303).primary.id, "outgrown_no_upgrade", "a weapon far below the worn one is outgrown")
 end)
 
 T.test("soulbound gear only counts for the character who owns it", function()
