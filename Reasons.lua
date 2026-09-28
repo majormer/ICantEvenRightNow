@@ -872,12 +872,14 @@ local function ExplainItem(item, ctx)
         end
     end
     -- The player's decision (Triage.lua) comes first; a run-out defer asks again.
-    local decision = P.GetDecision and item.itemID and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and item.itemID and P.EffectiveDecision(item)
     if decision then
         local when = decision.at and date and date("%Y-%m-%d", decision.at) or nil
         local stamp = when and ("On " .. when) or "Your decision"
         local blocked = P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision)
-        if blocked then
+        if decision.keptCopy then
+            add("decided_keep", stamp .. ": keep " .. decision.keepCount .. ", the rest " .. decision.restChoice .. " (this is a kept one)")
+        elseif blocked then
             add("decision_blocked", "You chose " .. decision.choice .. ", but " .. blocked .. ". Destroy it, or keep it.")
         elseif decision.choice == "defer" then
             if decision.due then
@@ -890,7 +892,8 @@ local function ExplainItem(item, ctx)
         elseif decision.choice == "keep" then
             add("decided_keep", stamp .. (decision.reason and (": " .. decision.reason) or "") .. (decision.note and (" (" .. decision.note .. ")") or ""))
         else
-            add("decided_" .. decision.choice, stamp .. (decision.note and (": " .. decision.note) or ""))
+            add("decided_" .. decision.choice, stamp .. (decision.note and (": " .. decision.note) or "")
+                .. (decision.keepCount and (": beyond the " .. decision.keepCount .. " you keep") or ""))
         end
     end
     if #reasons == 0 then add("unexplained") end
@@ -1153,7 +1156,7 @@ end
 -- Decided to destroy: pulled from a bank like anything that can go, then
 -- destroyed from the bags one click at a time.
 local function DecidedToDestroy(item)
-    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
     return decision ~= nil and decision.choice == "destroy"
 end
 P.DecidedToDestroy = DecidedToDestroy
@@ -1162,7 +1165,7 @@ local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
     if P.MerchantRefused and P.MerchantRefused(item.itemID) then return false end
     -- A decision to auction or destroy keeps the item away from the vendor.
-    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
     if decision and (decision.choice == "auction" or decision.choice == "destroy") then return false end
     if P.IsValueFlagged and P.IsValueFlagged(item, "Vendor") then return false end
     local explanation = P.ExplainScanned(item)

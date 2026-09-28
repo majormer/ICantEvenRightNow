@@ -108,6 +108,21 @@ T.test("the screen: prices cover every stack of the item, with the unit price al
     T.contains(frame.buttons.auction:GetText(), P.FormatMoney(listing * 30))
 end)
 
+T.test("the screen: a number in the Keep box makes Sell/Auction/Destroy apply to the rest", function()
+    local g = game(function(w)
+        w:put(0, 1, I.OLD_POTION, 5)
+        w:put(0, 2, I.OLD_POTION, 5)
+    end)
+    local P = g:P()
+    local frame = P.ShowTriage("bags")
+    T.ok(frame.keepBox:IsShown(), "two stacks: the box is offered")
+    frame.keepBox:SetText("5")
+    frame:GetScript("OnKeyDown")(frame, "2")   -- Sell
+    local decision = P.GetDecision(I.OLD_POTION)
+    T.eq(decision.choice, "sell") T.eq(decision.keepCount, 5)
+    T.contains(frame.summary:GetText() or frame.title:GetText(), "")
+end)
+
 T.test("the screen: Leave puts the item at the end; Carry stores keep+carry; Previous goes back", function()
     local g = game(function(w)
         w:put(0, 1, I.LINEN, 20)

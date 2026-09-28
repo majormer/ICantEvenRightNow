@@ -44,7 +44,13 @@ function P.SetDecision(itemID, choice, opts)
     if choice == "defer" then
         record.until_ = Now() + (tonumber(opts.days) or P.TriageDeferDays()) * DAY
     end
+    -- "Keep N, the rest go": only an outward choice can have a kept share.
+    local keepCount = tonumber(opts.keepCount)
+    if keepCount and keepCount > 0 and (choice == "sell" or choice == "auction" or choice == "destroy") then
+        record.keepCount = math.floor(keepCount)
+    end
     Store()[itemID] = record
+    P.InvalidateDecisionSurplus()
     P.Log("triage", "decision %s: %s (%s)%s", tostring(itemID), choice, tostring(opts.name),
         record.until_ and (" until " .. (date and date("%Y-%m-%d", record.until_) or record.until_)) or "")
     return record
@@ -55,7 +61,73 @@ function P.ClearDecision(itemID)
     if not itemID then return false end
     local had = Store()[itemID] ~= nil
     Store()[itemID] = nil
+    P.InvalidateDecisionSurplus()
     return had
+end
+
+-- ---------------------------------------------------------------------------
+-- Quantity decisions: "keep N, the rest go"
+-- A decision is per item, but the player keeps 60 Phoenix Oil and auctions
+-- the rest, or keeps one of five duplicate trinkets and sells four. The
+-- kept share is the first N units in this order: highest item level first,
+-- then bags before the character bank before the Warband bank, then larger
+-- stacks first. A stack that straddles the boundary is kept whole. Every
+-- other stack is "surplus" and carries the outward decision.
+-- ---------------------------------------------------------------------------
+local SCOPE_ORDER = { bags = 0, bank = 1, warband = 2 }
+local surplusCache = {}
+
+function P.InvalidateDecisionSurplus() surplusCache = {} end
+
+-- One key per stack. `owner` is written by the scanner (character key, or
+-- "warband"); older scans without it still key consistently on "".
+function P.StackKey(item)
+    return tostring(item.owner or "") .. "|" .. tostring(item.scope or "") .. "|" .. tostring(item.bagID or "") .. "|" .. tostring(item.slot or "")
+end
+
+function P.DecisionSurplus(itemID)
+    local cached = surplusCache[itemID]
+    if cached then return cached end
+    local record = Store()[itemID]
+    local surplus = {}
+    if record and record.keepCount and P.AllSnapshots then
+        local stacks = {}
+        for _, snapshot in ipairs(P.AllSnapshots()) do
+            for _, item in ipairs(snapshot.items or {}) do
+                if item.itemID == itemID then stacks[#stacks + 1] = item end
+            end
+        end
+        table.sort(stacks, function(a, b)
+            local la, lb = a.itemLevel or 0, b.itemLevel or 0
+            if la ~= lb then return la > lb end
+            local sa, sb = SCOPE_ORDER[a.scope] or 3, SCOPE_ORDER[b.scope] or 3
+            if sa ~= sb then return sa < sb end
+            local ca, cb = a.count or 1, b.count or 1
+            if ca ~= cb then return ca > cb end
+            return P.StackKey(a) < P.StackKey(b)
+        end)
+        local kept = 0
+        for _, stack in ipairs(stacks) do
+            if kept < record.keepCount then
+                kept = kept + (stack.count or 1)
+            else
+                surplus[P.StackKey(stack)] = true
+            end
+        end
+    end
+    surplusCache[itemID] = surplus
+    return surplus
+end
+
+-- The decision as it applies to this particular stack: a kept share reads as
+-- a keep ("kept copy"); a surplus stack carries the outward choice.
+function P.EffectiveDecision(item)
+    if not (item and item.itemID) then return nil end
+    local record = P.GetDecision(item.itemID)
+    if not record or not record.keepCount then return record end
+    if P.DecisionSurplus(item.itemID)[P.StackKey(item)] then return record end
+    return { choice = "keep", keptCopy = true, keepCount = record.keepCount, restChoice = record.choice,
+        at = record.at, by = record.by, name = record.name, note = record.note }
 end
 
 -- The decision for an item, or nil. A defer that has run out is returned
@@ -195,7 +267,7 @@ end
 function P.DecideCommand(args)
     local itemID, choice, rest = (args or ""):match("^(%d+)%s+(%a+)%s*(.-)$")
     if not itemID then
-        return "Usage: /icanteven decide <itemID> sell|auction|destroy|keep|use|defer|clear [days or note]"
+        return "Usage: /icanteven decide <itemID> sell|auction|destroy|keep|use|defer|clear [keep <n>] [days or note]"
     end
     choice = choice:lower()
     if choice == "clear" then
@@ -210,10 +282,15 @@ function P.DecideCommand(args)
         if name then break end
     end
     local days = choice == "defer" and tonumber(rest) or nil
-    local record, err = P.SetDecision(itemID, choice, { name = name, days = days, note = (not days and rest ~= "") and rest or nil })
+    -- "<choice> keep <n> [note]": keep n units, the rest follow the choice.
+    local keepCount, afterKeep = rest:match("^keep%s+(%d+)%s*(.-)$")
+    if keepCount then rest = afterKeep end
+    local record, err = P.SetDecision(itemID, choice, { name = name, days = days, keepCount = keepCount,
+        note = (not days and rest ~= "") and rest or nil })
     if not record then return err end
     if Core.RefreshUI and P.UI and P.UI.frame and P.UI.frame:IsShown() then Core.RefreshUI() end
     return "Decided: " .. (name or ("item " .. itemID)) .. " -> " .. choice
+        .. (record.keepCount and (" (keep " .. record.keepCount .. ", the rest " .. choice .. ")") or "")
         .. (record.until_ and (" until " .. (date and date("%Y-%m-%d", record.until_) or "")) or "")
         .. ((total or 0) == 0 and " (not in your scans yet)" or "")
 end

@@ -208,6 +208,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 bagID         = bagID,
                 slot          = slot,
                 scope         = scope,
+                owner         = scope == "warband" and "warband" or P.currentCharacterKey,
                 storageKind   = storageKind,
                 location      = FormatItemLocation(bagID, slot, scope, storageKind),
                 classID       = classID,
@@ -404,6 +405,7 @@ function Core.ScanInventory(scope, quiet, isItemDataRetry)
 
     if P.CleanupHandoffs then pcall(P.CleanupHandoffs) end
     if P.SweepDecisions then pcall(P.SweepDecisions) end
+    if P.InvalidateDecisionSurplus then P.InvalidateDecisionSurplus() end
 
     -- A background item-data retry after the addon settled must not change
     -- what's on screen by itself: flag it instead (Readiness.lua).

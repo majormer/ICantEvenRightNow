@@ -260,15 +260,28 @@ local function Render()
     local decision = entry.decision
     local blocked = decision and P.DecisionBlocked and P.DecisionBlocked(item.itemID, decision)
     frame.previousDecision:SetText(decision and ("Current decision: " .. decision.choice
+        .. (decision.keepCount and (" (keep " .. decision.keepCount .. ")") or "")
         .. (decision.at and date and (" on " .. date("%Y-%m-%d", decision.at)) or "")
         .. (blocked and (" (not possible: " .. blocked .. ")") or "")) or "")
+    -- Keep box: only when there is more than one to split.
+    local splittable = (entry.count or 1) > 1
+    frame.keepLabel:SetShown(splittable)
+    frame.keepBox:SetShown(splittable)
+    if state.keepBoxFor ~= item.itemID then
+        frame.keepBox:SetText(decision and decision.keepCount and tostring(decision.keepCount) or "")
+        state.keepBoxFor = item.itemID
+    end
+    local keepN = splittable and tonumber(frame.keepBox:GetText()) or nil
+    if keepN and (keepN <= 0 or keepN >= (entry.count or 1)) then keepN = nil end
+    frame.keepLabel:SetText(keepN and ("Keep " .. keepN .. " of " .. count .. ", the rest:") or ("Keep some? (of " .. count .. ")"))
     for i, choice in ipairs(CHOICE_ORDER) do
         local button = frame.buttons[choice]
         local enabled = options[choice] and true or false
         button:SetEnabled(enabled)
         local label = i .. ". " .. CHOICE_LABEL[choice]
-        if choice == "sell" and options.sell then label = label .. " " .. Money(options.vendorTotal or options.vendorPrice) end
-        if choice == "auction" and options.auction then label = label .. " ~" .. Money(options.auctionTotal or options.auctionPrice) end
+        if choice == "sell" and options.sell then label = label .. (keepN and " the rest" or (" " .. Money(options.vendorTotal or options.vendorPrice))) end
+        if choice == "auction" and options.auction then label = label .. (keepN and " the rest" or (" ~" .. Money(options.auctionTotal or options.auctionPrice))) end
+        if choice == "destroy" and keepN then label = label .. " the rest" end
         if choice == "defer" then label = label .. " " .. P.TriageDeferDays() .. "d" end
         if state.pendingConfirm == choice then label = "Confirm: " .. CHOICE_LABEL[choice] end
         button:SetText(label)
@@ -311,7 +324,10 @@ local function Choose(choice, fromClick)
     local decisionChoice, note = choice, nil
     if choice == "carry" then decisionChoice, note = "keep", "carry" end
     if choice == "keep" then note = "keepsake" end
-    P.SetDecision(item.itemID, decisionChoice, { name = item.name, note = note })
+    -- "Keep N": the number in the box applies to sell/auction/destroy.
+    local keepCount = frame and frame.keepBox and tonumber(frame.keepBox:GetText())
+    if keepCount and (keepCount <= 0 or keepCount >= (entry.count or 1)) then keepCount = nil end
+    P.SetDecision(item.itemID, decisionChoice, { name = item.name, note = note, keepCount = keepCount })
     entry.decision = P.GetDecision(item.itemID)
     state.done[item.itemID] = choice
     P.Log("triage", "screen: %s -> %s", tostring(item.name), choice)
@@ -338,7 +354,7 @@ local function Start(scope)
     local total, decided = P.TriageProgress(scope)
     state.scope, state.scopeLabel = scope, label or scope
     state.queue = P.BuildTriageQueue(scope)
-    state.index, state.done, state.pendingConfirm = 1, {}, nil
+    state.index, state.done, state.pendingConfirm, state.keepBoxFor = 1, {}, nil, nil
     state.decidedBefore = decided
     state.started = GetTime and GetTime() or 0
     if ns.DB.ui.triageRememberScope then ns.DB.ui.triageScope = scope end
@@ -472,6 +488,18 @@ local function Build()
     frame.recommended:SetPoint("BOTTOMLEFT", 0, 118)
     frame.previousDecision = kit.CreateLabel(area, "", "GameFontDisableSmall")
     frame.previousDecision:SetPoint("LEFT", frame.recommended, "RIGHT", 12, 0)
+    -- "Keep N" box, right of the recommendation line: a number here turns
+    -- Sell/Auction/Destroy into "the rest" (the Phoenix Oil case: keep 60).
+    frame.keepBox = CreateFrame("EditBox", nil, area, "InputBoxTemplate")
+    frame.keepBox:SetSize(48, 20)
+    frame.keepBox:SetPoint("BOTTOMRIGHT", 0, 116)
+    frame.keepBox:SetAutoFocus(false)
+    if frame.keepBox.SetNumeric then frame.keepBox:SetNumeric(true) end
+    frame.keepBox:SetScript("OnTextChanged", function(_, userInput) if userInput ~= false then Render() end end)
+    frame.keepBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    frame.keepBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
+    frame.keepLabel = kit.CreateLabel(area, "", "GameFontHighlightSmall")
+    frame.keepLabel:SetPoint("RIGHT", frame.keepBox, "LEFT", -6, 0)
 
     frame.buttons = {}
     local row1 = CreateFrame("Frame", nil, area) row1:SetSize(600, 26)

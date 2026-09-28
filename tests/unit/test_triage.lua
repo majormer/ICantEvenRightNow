@@ -80,6 +80,52 @@ T.test("a sell decision the vendor refuses asks again: review verdict, back in t
     T.contains(frame.previousDecision:GetText(), "not possible")
 end)
 
+T.test("keep N, the rest go: duplicates and commodity stacks split per stack", function()
+    -- Two copies of a sword, one better: keep 1 -> the higher item level stays, the other sells.
+    local g = game(function(w)
+        w:put(0, 1, I.OLD_SWORD, 1)
+        w:put(0, 2, I.OLD_SWORD, 1)
+    end)
+    local P = g:P()
+    g:slash("decide " .. I.OLD_SWORD .. " sell keep 1")
+    g:Core().ScanInventory("bags", true)
+    local copies = {}
+    for _, it in ipairs(P.GetScanList("bags")) do if it.itemID == I.OLD_SWORD then copies[#copies + 1] = it end end
+    T.eq(#copies, 2)
+    local kept, sold = 0, 0
+    for _, it in ipairs(copies) do
+        local eff = P.EffectiveDecision(it)
+        if eff.choice == "keep" then
+            kept = kept + 1
+            T.eq(P.ExplainScanned(it).primary.id, "decided_keep")
+            T.no(P.CanGoAndSellable(it), "the kept copy stays")
+        else
+            sold = sold + 1
+            T.eq(eff.choice, "sell")
+            T.eq(P.ExplainScanned(it).primary.id, "decided_sell")
+            T.ok(P.CanGoAndSellable(it), "the surplus copy goes")
+        end
+    end
+    T.eq(kept, 1) T.eq(sold, 1)
+    -- Four stacks of 20 ore, keep 60 and auction the rest: exactly one stack is a candidate.
+    g = game(function(w) for slot = 1, 4 do w:put(0, slot, I.VALUABLE_ORE, 20) end end)
+    P = g:P()
+    price(g, I.VALUABLE_ORE, 900000)
+    g:slash("decide " .. I.VALUABLE_ORE .. " auction keep 60")
+    g:Core().ScanInventory("bags", true)
+    local candidates, keeps = 0, 0
+    for _, it in ipairs(P.GetScanList("bags")) do
+        if it.itemID == I.VALUABLE_ORE then
+            if P.IsAuctionCandidate(it) then candidates = candidates + 1 else keeps = keeps + 1 end
+        end
+    end
+    T.eq(candidates, 1) T.eq(keeps, 3)
+    T.eq(P.GetDecision(I.VALUABLE_ORE).keepCount, 60)
+    -- The paste parser understands the same form.
+    local applied = P.ApplyDecisionLines("/icanteven decide " .. I.VALUABLE_ORE .. " auction keep 40   -- ore")
+    T.eq(applied, 1) T.eq(P.GetDecision(I.VALUABLE_ORE).keepCount, 40)
+end)
+
 T.test("decide auction: a candidate despite a keep reason; never offered to the vendor", function()
     local g = game(function(w) w:put(0, 1, I.NEW_FLASK, 5) end)   -- current expansion: kept by default
     local P = g:P()

@@ -266,7 +266,7 @@ end
 -- (otherwise there's nothing to scan with).
 function P.NeedsPriceCheck(item)
     if not item or not P.HasPriceSource() then return false end
-    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
     if decision and decision.choice == "sell" then return false end
     if (item.quality or 0) < 2 or not CanBeAuctioned(item) then return false end
     if P.NotListedAtLastScan(item) then return false end
@@ -347,7 +347,7 @@ end
 function P.IsValueFlagged(item, dest)
     if dest ~= "Vendor" then return false end
     -- The player decided to sell it to a vendor with the auction price in view.
-    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
     if decision and decision.choice == "sell" then return false end
     return (P.AuctionAdvice(item, true)) == "auction"
 end
@@ -642,7 +642,7 @@ function P.IsAuctionCandidate(item)
     if item.expansionID == nil or not item.classID then return false end
     -- The player's decision wins: "auction" needs only a channel and a price;
     -- any other decision takes the item out of the candidates.
-    local decision = P.GetDecision and P.GetDecision(item.itemID)
+    local decision = P.EffectiveDecision and P.EffectiveDecision(item)
     if decision and decision.choice ~= "defer" then
         if decision.choice ~= "auction" then return false end
         return CanBeAuctioned(item) and GetAuctionPrice(item) ~= nil
