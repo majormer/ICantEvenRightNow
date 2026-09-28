@@ -332,3 +332,30 @@ T.test("Sell Old Consumables never offers an item the addon says to keep (a util
     T.ok(ids[I.OLD_POTION], "the old potion is offered")
     T.no(ids[111820], "the utility gadget is not")
 end)
+
+-- The player (2026-09-28): "any window from I Can't Even Right Now will
+-- close if I press Esc". One window per press, the top one first.
+T.test("Escape closes the addon's windows one per press, the most recent first", function()
+    local game = bagGame(function() end)
+    local env = game.env
+    local function pressEscape()
+        -- Like the game's CloseSpecialWindows: hide every shown frame listed.
+        local closed = false
+        for _, name in ipairs(env.UISpecialFrames) do
+            local frame = env[name]
+            if frame and frame:IsShown() then frame:Hide() closed = true end
+        end
+        return closed
+    end
+    game:slash("")
+    local main = game:UI().frame
+    T.ok(main:IsShown(), "console open")
+    local paste = game:P().ShowDecisionPasteBox()
+    T.ok(paste:IsShown(), "paste box open over it")
+    T.ok(pressEscape(), "Escape is used")
+    T.no(paste:IsShown(), "the top window closes first")
+    T.ok(main:IsShown(), "the console stays")
+    T.ok(pressEscape())
+    T.no(main:IsShown(), "then the console")
+    T.no(pressEscape(), "nothing left: the game menu opens as usual")
+end)

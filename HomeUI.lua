@@ -153,6 +153,7 @@ local function EnsurePriceFirstFrame()
     local kit = Kit()
     local parent = UI.frame or UIParent
     local frame = CreateFrame("Frame", "ICantEvenRightNowPriceFirst", parent, "BackdropTemplate")
+    if P.RegisterEscapeWindow then P.RegisterEscapeWindow(frame) end
     frame:SetSize(460, 150)
     frame:SetPoint("CENTER", parent, "CENTER", 0, 40)
     -- Above the console's own panels (in game a DIALOG-strata child was drawn
@@ -758,6 +759,7 @@ function P.ShowHandoffPicker(item)
     local frame = UI.handoffPicker
     if not frame then
         frame = CreateFrame("Frame", "ICantEvenRightNowHandoffPicker", UIParent, "BackdropTemplate")
+        if P.RegisterEscapeWindow then P.RegisterEscapeWindow(frame) end
         frame:SetSize(260, 60)
         -- Above the main window: it is a top-level FULLSCREEN_DIALOG frame and
         -- re-raises itself on every click, so in game a picker in the same

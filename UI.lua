@@ -252,6 +252,75 @@ local function CloseOpenDropdown(exceptDropdown)
     end
 end
 
+-- ---------------------------------------------------------------------------
+-- Escape closes the addon's windows, one per press, the most recently opened
+-- first (a menu or dialog before the window under it). The player asked for
+-- "any window from I Can't Even Right Now will close if I press Esc"
+-- (2026-09-28): only the Justify window did. One hidden frame sits in the
+-- game's UISpecialFrames list; while any registered window is open it is
+-- shown, and when Escape hides it, it closes the top window and comes back
+-- if others are still open.
+-- ---------------------------------------------------------------------------
+local escapeStack, escapeProxy, escapeSyncing = {}, nil, false
+
+local function OpenEscapeWindows()
+    local open = {}
+    for i = #escapeStack, 1, -1 do
+        local frame = escapeStack[i]
+        if frame:IsVisible() then open[#open + 1] = frame end
+    end
+    return open
+end
+
+local function SyncEscapeProxy()
+    if not escapeProxy then return end
+    local anyOpen = #OpenEscapeWindows() > 0
+    if anyOpen and not escapeProxy:IsShown() then
+        escapeSyncing = true
+        escapeProxy:Show()
+        escapeSyncing = false
+    elseif not anyOpen and escapeProxy:IsShown() then
+        escapeSyncing = true
+        escapeProxy:Hide()
+        escapeSyncing = false
+    end
+end
+
+local function EnsureEscapeProxy()
+    if escapeProxy or not CreateFrame then return escapeProxy end
+    escapeProxy = CreateFrame("Frame", "ICantEvenRightNowEscape", UIParent)
+    escapeProxy:Hide()
+    escapeProxy:SetScript("OnHide", function(self)
+        if escapeSyncing then return end
+        -- Escape: close the top window only.
+        local top = OpenEscapeWindows()[1]
+        if top then top:Hide() end
+        if #OpenEscapeWindows() > 0 then
+            escapeSyncing = true
+            self:Show()
+            escapeSyncing = false
+        end
+    end)
+    if UISpecialFrames and tinsert then tinsert(UISpecialFrames, "ICantEvenRightNowEscape") end
+    return escapeProxy
+end
+
+-- Make a frame close on Escape (menus, dialogs and windows alike).
+function P.RegisterEscapeWindow(frame)
+    if not frame or frame.escapeRegistered or not frame.HookScript then return end
+    frame.escapeRegistered = true
+    EnsureEscapeProxy()
+    frame:HookScript("OnShow", function(self)
+        for i = #escapeStack, 1, -1 do
+            if escapeStack[i] == self then table.remove(escapeStack, i) end
+        end
+        escapeStack[#escapeStack + 1] = self
+        SyncEscapeProxy()
+    end)
+    frame:HookScript("OnHide", function() SyncEscapeProxy() end)
+    if frame:IsShown() then escapeStack[#escapeStack + 1] = frame SyncEscapeProxy() end
+end
+
 local function ToggleDropdownMenu(dropdown)
     local menu = dropdown.menu
     local shouldShow = not menu:IsShown()
@@ -273,6 +342,7 @@ local function CreateDropdown(parent, width, options, onSelect)
     dropdown.onSelect = onSelect
 
     local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    P.RegisterEscapeWindow(menu)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:SetFrameLevel(parent:GetFrameLevel() + 40)
     menu:SetSize(width or 140, #options * 22 + 8)
@@ -384,6 +454,7 @@ local function CreateMultiSelectDropdown(parent, width, options, onSelect)
     dropdown.onSelect = onSelect
 
     local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    P.RegisterEscapeWindow(menu)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:SetFrameLevel(parent:GetFrameLevel() + 40)
     menu:SetSize(width or 140, #options * 22 + 8)
@@ -927,6 +998,7 @@ end
 
 local function CreateRowRuleMenu(parent, width, options)
     local menu = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    P.RegisterEscapeWindow(menu)
     menu:SetFrameStrata("FULLSCREEN_DIALOG")
     menu:SetFrameLevel(parent:GetFrameLevel() + 30)
     menu:SetSize(width or 100, #options * 22 + 8)
@@ -2667,6 +2739,7 @@ function Core.CreateUI()
     frame:SetScript("OnMouseDown", RaiseConsole)
     frame:SetScript("OnShow", RaiseConsole)
     frame:Hide()
+    P.RegisterEscapeWindow(frame)
 
     frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     frame.title:SetPoint("LEFT", frame.TitleBg, "LEFT", 5, 0)

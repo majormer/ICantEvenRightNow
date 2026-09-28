@@ -347,6 +347,7 @@ function P.ShowDecisionPasteBox()
     if not CreateFrame then return nil end
     if not pasteBox then
         local frame = CreateFrame("Frame", "ICantEvenDecisionPasteBox", UIParent)
+        if P.RegisterEscapeWindow then P.RegisterEscapeWindow(frame) end
         frame:SetSize(560, 360)
         -- A plain dark background: BackdropTemplate drew nothing in game.
         local bg = frame:CreateTexture(nil, "BACKGROUND")
