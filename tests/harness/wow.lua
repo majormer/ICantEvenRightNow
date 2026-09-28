@@ -96,6 +96,7 @@ function World.new(opts)
     self.now = opts.now or 1790000000         -- seconds (roughly 2026)
     self.timers = {}
     self.timerSeq = 0
+    self.guidSeq = 0
     self.eventFrames = {}
     self.log = {}
     self.items = {}
@@ -200,8 +201,10 @@ function World:put(bagID, slot, itemID, count, opts)
     assert(self.items[itemID], "undefined item " .. tostring(itemID))
     local container = assert(self.containers[bagID], "no container " .. tostring(bagID))
     assert(slot >= 1 and slot <= container.size, "slot out of range")
+    self.guidSeq = self.guidSeq + 1
     container.slots[slot] = {
         itemID = itemID, count = count or 1, locked = opts.locked or false,
+        guid = opts.guid or ("Item-0-0-0-0-0-" .. self.guidSeq),
         bound = opts.bound or false, wue = opts.warboundUntilEquipped or false, apiHidesWue = opts.apiHidesWue,
         tooltipBinding = opts.tooltipBinding, tooltipLoading = opts.tooltipLoading, bonusIDs = opts.bonusIDs,
         questActive = opts.questActive,
@@ -768,6 +771,12 @@ function World:_buildEnv()
     end
     G.GetItemInfo = getItemInfo
     G.C_Item = {
+        GetItemGUID = function(location)
+            if not (location and location.IsBagAndSlot and location:IsBagAndSlot()) then return nil end
+            local bagID, slot = location:GetBagAndSlot()
+            local stack = world:getStack(bagID, slot)
+            return stack and stack.guid or nil
+        end,
         GetItemInfo = getItemInfo,
         GetItemInfoInstant = function(value)
             local itemID = parseItemID(value)

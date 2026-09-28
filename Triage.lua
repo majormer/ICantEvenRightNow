@@ -74,14 +74,20 @@ end
 -- stacks first. A stack that straddles the boundary is kept whole. Every
 -- other stack is "surplus" and carries the outward decision.
 -- ---------------------------------------------------------------------------
+-- Stackables keep the bags copies (60 oils to carry); gear keeps the banked
+-- copy (the Warband bank is where the alts reach it) and lets the bag copy go.
 local SCOPE_ORDER = { bags = 0, bank = 1, warband = 2 }
+local GEAR_SCOPE_ORDER = { warband = 0, bank = 1, bags = 2 }
 local surplusCache = {}
 
 function P.InvalidateDecisionSurplus() surplusCache = {} end
 
--- One key per stack. `owner` is written by the scanner (character key, or
--- "warband"); older scans without it still key consistently on "".
+-- One key per stack: the item's GUID when the scanner recorded one (it
+-- follows the item across moves, so a kept copy stays kept after a deposit
+-- or a pull), else the location. `owner` is written by the scanner
+-- (character key, or "warband"); older scans without it key on "".
 function P.StackKey(item)
+    if item.guid then return item.guid end
     return tostring(item.owner or "") .. "|" .. tostring(item.scope or "") .. "|" .. tostring(item.bagID or "") .. "|" .. tostring(item.slot or "")
 end
 
@@ -107,7 +113,8 @@ function P.DecisionSurplus(itemID)
             if la ~= lb then return la > lb end
             local ka, kb = keptBefore[P.StackKey(a)] and 0 or 1, keptBefore[P.StackKey(b)] and 0 or 1
             if ka ~= kb then return ka < kb end
-            local sa, sb = SCOPE_ORDER[a.scope] or 3, SCOPE_ORDER[b.scope] or 3
+            local order = ((a.maxStack or 1) <= 1) and GEAR_SCOPE_ORDER or SCOPE_ORDER
+            local sa, sb = order[a.scope] or 3, order[b.scope] or 3
             if sa ~= sb then return sa < sb end
             local ca, cb = a.count or 1, b.count or 1
             if ca ~= cb then return ca > cb end

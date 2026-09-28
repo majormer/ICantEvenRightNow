@@ -101,6 +101,17 @@ local function KnownItemInfo()
 end
 
 -- Scans one container into output. Returns true if any item's data was missing.
+-- The game's GUID for the item in a slot: it follows the item when it moves,
+-- so quantity decisions can tell "the copy I kept" from its duplicates.
+local function ItemGUIDAt(bagID, slot)
+    if not (ItemLocation and ItemLocation.CreateFromBagAndSlot and C_Item and C_Item.GetItemGUID) then return nil end
+    local ok, location = pcall(ItemLocation.CreateFromBagAndSlot, ItemLocation, bagID, slot)
+    if not ok or not location then return nil end
+    local okGUID, guid = pcall(C_Item.GetItemGUID, location)
+    if okGUID and type(guid) == "string" and guid ~= "" then return guid end
+    return nil
+end
+
 local function ScanContainerBag(bagID, scope, output, storageKind)
     storageKind = storageKind or GetStorageKindForBagID(bagID, scope)
     local missingData = false
@@ -209,6 +220,7 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 slot          = slot,
                 scope         = scope,
                 owner         = scope == "warband" and "warband" or P.currentCharacterKey,
+                guid          = ItemGUIDAt(bagID, slot),
                 storageKind   = storageKind,
                 location      = FormatItemLocation(bagID, slot, scope, storageKind),
                 classID       = classID,
