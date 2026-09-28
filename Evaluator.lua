@@ -293,6 +293,7 @@ local function GetItemType(item)
     if item.classID == 0  then return Data.ItemTypes.CONSUMABLE end
     if item.classID == 7  then return Data.ItemTypes.PROFESSION end
     if item.classID == 12 then return Data.ItemTypes.QUEST end
+    if item.classID == 20 then return Data.ItemTypes.HOUSING end
     if item.bindType == 2 and (item.classID == 2 or item.classID == 4) then return Data.ItemTypes.BOE end
     if item.classID == 2 or item.classID == 4 then return Data.ItemTypes.EQUIPMENT end
     return Data.ItemTypes.UNKNOWN
@@ -555,7 +556,15 @@ function P.ItemChannels(item)
     if P.GetCollectibleState then kind, learned, cannotLearn = P.GetCollectibleState(item) end
     local useWhy
     if kind and learned == false then useWhy = "learn the " .. kind
-    elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest" end
+    elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest"
+    elseif item.classID == 20 then
+        -- Housing items (class 20): decor goes into the House Chest, plans
+        -- unlock rooms and exteriors, the hatchet teaches lumber harvesting.
+        -- Dyes (subclass 1) are applied inside the house, not "used" from a bag.
+        if item.subclassID == 0 then useWhy = "add it to your House Chest"
+        elseif item.subclassID == 2 or item.subclassID == 3 or item.subclassID == 4 then useWhy = "unlock it in your house"
+        elseif item.subclassID == 5 then useWhy = "learn it" end
+    end
     if useWhy then channels.use = true channels.useWhat = useWhy else deny("use", cannotLearn or "Nothing to learn or start") end
     for _, channel in ipairs({ "vendor", "auction", "mail", "trade", "warbandBank", "destroy" }) do allow(channel) end
     return channels

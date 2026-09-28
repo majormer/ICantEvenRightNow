@@ -346,3 +346,35 @@ if CreateFrame then
         -- success false: temporary; the wait limit applies.
     end)
 end
+
+
+-- ---------------------------------------------------------------------------
+-- Housing: what the House Chest says about a decor item.
+-- Returns nil when the API is missing or the item isn't a catalog entry;
+-- otherwise { stored, placed, firstBonus, chestTotal, chestMax, chestFull }.
+-- C_HousingCatalog.GetCatalogEntryInfoByItem takes one argument since 12.0.5.
+-- ---------------------------------------------------------------------------
+local houseCache = {}
+function P.InvalidateHousingCache() houseCache = {} end
+function P.HousingEntry(item)
+    if not (item and item.itemID and C_HousingCatalog and C_HousingCatalog.GetCatalogEntryInfoByItem) then return nil end
+    local cached = houseCache[item.itemID]
+    if cached ~= nil then return cached or nil end
+    local ok, info = pcall(C_HousingCatalog.GetCatalogEntryInfoByItem, item.itemID)
+    if not ok or type(info) ~= "table" then houseCache[item.itemID] = false return nil end
+    local entry = {
+        stored = info.totalNumStored or 0,
+        placed = info.totalNumPlaced or 0,
+        firstBonus = info.firstAcquisitionBonus or 0,
+    }
+    if C_HousingCatalog.GetDecorTotalOwnedCount and C_HousingCatalog.GetDecorMaxOwnedCount then
+        local okTotal, total = pcall(C_HousingCatalog.GetDecorTotalOwnedCount)
+        local okMax, max = pcall(C_HousingCatalog.GetDecorMaxOwnedCount)
+        if okTotal and okMax and type(total) == "number" and type(max) == "number" then
+            entry.chestTotal, entry.chestMax = total, max
+            entry.chestFull = max > 0 and total >= max
+        end
+    end
+    houseCache[item.itemID] = entry
+    return entry
+end

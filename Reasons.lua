@@ -46,6 +46,10 @@ local REASONS = {
     recipe_other_profession = { disposition = "review", label = "Recipe for a profession this character doesn't have" },
     appearance_uncollected = { disposition = "keep", label = "Appearance not collected yet" },
     used_by_crafter      = { disposition = "keep",   label = "Material one of your crafters uses" },
+    housing_material     = { disposition = "keep",   label = "Lumber for crafting house decor" },
+    decor_item           = { disposition = "keep",   label = "Decor for your house: add it to the House Chest", rank = 0.9 },
+    housing_plan         = { disposition = "keep",   label = "House plans: use it to unlock", rank = 0.9 },
+    housing_supply       = { disposition = "keep",   label = "Housing supply (dye, tool)" },
     usable_gear          = { disposition = "keep",   label = "Gear one of your played characters can use" },
     equipment_set        = { disposition = "keep",   label = "In a saved equipment set" },
     current_expansion    = { disposition = "keep",   label = "From the current expansion" },
@@ -278,10 +282,17 @@ end
 local function CraftersFor(item)
     if item.classID ~= 7 then return nil end
     local users = {}
+    -- Housing lumber: every crafting profession has decor recipes for it
+    -- (the player: "All lumber should be wanted", 2026-09-28).
+    local lumber = Data.HousingLumber and Data.HousingLumber[item.itemID]
     for _, char in ipairs(P.CharactersWith("receivesMaterials")) do
         for _, prof in ipairs(char.professions or {}) do
             local subclasses = Data.ProfessionSubclasses and Data.ProfessionSubclasses[prof.skillLine]
-            if subclasses then
+            if lumber then
+                if not (Data.GatheringSkillLines and Data.GatheringSkillLines[prof.skillLine]) and not prof.secondary then
+                    table.insert(users, { character = char, profession = prof.name })
+                end
+            elseif subclasses then
                 for _, subclassID in ipairs(subclasses) do
                     if subclassID == item.subclassID then
                         table.insert(users, { character = char, profession = prof.name })
@@ -639,6 +650,28 @@ local function ExplainItem(item, ctx)
         add("quest_item")
     end
 
+    if item.classID == 20 then
+        if item.subclassID == 0 or item.subclassID == 5 then
+            local entry = P.HousingEntry and P.HousingEntry(item)
+            local text
+            if entry and entry.firstBonus > 0 and entry.stored == 0 and entry.placed == 0 then
+                text = "New for your house: +" .. entry.firstBonus .. " House XP"
+            elseif entry then
+                text = "You already hold " .. entry.stored .. " in the House Chest" .. (entry.placed > 0 and (", " .. entry.placed .. " placed") or "")
+            else
+                text = "Use it to add it to your House Chest"
+            end
+            if entry and entry.chestFull then
+                text = text .. "; the chest is full (" .. entry.chestTotal .. " of " .. entry.chestMax .. ")"
+            end
+            add("decor_item", text)
+        elseif item.subclassID == 1 then
+            add("housing_supply", "Housing dye: applied once to a decor piece inside your house")
+        else
+            add("housing_plan", "Use it to unlock it in your house")
+        end
+    end
+
     local kind, learned, cannotLearn, copies = CollectibleState(item)
     if kind == "pet" and learned and copies and copies.collected >= copies.limit then
         -- Learned and at the limit: keeping it adds nothing, whatever the expansion.
@@ -805,7 +838,16 @@ local function ExplainItem(item, ctx)
         end
     end
 
-    if item.classID == 7 then
+    if item.classID == 7 and Data.HousingLumber and Data.HousingLumber[item.itemID] then
+        -- Lumber is wanted whether or not a crafter is set up: it can't be
+        -- bought back, and older tiers make older decor.
+        local users = AnyRolesAssigned() and CraftersFor(item) or {}
+        local labels = {}
+        for _, u in ipairs(users) do labels[#labels + 1] = u.character.name .. " (" .. u.profession .. ")" end
+        local tier = Data.HousingLumber[item.itemID]
+        add("housing_material", (#labels > 0 and ("Decor crafting for " .. Names(labels)) or "Decor crafting, any crafting profession")
+            .. (tier ~= "any" and (" at " .. tier .. " proficiency") or ""))
+    elseif item.classID == 7 then
         if AnyRolesAssigned() then
             local users = CraftersFor(item)
             if users and #users > 0 then

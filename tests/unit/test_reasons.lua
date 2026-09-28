@@ -155,6 +155,63 @@ T.test("heirlooms: a copy the journal already has can go, unless it's an upgrade
     T.ok(explain(game, 7301).primary.id ~= "heirloom_copy")
 end)
 
+T.test("housing: lumber is wanted by every crafter, never 'no crafter uses it'", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 251764, 40)   -- the real Ashwood Lumber ID: the rule is keyed by ID
+    end, function(w)
+        w:defineItem(251764, { name = "Ashwood Lumber", classID = 7, subclassID = 11, quality = 2, maxStack = 1000,
+            sellPrice = 0, expansionID = 3, isCraftingReagent = true })
+    end)
+    game:db().characters["Mage-R"].professions = { { name = "Tailoring", skillLine = 197 }, { name = "Herbalism", skillLine = 182 } }
+    game:Core().ScanInventory("bags", true)
+    local e = explain(game, 251764)
+    T.eq(e.primary.id, "housing_material") T.eq(e.disposition, "keep")
+    T.contains(e.evidence, "Mage (Tailoring)") T.notContains(e.evidence, "Herbalism")
+    T.contains(e.evidence, "Cataclysm proficiency")
+    -- No crafter set up at all: still kept, with the generic reason.
+    game:db().characters["Mage-R"].professions = {}
+    game:Core().ScanInventory("bags", true)
+    e = explain(game, 251764)
+    T.eq(e.primary.id, "housing_material") T.contains(e.evidence, "any crafting profession")
+end)
+
+T.test("housing: decor items are 'use it' with the House Chest state; dyes and plans are kept", function()
+    local function houseGame(entry, chest)
+        return mageWith(function(w)
+            w:put(0, 1, 8401, 1)
+            w:put(0, 2, 8402, 3)
+            w:put(0, 3, 8403, 1)
+            if entry then w.house.entries[8401] = entry end
+            if chest then w.house.total, w.house.max = chest.total, chest.max end
+        end, function(w)
+            w:defineItem(8401, { name = "Sturdy Wooden Chair", classID = 20, subclassID = 0, quality = 1, sellPrice = 250000,
+                itemType = "Housing", itemSubType = "Decor", expansionID = 11 })
+            w:defineItem(8402, { name = "Purple Housing Dye", classID = 20, subclassID = 1, quality = 2, sellPrice = 5, maxStack = 1000,
+                itemType = "Housing", itemSubType = "Housing Dye", expansionID = 11 })
+            w:defineItem(8403, { name = "Stormwind Armory Plans", classID = 20, subclassID = 2, quality = 2, sellPrice = 0,
+                itemType = "Housing", itemSubType = "Room", expansionID = 11 })
+        end)
+    end
+    local game = houseGame({ stored = 0, placed = 0, firstBonus = 25 })
+    local P = game:P()
+    game:Core().ScanInventory("bags", true)
+    local e = explain(game, 8401)
+    T.eq(e.primary.id, "decor_item") T.contains(e.evidence, "+25 House XP")
+    local chair
+    for _, it in ipairs(P.GetScanList("bags")) do if it.itemID == 8401 then chair = it end end
+    T.eq(P.GetItemType(chair), "Housing")
+    local channels = P.ItemChannels(chair)
+    T.eq(channels.use, true) T.contains(channels.useWhat, "House Chest")
+    T.no(P.CanGoAndSellable(chair), "decor is not a vendor sale by default")
+    T.eq(explain(game, 8402).primary.id, "housing_supply")
+    T.eq(explain(game, 8403).primary.id, "housing_plan")
+    -- A duplicate with a full chest says so.
+    game = houseGame({ stored = 2, placed = 1, firstBonus = 0 }, { total = 500, max = 500 })
+    game:Core().ScanInventory("bags", true)
+    e = explain(game, 8401)
+    T.contains(e.evidence, "already hold 2") T.contains(e.evidence, "1 placed") T.contains(e.evidence, "chest is full (500 of 500)")
+end)
+
 T.test("materials: kept for a crafter who uses them, free otherwise", function()
     local game = mageWith(function(w)
         w:put(0, 1, I.LINEN, 40)

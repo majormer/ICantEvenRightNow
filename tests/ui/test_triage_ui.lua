@@ -225,6 +225,9 @@ T.test("Move Materials to Warband: crafter materials from the character bank to 
         w:addBankTab(2, 12, "Tab 1", 0, 20)
         w:put(6, 1, I.LINEN, 40)         -- Tailoring cloth
         w:put(6, 2, I.OLD_SWORD, 1)      -- gear, not a material
+        w:defineItem(256963, { name = "Thalassian Lumber", classID = 7, subclassID = 11, quality = 2, maxStack = 1000,
+            sellPrice = 0, expansionID = 11, isCraftingReagent = true, bindType = 7 })   -- Warbound
+        w:put(6, 3, 256963, 191)
     end })
     local P = g:P()
     P.SetCharacterRole("Main-R", "main")
@@ -240,5 +243,6 @@ T.test("Move Materials to Warband: crafter materials from the character bank to 
     local ids = {}
     for _, plan in ipairs(P.GetTaskPlans(task)) do ids[plan.item.itemID] = true end
     T.ok(ids[I.LINEN], "linen a crafter uses is offered")
+    T.ok(ids[256963], "housing lumber goes with the crafter materials")
     T.no(ids[I.OLD_SWORD], "gear is not")
 end)

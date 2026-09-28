@@ -120,6 +120,8 @@ function World.new(opts)
     self.equipped = {}
     self.equippedItems = {}   -- [slot] = itemID (for sets); levels stay in self.equipped
     self.quests = { completed = {}, active = {} }
+    -- House Chest: entries[itemID] = { stored, placed, firstBonus }, total, max.
+    self.house = { entries = {}, total = 0, exempt = 0, max = 500 }
     self.collections = { heirlooms = {}, appearances = {}, toys = {}, mounts = {}, pets = {} }
     self.player = {
         name = "Tester", realm = "TestRealm", level = 80, className = "Warrior",
@@ -770,7 +772,23 @@ function World:_buildEnv()
             def.setID, def.isCraftingReagent or false
     end
     G.GetItemInfo = getItemInfo
+    G.C_HousingCatalog = {
+        GetCatalogEntryInfoByItem = function(itemID)
+            local e = world.house.entries[itemID]
+            if not e then return nil end
+            return { recordID = itemID, entryType = 1, itemID = itemID, name = world.items[itemID] and world.items[itemID].name or "?",
+                totalNumStored = e.stored or 0, totalNumPlaced = e.placed or 0, firstAcquisitionBonus = e.firstBonus or 0,
+                remainingRedeemable = 0, destroyableInstanceCount = e.stored or 0 }
+        end,
+        GetDecorTotalOwnedCount = function() return world.house.total, world.house.exempt end,
+        GetDecorMaxOwnedCount = function() return world.house.max end,
+    }
     G.C_Item = {
+        IsDecorItem = function(itemIDOrLink)
+            local id = world.parseItemID(itemIDOrLink)
+            local def = id and world.items[id]
+            return def ~= nil and def.classID == 20 and def.subclassID == 0
+        end,
         GetItemGUID = function(location)
             if not (location and location.IsBagAndSlot and location:IsBagAndSlot()) then return nil end
             local bagID, slot = location:GetBagAndSlot()

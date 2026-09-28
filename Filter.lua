@@ -683,6 +683,7 @@ local function GetTypeFilterOptions()
         { text = Data.ItemTypes.PROFESSION,       value = Data.ItemTypes.PROFESSION },
         { text = TYPE_FILTER_REAGENT,             value = TYPE_FILTER_REAGENT },
         { text = Data.ItemTypes.CONSUMABLE,       value = Data.ItemTypes.CONSUMABLE },
+        { text = Data.ItemTypes.HOUSING,          value = Data.ItemTypes.HOUSING },
         { text = TYPE_FILTER_VENDOR_SELLABLE,     value = TYPE_FILTER_VENDOR_SELLABLE },
         { text = Data.ItemTypes.UNKNOWN,          value = Data.ItemTypes.UNKNOWN },
     }

@@ -35,8 +35,31 @@ ns.Data.ItemTypes = {
     CURRENCY_LIKE = "CurrencyLike",
     EQUIPMENT = "Equipment",
     MATERIAL = "Material",
+    HOUSING = "Housing",
     UNKNOWN = "Unknown",
 }
+
+-- Housing lumber (class 7, subclass "Other", Warbound, 1,000-stack): one per
+-- expansion tier, used by every crafting profession for decor recipes at
+-- that tier's proficiency. Matched by ID because the subclass says nothing.
+-- Verified 2026-09-28 (ItemSparse build 12.1.0.69933, warcraft.wiki.gg).
+ns.Data.HousingLumber = {
+    [245586] = "Classic",            -- Ironwood Lumber
+    [242691] = "Outland",            -- Olemba Lumber
+    [251762] = "Northrend",          -- Coldwind Lumber
+    [251764] = "Cataclysm",          -- Ashwood Lumber
+    [251763] = "Pandaria",           -- Bamboo Lumber
+    [251766] = "Draenor",            -- Shadowmoon Lumber
+    [251767] = "Legion",             -- Fel-Touched Lumber
+    [251768] = "Battle for Azeroth", -- Darkpine Lumber
+    [251772] = "Shadowlands",        -- Arden Lumber
+    [251773] = "Dragonflight",       -- Dragonpine Lumber
+    [248012] = "The War Within",     -- Dornic Fir Lumber
+    [256963] = "Midnight",           -- Thalassian Lumber
+    [269010] = "any",                -- Essence of Lumber: trades for 20 lumber of your choice
+}
+-- Gathering professions have no decor recipes.
+ns.Data.GatheringSkillLines = { [182] = true, [186] = true, [393] = true, [356] = true }
 
 ns.Data.Actions = {
     BANK = "Bank",
