@@ -115,6 +115,46 @@ T.test("recipes: learn it when the character has the profession and doesn't know
     T.eq(channels.use, false) T.contains(channels.why.use, "doesn't have Blacksmithing")
 end)
 
+T.test("pets: a learned pet at its collection limit can go even from the current expansion", function()
+    local function petGame(collected, limit)
+        return mageWith(function(w)
+            w:put(0, 1, 7201, 1)
+            w.collections.pets[9201] = collected
+            w.collections.pets[9202] = 1   -- some other pet: the journal counts as loaded
+        end, function(w)
+            w:defineItem(7201, { name = "Lost Star", classID = 15, subclassID = 2, quality = 2, sellPrice = 250000,
+                expansionID = 11, petSpeciesID = 9201, petLimit = limit })
+        end)
+    end
+    local e = explain(petGame(1, 1), 7201)
+    T.eq(e.primary.id, "collectible_complete") T.eq(e.disposition, "free")
+    e = explain(petGame(1, 3), 7201)
+    T.eq(e.primary.id, "current_expansion", "room for more copies: still a keep")
+    e = explain(petGame(0, 3), 7201)
+    local ids = {}
+    for _, r in ipairs(e.reasons) do ids[r.id] = true end
+    T.ok(ids.collectible_unlearned, "not learned: use it") T.eq(e.disposition, "keep")
+end)
+
+T.test("heirlooms: a copy the journal already has can go, unless it's an upgrade for an alt", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 7301, 1)
+        w.collections.heirlooms[7301] = true
+    end, function(w)
+        w:defineItem(7301, { name = "Tattered Dreadmist Mantle", classID = 4, subclassID = 1, quality = 7,
+            itemLevel = 69, equipLoc = "INVTYPE_SHOULDER", expansionID = 0, sellPrice = 0 })
+    end)
+    local e = explain(game, 7301)
+    T.eq(e.primary.id, "heirloom_copy") T.eq(e.disposition, "free")
+    T.contains(e.evidence, "Heirloom Journal")
+    -- Not in the journal (a heirloom that was never learned): no such claim.
+    game = mageWith(function(w) w:put(0, 1, 7301, 1) end, function(w)
+        w:defineItem(7301, { name = "Tattered Dreadmist Mantle", classID = 4, subclassID = 1, quality = 7,
+            itemLevel = 69, equipLoc = "INVTYPE_SHOULDER", expansionID = 0, sellPrice = 0 })
+    end)
+    T.ok(explain(game, 7301).primary.id ~= "heirloom_copy")
+end)
+
 T.test("materials: kept for a crafter who uses them, free otherwise", function()
     local game = mageWith(function(w)
         w:put(0, 1, I.LINEN, 40)

@@ -119,7 +119,7 @@ function World.new(opts)
     self.equipped = {}
     self.equippedItems = {}   -- [slot] = itemID (for sets); levels stay in self.equipped
     self.quests = { completed = {}, active = {} }
-    self.collections = { appearances = {}, toys = {}, mounts = {}, pets = {} }
+    self.collections = { heirlooms = {}, appearances = {}, toys = {}, mounts = {}, pets = {} }
     self.player = {
         name = "Tester", realm = "TestRealm", level = 80, className = "Warrior",
         classFile = "WARRIOR", classID = 1, professions = {},
@@ -932,6 +932,10 @@ function World:_buildEnv()
         if container and container.slots[cur.fromSlot] == cur.stack then container.slots[cur.fromSlot] = nil end
         world.cursor = nil
     end
+    -- Heirloom Journal: world.collections.heirlooms[itemID] = true once learned.
+    G.C_Heirloom = {
+        PlayerHasHeirloom = function(itemID) return world.collections.heirlooms[itemID] == true end,
+    }
     G.C_PetJournal = {
         GetPetInfoByItemID = function(itemID)
             local def = world.items[itemID]
@@ -940,7 +944,9 @@ function World:_buildEnv()
         end,
         GetNumCollectedInfo = function(speciesID)
             if world.petJournalLoading then return 0, 3 end
-            return world.collections.pets[speciesID] or 0, 3
+            local def
+            for _, d in pairs(world.items) do if d.petSpeciesID == speciesID then def = d end end
+            return world.collections.pets[speciesID] or 0, (def and def.petLimit) or 3
         end,
         GetNumPets = function()
             local owned = 0

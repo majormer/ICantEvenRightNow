@@ -54,6 +54,8 @@ local REASONS = {
     -- free
     appearance_collected = { disposition = "free",   label = "Appearance already collected" },
     collectible_learned  = { disposition = "free",   label = "Collectible already learned" },
+    collectible_complete = { disposition = "free",   label = "Pet collected to its limit", rank = 0.9 },
+    heirloom_copy        = { disposition = "free",   label = "Heirloom copy: the journal makes another any time", rank = 0.9 },
     quest_done           = { disposition = "free",   label = "Starts a quest you already completed" },
     junk                 = { disposition = "free",   label = "Junk (grey item)" },
     old_consumable       = { disposition = "free",   label = "Consumable from a past expansion" },
@@ -252,13 +254,25 @@ local function CollectibleState(item)
         end
         if speciesID then
             if P.PetJournalReady and not P.PetJournalReady() then return "pet", nil end   -- not known yet
-            local collected = SafeCall(C_PetJournal.GetNumCollectedInfo, speciesID) or 0
-            return "pet", collected > 0
+            local collected, limit = SafeCall(C_PetJournal.GetNumCollectedInfo, speciesID)
+            collected = collected or 0
+            -- Fourth value: copies still collectable (pets can be owned up to
+            -- a limit, usually 3; a Lost Star is 1/1 and then only a vendor sale).
+            return "pet", collected > 0, nil, { collected = collected, limit = limit or 3 }
         end
     end
     return nil
 end
 P.GetCollectibleState = CollectibleState
+
+-- Is the heirloom in the account's Heirloom Journal? nil when the API is
+-- missing or the answer isn't known.
+function P.HeirloomKnown(itemID)
+    if not (C_Heirloom and C_Heirloom.PlayerHasHeirloom and itemID) then return nil end
+    local ok, has = pcall(C_Heirloom.PlayerHasHeirloom, itemID)
+    if not ok then return nil end
+    return has and true or false
+end
 
 -- Professions (with trade-goods subclasses) of characters that receive materials.
 local function CraftersFor(item)
@@ -625,8 +639,11 @@ local function ExplainItem(item, ctx)
         add("quest_item")
     end
 
-    local kind, learned, cannotLearn = CollectibleState(item)
-    if kind == "recipe" then
+    local kind, learned, cannotLearn, copies = CollectibleState(item)
+    if kind == "pet" and learned and copies and copies.collected >= copies.limit then
+        -- Learned and at the limit: keeping it adds nothing, whatever the expansion.
+        add("collectible_complete", "You own " .. copies.collected .. " of " .. copies.limit .. " of this pet")
+    elseif kind == "recipe" then
         local profession = item.itemSubTypeName or "profession"
         if learned then add("collectible_learned", "A " .. profession .. " recipe you already know")
         elseif learned == false then add("collectible_unlearned", "Learn it: a " .. profession .. " recipe you don't know yet")
@@ -637,6 +654,17 @@ local function ExplainItem(item, ctx)
         else add("details_loading", "Waiting for your " .. kind .. " collection to load") end
     elseif cannotLearn then
         add("recipe_other_profession", cannotLearn)
+    end
+
+    -- A physical heirloom the journal already knows: the Heirlooms tab makes a
+    -- new copy at its upgrade level whenever a character needs one, so the
+    -- copy in a bank is clutter unless an alt can use it now (usable_gear).
+    if (item.quality or 0) == 7 and P.HeirloomKnown and P.HeirloomKnown(item.itemID) then
+        local upgradeFor = false
+        for _, r in ipairs(reasons) do if r.id == "usable_gear" then upgradeFor = true end end
+        if not upgradeFor then
+            add("heirloom_copy", "In your Heirloom Journal: destroy this copy, recreate it when an alt needs it")
+        end
     end
 
     if IsGear(item) and P.EquipmentSetsWith then
