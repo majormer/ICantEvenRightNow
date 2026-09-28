@@ -272,6 +272,9 @@ local function ScanContainerBag(bagID, scope, output, storageKind)
                 questID            = questID,
                 questActive        = questActive,
                 questCompleted     = questCompleted and true or false,
+                -- A bag of loot you open (Satchel of Helpful Goods, caches):
+                -- in game three sat in Gnomurcy's bank as "unexplained".
+                hasLoot            = info.hasLoot and true or nil,
                 questUse           = questUse,
             })
         end

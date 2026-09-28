@@ -476,3 +476,19 @@ T.test("a learned toy from the current expansion can go", function()
     T.eq(e.primary.id, "collectible_learned")
     T.eq(e.disposition, "free")
 end)
+
+-- In game (Gnomurcy, 2026-09-28) three Scorched Satchels of Helpful Goods sat
+-- in the bank as "unexplained": the loot flag was never read.
+T.test("a bag of loot says open it, and Use is offered", function()
+    local game = mageWith(function(w) w:put(0, 1, 7401, 1, { bound = true }) end,
+        function(w) w:defineItem(7401, { name = "Satchel of Helpful Goods", classID = 15, subclassID = 4, quality = 1,
+            bindType = 1, sellPrice = 0, expansionID = 3, hasLoot = true }) end)
+    local e = explain(game, 7401)
+    T.eq(e.primary.id, "open_container")
+    local item
+    for _, it in ipairs(game:P().GetScanList("bags")) do if it.itemID == 7401 then item = it end end
+    local channels = game:P().ItemChannels(item)
+    T.ok(channels.use)
+    T.eq(channels.useWhat, "open it")
+    T.eq(game:P().TriageOptions(item).recommended, "use")
+end)

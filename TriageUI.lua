@@ -127,7 +127,7 @@ function P.TriageOptions(item)
         if options.auction and P.AuctionAdvice and (P.AuctionAdvice(item)) == "auction" then rec = "auction"
         elseif options.sell then rec = "sell"
         elseif options.destroy then rec = "destroy" end
-    elseif options.use and (primary == "collectible_unlearned" or primary == "quest_not_started") then
+    elseif options.use and (primary == "collectible_unlearned" or primary == "quest_not_started" or primary == "open_container") then
         rec = "use"
     elseif explanation.disposition == "keep" then
         rec = "keep"

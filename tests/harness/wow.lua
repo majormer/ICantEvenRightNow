@@ -674,7 +674,7 @@ function World:_buildEnv()
             iconFileID = def.icon, stackCount = stack.count, isLocked = stack.locked,
             quality = def.quality, isReadable = false, hasLoot = false,
             hyperlink = world:itemLink(stack.itemID, stack.bonusIDs), isFiltered = false,
-            hasNoValue = (def.sellPrice or 0) <= 0, itemID = stack.itemID, isBound = stack.bound,
+            hasNoValue = (def.sellPrice or 0) <= 0, itemID = stack.itemID, isBound = stack.bound, hasLoot = def.hasLoot,
         }
     end
     G.C_Container = {

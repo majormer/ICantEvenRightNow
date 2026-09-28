@@ -557,6 +557,7 @@ function P.ItemChannels(item)
     local useWhy
     if kind and learned == false then useWhy = "learn the " .. kind
     elseif item.questID and not item.questActive and not item.questCompleted then useWhy = "start the quest"
+    elseif item.hasLoot then useWhy = "open it"
     elseif item.classID == 20 then
         -- Housing items (class 20): decor goes into the House Chest, plans
         -- unlock rooms and exteriors, the hatchet teaches lumber harvesting.

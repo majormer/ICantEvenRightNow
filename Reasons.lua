@@ -84,6 +84,7 @@ local REASONS = {
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
+    open_container       = { disposition = "keep",   label = "Holds loot: open it", rank = 0.9 },
     bag_equip            = { disposition = "keep",   label = "A bag for an empty bag slot: equip it" },
     bag_upgrade          = { disposition = "keep",   label = "Bigger than a bag you use: swap it in" },
     bag_outgrown         = { disposition = "free",   label = "No bigger than any bag you use" },
@@ -757,6 +758,10 @@ local function ExplainItem(item, ctx)
         add("quest_active", "Used by \"" .. item.questUse .. "\" in your quest log")
     elseif item.isQuestItem or item.classID == 12 then
         add("quest_item", "Destroying a quest item can remove its quest from your log")
+    end
+
+    if item.hasLoot then
+        add("open_container", "Right-click it in your bags to open it and take what's inside")
     end
 
     -- Bags (general and reagent) this character holds, against the bags it
