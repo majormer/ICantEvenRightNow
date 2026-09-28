@@ -508,6 +508,8 @@ function World:_buildEnv()
             if stack.tooltipLoading then return { lines = { { leftText = "Retrieving item information" } } } end
             local lines = { { leftText = (world.items[stack.itemID] or {}).name or "?" } }
             if stack.wue then table.insert(lines, { leftText = "Warbound until equipped" }) end
+            -- def.bagTooltipLines: lines only the bag-slot tooltip shows ("<Right Click to Open>").
+            for _, text in ipairs((world.items[stack.itemID] or {}).bagTooltipLines or {}) do table.insert(lines, { leftText = text }) end
             -- stack.tooltipBinding: the binding line the tooltip shows ("Warbound", "Soulbound").
             if stack.tooltipBinding then table.insert(lines, { leftText = stack.tooltipBinding }) end
             return { lines = lines }

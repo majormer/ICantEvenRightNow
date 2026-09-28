@@ -482,9 +482,9 @@ end)
 T.test("a bag of loot says open it, and Use is offered", function()
     local game = mageWith(function(w) w:put(0, 1, 7401, 1, { bound = true }) end,
         function(w) w:defineItem(7401, { name = "Satchel of Helpful Goods", classID = 15, subclassID = 4, quality = 1,
-            bindType = 1, sellPrice = 0, expansionID = 3, tooltipLines = { "<Right Click to Open>" } }) end)
+            bindType = 1, sellPrice = 0, expansionID = 3, bagTooltipLines = { "<Right Click to Open>" } }) end)
     -- The container info's hasLoot is unreliable (false after a reload in
-    -- game); the tooltip line decides.
+    -- game) and the link tooltip lacks the line; the bag-slot tooltip decides.
     local e = explain(game, 7401)
     T.eq(e.primary.id, "open_container")
     local item

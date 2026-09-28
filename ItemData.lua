@@ -228,13 +228,32 @@ local KNOWN_LINE = (type(ITEM_SPELL_KNOWN) == "string" and ITEM_SPELL_KNOWN) or 
 -- { state, setName, setTotal, setMin (lowest inactive bonus), activeBonuses, classes,
 --   upgradeTrack, upgradeCur, upgradeMax, upgradable, known ("Already known": a learned recipe) }.
 -- state "ready", "loading" (tooltip reads "Retrieving item information"), or "unknown".
--- A container to open: the tooltip's "<Right Click to Open>", or the
--- container info's hasLoot when the tooltip isn't read yet.
+-- A container to open. The bag-slot tooltip carries "<Right Click to Open>";
+-- the tooltip by link does not, and the container info's hasLoot flickers
+-- (in game, one of Glowheart's five satchels read openable, 2026-09-28).
+-- Once seen, remembered by item ID (saved): it is a property of the item.
+local openableChecked = {}
+local OPENABLE_LINE = (type(ITEM_OPENABLE) == "string" and ITEM_OPENABLE) or "<Right Click to Open>"
 function P.IsOpenable(item)
-    if not item then return false end
-    if item.hasLoot then return true end
-    local facts = P.ItemTooltipFacts(item)
-    return facts.openable == true
+    if not (item and item.itemID and ns.DB) then return false end
+    ns.DB.openableItems = ns.DB.openableItems or {}
+    local known = ns.DB.openableItems
+    if known[item.itemID] then return true end
+    if item.hasLoot then known[item.itemID] = true return true end
+    if openableChecked[item.itemID] then return false end
+    local accessible = item.bagID and item.slot and (item.scope == "bags" or (item.scope == "bank" and ns.DB.context and ns.DB.context.bankOpen))
+    if accessible and C_TooltipInfo and C_TooltipInfo.GetBagItem then
+        local ok, data = pcall(C_TooltipInfo.GetBagItem, item.bagID, item.slot)
+        local lines = ok and type(data) == "table" and data.lines
+        local first = lines and lines[1] and lines[1].leftText
+        if lines and first ~= (RETRIEVING_ITEM_INFO or "Retrieving item information") then
+            for _, line in ipairs(lines) do
+                if line.leftText == OPENABLE_LINE then known[item.itemID] = true return true end
+            end
+            openableChecked[item.itemID] = true
+        end
+    end
+    return false
 end
 
 function P.ItemTooltipFacts(item)
