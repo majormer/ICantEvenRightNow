@@ -132,6 +132,11 @@ T.test("a confirmed price of the same day beats Auctionator's unconfirmed one", 
     price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
     T.eq(price.price, 1225500) T.no(price.unconfirmed)
     T.ok(P.ListingPrice(scanned(g, I.OLD_SWORD)), "can be listed")
+    -- A price the player entered is trusted above the troll thresholds.
+    g:db().prices["i:" .. I.OLD_SWORD .. ":" .. g.env.GetRealmName()] = { price = 450000000, at = g.env.time(), source = "manual" }
+    price = P.GetAuctionPrice(scanned(g, I.OLD_SWORD))
+    T.eq(price.price, 450000000) T.no(price.unconfirmed, "45,000g entered by hand is not a troll listing")
+    T.contains(P.FormatPriceSource(price), "entered by you")
 end)
 
 T.test("exact prices and non-gear are not labelled approximate", function()

@@ -164,7 +164,10 @@ end
 local function StoredPrice(item)
     local entry = Prices()[PriceKey(item)]
     if not entry then return nil end
-    return { price = entry.price, source = "your scan", ageDays = (Now() - (entry.at or 0)) / DAY }
+    -- entry.source == "manual": a price the player typed in (or pasted from
+    -- a market median); everything else came from the addon's own lookups.
+    return { price = entry.price, source = entry.source == "manual" and "entered by you" or "your scan",
+        ageDays = (Now() - (entry.at or 0)) / DAY }
 end
 
 function P.HasPriceSource()
@@ -196,8 +199,10 @@ local function GetAuctionPrice(item)
     -- usually a troll listing (in game: Depleted Two-Handed Axe, a rare with
     -- no vendor price, at 47,908g made up most of a ~61,332g "Auction
     -- Candidates" total). Kept as a candidate, but not counted as value.
-    if not result.unconfirmed and ((item.quality or 0) <= 2 and result.price >= TROLL_PRICE
-        or result.price >= TROLL_PRICE_ANY) then
+    -- A price the player entered is taken as confirmed: a 45,000g pattern
+    -- median from Undermine Exchange was blocked as a troll listing (2026-09-28).
+    if not result.unconfirmed and result.source ~= "entered by you"
+        and ((item.quality or 0) <= 2 and result.price >= TROLL_PRICE or result.price >= TROLL_PRICE_ANY) then
         result.unconfirmed = true
     end
     local settings = Settings()
