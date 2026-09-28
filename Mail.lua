@@ -32,9 +32,34 @@ function P.IsAuctionCharacter(char)
     return (char.auctionAt or 0) > 0 and Now() - char.auctionAt <= AUCTION_RECENT_DAYS * DAY
 end
 
+-- One character carries the mark: ticking it on another clears the first
+-- (auctionables from every other character are handed to this one).
 function P.SetAuctionFlag(key, flag)
     local char = P.GetCharacter(key)
-    if char then char.auctionFlag = flag and true or nil end
+    if not char then return end
+    if flag then
+        for _, other in ipairs(P.GetCharacters and P.GetCharacters() or {}) do
+            if other.key ~= key then other.auctionFlag = nil end
+        end
+    end
+    char.auctionFlag = flag and true or nil
+end
+
+-- The character marked "Auctions" on the Characters tab, or nil.
+function P.AuctionCharacter()
+    for _, char in ipairs(P.GetCharacters and P.GetCharacters() or {}) do
+        if char.auctionFlag then return char end
+    end
+    return nil
+end
+
+-- The auction character when it is another character than the one played:
+-- auctionables are handed to it through the Warband bank instead of being
+-- listed here (the player: "only Kiosk should", 2026-09-28).
+function P.AuctionHandoffTarget()
+    local char = P.AuctionCharacter()
+    if char and char.key ~= P.currentCharacterKey then return char end
+    return nil
 end
 
 -- AUCTION_HOUSE_SHOW on the current character.

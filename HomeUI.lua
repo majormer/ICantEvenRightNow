@@ -543,9 +543,12 @@ function P.BuildCharactersTab(parent)
             Core.RefreshUI()
         end)
         row.auction:SetScript("OnEnter", function(self)
-            kit.ShowTooltip(self, { "Auction character", "Warns before this character's auction returns",
-                "and gold in the mail are deleted (30 days).",
-                "Set automatically when the character visits an auction house." })
+            kit.ShowTooltip(self, { "Auction character (one)",
+                "Items worth auctioning on your other characters are handed",
+                "to this one through the Warband bank; it lists them.",
+                "Also warns before its auction returns and gold in the mail",
+                "are deleted (30 days). Any character that visited an auction",
+                "house recently gets that warning too." })
         end)
         row.auction:SetScript("OnLeave", function() GameTooltip:Hide() end)
         row.auctionLabel = kit.CreateLabel(row, "Auctions", "GameFontDisableSmall")

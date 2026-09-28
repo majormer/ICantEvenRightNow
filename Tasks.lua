@@ -172,9 +172,11 @@ local function GetAllTasks()
     for _, task in ipairs(EXTRA_TASKS) do
         if not task.isAvailable or task.isAvailable() then
             -- presetFor: a task can pick its route now (e.g. which bank holds its items).
+            local description = task.description
+            if type(description) == "function" then description = description() end
             table.insert(tasks, { name = task.name, kind = "extra",
                 preset = task.presetFor and task.presetFor() or task.preset,
-                description = task.description, predicate = task.predicate, count = task.count, open = task.open,
+                description = description, predicate = task.predicate, count = task.count, open = task.open,
                 secondary = task.secondary, valueMode = task.valueMode })
         end
     end
@@ -398,7 +400,9 @@ function P.TripPlan(cards)
         end
     end
     local auction = 0
-    if P.AuctionCandidateItems then
+    -- With an auction character elsewhere, auctionables go to the bank for
+    -- it; the auction house is that character's stop, not this one's.
+    if P.AuctionCandidateItems and not (P.AuctionHandoffTarget and P.AuctionHandoffTarget()) then
         for _, item in ipairs(P.AuctionCandidateItems()) do
             if item.scope == P.BAG_SCOPE then auction = auction + 1 end
         end

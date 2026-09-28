@@ -209,6 +209,29 @@ function P.QueueHandoff(item, toKey)
     return true
 end
 
+-- An item already in the Warband bank, waiting for toKey (the auction
+-- character): recorded as a deposited hand-off so its Waiting for You card
+-- lists it. Idempotent; no entry is made while one is queued or deposited.
+function P.NoteHandoffDeposited(item, toKey)
+    if not toKey or item.accountBankAllowed == false then return false end
+    local queue = Queue()
+    for _, entry in ipairs(queue.entries) do
+        if entry.itemID == item.itemID and entry.to == toKey
+            and (entry.state == "queued" or entry.state == "deposited") then
+            return true
+        end
+    end
+    table.insert(queue.entries, {
+        id = queue.nextID, itemID = item.itemID, name = item.name, count = item.count or 1,
+        from = P.currentCharacterKey, to = toKey, at = Now(), depositedAt = Now(), state = "deposited",
+        auction = true,
+    })
+    queue.nextID = queue.nextID + 1
+    P.Log("handoff", "%s (%s) x%s waits in the Warband bank for %s (auction)", item.name, item.itemID,
+        item.count or 1, toKey)
+    return true
+end
+
 function P.CancelHandoff(id)
     local queue = Queue()
     for i, entry in ipairs(queue.entries) do

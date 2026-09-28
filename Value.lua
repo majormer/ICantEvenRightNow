@@ -798,9 +798,19 @@ end
 
 function P.RegisterValueTasks()
     if not P.RegisterTask then return end
+    local AH_PRESET = { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
+        expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
+        hideBlocked = true, sort = "Vendor Value" }
     P.RegisterTask({
         name = "Auction Candidates",
-        description = "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags; at the auction house it lists them.",
+        description = function()
+            local target = P.AuctionHandoffTarget and P.AuctionHandoffTarget()
+            if target then
+                return "Worth noticeably more at auction than at a vendor. Handed to " .. target.name
+                    .. " through the Warband bank; " .. target.name .. " lists them. At an auction house you can still list here."
+            end
+            return "Worth noticeably more at auction than at a vendor. Review pulls bank items to your bags; at the auction house it lists them."
+        end,
         preset = { name = "Auction Candidates", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
@@ -809,12 +819,10 @@ function P.RegisterValueTasks()
         -- counted while the review only covered the character bank: the
         -- Warband bank's axe could never be pulled).
         presetFor = function()
-            -- At the auction house the review lists what's in the bags.
-            if ns.DB.context.auctionHouseOpen then
-                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
-                    expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
-                    hideBlocked = true, sort = "Vendor Value" }
-            end
+            -- At the auction house the review lists what's in the bags (also
+            -- on a character that isn't the auction character: being there
+            -- is the player's choice).
+            if ns.DB.context.auctionHouseOpen then return AH_PRESET end
             local inBank, inWarband, inBags = 0, 0, 0
             for _, item in ipairs(P.AuctionCandidateItems(true)) do
                 if item.scope ~= P.BAG_SCOPE then
@@ -823,13 +831,17 @@ function P.RegisterValueTasks()
                     inBags = inBags + 1
                 end
             end
-            -- Everything is already in the bags: the next stop is the auction
-            -- house, not a bank (the card read "Visit a bank" with 11 in bags).
-            if inBank + inWarband == 0 and inBags > 0 then
-                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_AUCTION_HOUSE,
+            -- Another character lists: bag items go to the Warband bank for
+            -- it (by tab settings); bank items are pulled first, as below.
+            local target = P.AuctionHandoffTarget and P.AuctionHandoffTarget()
+            if target and inBags > 0 then
+                return { name = "Auction Candidates", source = "Bags", dest = P.STORAGE_WARBAND_ROUTED,
                     expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
                     hideBlocked = true, sort = "Vendor Value" }
             end
+            -- Everything is already in the bags: the next stop is the auction
+            -- house, not a bank (the card read "Visit a bank" with 11 in bags).
+            if inBank + inWarband == 0 and inBags > 0 then return AH_PRESET end
             return { name = "Auction Candidates",
                 source = inWarband > inBank and P.STORAGE_WARBAND_BANK or P.STORAGE_ALL_BANK_TABS, dest = "Bags",
                 expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
@@ -841,11 +853,14 @@ function P.RegisterValueTasks()
         -- are ready to post; bank items need withdrawing first (the review list).
         count = function()
             local inBags, inBank, inWarband, value, unconfirmed = 0, 0, 0, 0, 0
+            local target = not ns.DB.context.auctionHouseOpen and P.AuctionHandoffTarget and P.AuctionHandoffTarget()
             for _, item in ipairs(P.AuctionCandidateItems(true)) do
                 if item.scope == P.BAG_SCOPE then
                     inBags = inBags + 1
                 elseif P.IsWarbandStorage(item.storageKind) then
                     inWarband = inWarband + 1
+                    -- Already where the auction character can reach it.
+                    if target and P.NoteHandoffDeposited then P.NoteHandoffDeposited(item, target.key) end
                 else
                     inBank = inBank + 1
                 end
@@ -856,6 +871,20 @@ function P.RegisterValueTasks()
             local total = inBags + inBank + inWarband
             if total == 0 then return 0, nil, 0, "Nothing worth auctioning right now" end
             local parts = {}
+            if target then
+                -- Bag and bank items still need the bank (deposit, or pull
+                -- then deposit); Warband ones already wait for the target.
+                local toHand = inBags + inBank
+                local summary
+                if toHand > 0 then
+                    summary = toHand .. " to hand to " .. target.name
+                        .. (inWarband > 0 and (", " .. inWarband .. " already in the Warband bank") or "")
+                else
+                    summary = inWarband .. " in the Warband bank, waiting for " .. target.name
+                end
+                return total, nil, value, summary .. " (~" .. P.FormatMoney(value) .. " at auction"
+                    .. (unconfirmed > 0 and (", " .. unconfirmed .. " unconfirmed") or "") .. ")", toHand
+            end
             if inBags > 0 then parts[#parts + 1] = inBags .. " in bags" end
             if inBank > 0 then parts[#parts + 1] = inBank .. " in the bank" end
             if inWarband > 0 then parts[#parts + 1] = inWarband .. " in the Warband bank" end

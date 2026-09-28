@@ -340,3 +340,89 @@ T.test("Deposit to Warband leaves out gear that can go", function()
     for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
     T.eq(card.total, 0, "nobody can wear it: sell it, don't store it")
 end)
+
+-- The Auctions mark routes: on any other character, auctionables go to the
+-- Warband bank for the auction character (the player: "only Kiosk should",
+-- 2026-09-28); the auction character sees them waiting and lists them.
+local KIOSK = { name = "Kiosk", realm = "R", level = 40, classFile = "DEATHKNIGHT" }
+local function priceFor(g, itemID, copper)
+    local def = g.world.items[itemID]
+    local key = def.maxStack > 1 and ("c:" .. itemID) or ("i:" .. itemID .. ":" .. g.env.GetRealmName())
+    g:db().prices = g:db().prices or {}
+    g:db().prices[key] = { price = copper, at = g.env.time() }
+end
+local function cardNamed(g, name)
+    for _, c in ipairs(g:P().GetTaskCards()) do if c.name == name then return c end end
+end
+
+T.test("auction character: auctionables are handed to it through the Warband bank", function()
+    -- Main wears better than the sword, so it is outgrown, not an upgrade.
+    local saved = roster({ { player = MAIN, role = "main" }, { player = KIOSK, role = "utility" } },
+        { Main = { [16] = 400 } })
+    local g = login(saved, MAIN, function(w)
+        w:put(0, 1, I.OLD_SWORD, 1)
+        w.collections.appearances[70001] = true   -- look already collected: nothing keeps it
+    end)
+    local P = g:P()
+    P.SetAuctionFlag("Kiosk-R", true)
+    T.eq(P.AuctionCharacter().name, "Kiosk")
+    T.eq(P.AuctionHandoffTarget().name, "Kiosk", "another character lists")
+    priceFor(g, I.OLD_SWORD, 5000000)   -- 500g at auction, 40s at a vendor
+    g:Core().ScanInventory("bags", true)
+    local card = cardNamed(g, "Auction Candidates")
+    T.ok(card, "card exists")
+    T.contains(P.CardSummary(card), "1 to hand to Kiosk")
+    T.contains(card.description, "Handed to Kiosk through the Warband bank")
+    T.eq(card.task.preset.dest, P.STORAGE_WARBAND_ROUTED, "the route is the Warband bank, not the auction house")
+    local trip = P.TripPlan(P.GetTaskCards()) or ""
+    T.no(trip:find("auction house", 1, true), "no auction house stop for this character")
+    T.contains(trip, "bank")
+    -- At the bank: the review deposits it; a rescan marks it waiting for Kiosk.
+    g:openBank()
+    selectAndRun(g, "Auction Candidates")
+    T.eq(g.world:findItem(I.OLD_SWORD)[1].bagID >= 12, true, "sword went to the Warband bank")
+    g:Core().ScanInventory("all", true)
+    card = cardNamed(g, "Auction Candidates")
+    T.contains(P.CardSummary(card), "1 in the Warband bank, waiting for Kiosk")
+    local entries = P.GetHandoffs(function(e) return e.to == "Kiosk-R" and e.state == "deposited" end)
+    T.eq(#entries, 1, "a deposited hand-off for Kiosk")
+    T.eq(#P.GetHandoffs(), 1, "recorded once, however often the card refreshes")
+    -- Standing at an auction house, listing here is still allowed.
+    g:closeBank()
+    g.world:put(0, 2, I.VALUABLE_ORE, 20)
+    priceFor(g, I.VALUABLE_ORE, 900000)
+    g:Core().ScanInventory("bags", true)
+    g:openAuctionHouse()
+    T.eq(cardNamed(g, "Auction Candidates").task.preset.dest, P.STORAGE_AUCTION_HOUSE)
+    g:closeAuctionHouse()
+    saved = g:logout()
+
+    -- On Kiosk: the sword is waiting, and the card lists as usual.
+    local k = T.game({ savedVariables = saved, player = KIOSK, setup = function(w)
+        F.defineItems(w); F.addBank(w)
+        w:put(12, 1, I.OLD_SWORD, 1)
+        w.collections.appearances[70001] = true
+    end })
+    local PK = k:P()
+    T.eq(PK.AuctionHandoffTarget(), nil, "Kiosk lists its own")
+    k:openBank()
+    T.eq(cardNamed(k, "Waiting for You").ready, 1)
+    T.contains(PK.CardSummary(cardNamed(k, "Auction Candidates")), "1 in the Warband bank")
+    T.contains(PK.TripPlan(PK.GetTaskCards()) or "", "bank")
+    selectAndRun(k, "Waiting for You")
+    T.eq(k.world:findItem(I.OLD_SWORD)[1].bagID < 6, true, "Kiosk collected the sword")
+    T.eq(#PK.GetHandoffs(), 0, "entry cleared")
+    T.contains(PK.TripPlan(PK.GetTaskCards()) or "", "auction house (1 to list)")
+end)
+
+T.test("only one character carries the Auctions mark", function()
+    local saved = roster({ { player = MAIN, role = "main" }, { player = KIOSK, role = "utility" } })
+    local g = login(saved, MAIN, function() end)
+    local P = g:P()
+    P.SetAuctionFlag("Kiosk-R", true)
+    P.SetAuctionFlag("Main-R", true)
+    T.eq(P.AuctionCharacter().name, "Main")
+    T.no(P.GetCharacter("Kiosk-R").auctionFlag)
+    P.SetAuctionFlag("Main-R", false)
+    T.eq(P.AuctionCharacter(), nil)
+end)
