@@ -9,7 +9,7 @@ Release note rules:
 - Do not list mid-cycle test/build fixes as separate "Fixed" items unless that behavior was present in a previously released version.
 - Prefer "Added", "Changed", and "Improved" wording for features refined during the same unreleased development cycle.
 
-## [Unreleased]
+## [0.6.0] - 2026-09-28
 
 ### Added
 
