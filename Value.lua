@@ -660,12 +660,20 @@ function P.IsAuctionCandidate(item)
 end
 
 -- Auction candidates this character holds (bags, character bank, Warband bank).
-function P.AuctionCandidateItems()
+-- One entry per item (and item level) for searches and lists; with
+-- `perPlace`, one per item per place (bags / character bank / Warband bank)
+-- so counts and the pull route see a Warband stack even when another stack
+-- of the same item already sits in the bags (11 stacks of Phoenix Oil in the
+-- Warband bank were invisible behind one surplus stack in the bags, 2026-09-28).
+function P.AuctionCandidateItems(perPlace)
     local list, seen = {}, {}
     for _, scope in ipairs({ P.BAG_SCOPE, P.BANK_SCOPE }) do
         for _, item in ipairs(P.GetScanList(scope)) do
             -- Gear of the same name at different item levels sells separately.
             local key = item.itemID and (tostring(item.itemID) .. ":" .. tostring(GearItemLevel(item)))
+            if key and perPlace then
+                key = key .. ":" .. (item.scope == P.BAG_SCOPE and "bags" or (P.IsWarbandStorage(item.storageKind) and "warband" or "bank"))
+            end
             if key and not seen[key] and P.IsAuctionCandidate(item) then
                 seen[key] = true
                 table.insert(list, item)
@@ -803,7 +811,7 @@ function P.RegisterValueTasks()
                     hideBlocked = true, sort = "Vendor Value" }
             end
             local inBank, inWarband, inBags = 0, 0, 0
-            for _, item in ipairs(P.AuctionCandidateItems()) do
+            for _, item in ipairs(P.AuctionCandidateItems(true)) do
                 if item.scope ~= P.BAG_SCOPE then
                     if P.IsWarbandStorage(item.storageKind) then inWarband = inWarband + 1 else inBank = inBank + 1 end
                 else
@@ -828,7 +836,7 @@ function P.RegisterValueTasks()
         -- are ready to post; bank items need withdrawing first (the review list).
         count = function()
             local inBags, inBank, inWarband, value, unconfirmed = 0, 0, 0, 0, 0
-            for _, item in ipairs(P.AuctionCandidateItems()) do
+            for _, item in ipairs(P.AuctionCandidateItems(true)) do
                 if item.scope == P.BAG_SCOPE then
                     inBags = inBags + 1
                 elseif P.IsWarbandStorage(item.storageKind) then

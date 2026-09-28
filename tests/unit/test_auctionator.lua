@@ -278,6 +278,29 @@ T.test("Auction Candidates counts candidates in bags and in the bank", function(
     T.eq(card.ready, 2)
     T.contains(g:P().CardSummary(card), "1 in bags, 1 in the bank")
 end)
+T.test("Auction Candidates counts a Warband stack even when the same item is already a candidate in the bags", function()
+    local g = T.game({ player = { name = "Main", realm = "R", level = 90, classFile = "WARRIOR" },
+        setup = function(w)
+            F.defineItems(w)
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:addBankTab(2, 12, "Tab 1", 0, 20)
+            installAuctionator(w, { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
+            w:put(0, 1, I.VALUABLE_ORE, 20)      -- bags
+            w:put(12, 1, I.VALUABLE_ORE, 20)     -- Warband bank
+            w:put(12, 2, I.VALUABLE_ORE, 20)
+        end })
+    local P = g:P()
+    P.SetCharacterRole("Main-R", "main")
+    g:openBank()
+    g:Core().ScanInventory("all", true)
+    local card
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Auction Candidates" then card = c end end
+    T.contains(P.CardSummary(card), "1 in bags, 1 in the Warband bank")
+    T.eq(#P.AuctionCandidateItems(), 1, "searches still see one item")
+    T.eq(#P.AuctionCandidateItems(true), 2, "one entry per place")
+    T.eq(card.task.preset.source, P.STORAGE_WARBAND_BANK, "the review pulls from the Warband bank")
+end)
+
 T.test("Auction Candidates with everything in the bags points at the auction house, not a bank", function()
     local g = game(function(w) w:put(0, 1, I.VALUABLE_ORE, 20) end,
         { prices = { [I.VALUABLE_ORE] = 90000 }, ages = { [I.VALUABLE_ORE] = 1 } })
