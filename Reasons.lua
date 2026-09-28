@@ -66,6 +66,7 @@ local REASONS = {
     junk                 = { disposition = "free",   label = "Junk (grey item)" },
     old_consumable       = { disposition = "free",   label = "Consumable from a past expansion" },
     unused_material      = { disposition = "free",   label = "Material no crafter on your account uses" },
+    general_material     = { disposition = "review", label = "General crafting reagent: which profession uses it can't be told" },
     unused_gear          = { disposition = "free",   label = "Gear none of your played characters can use" },
     set_replaced         = { disposition = "free",   label = "Old class set: replaced by the set you wear" },
     outgrown_no_upgrade  = { disposition = "free",   label = "Below what you wear, and it can't be upgraded" },
@@ -1009,6 +1010,18 @@ local function ExplainItem(item, ctx)
                 local labels = {}
                 for _, u in ipairs(users) do labels[#labels + 1] = u.character.name .. " (" .. u.profession .. ")" end
                 add("used_by_crafter", "Used by " .. Names(labels))
+            elseif item.subclassID == 11 then
+                -- "Other" reagents belong to no profession's subclass, so the
+                -- map above can't clear them. In game (Finalomega, 2026-09-28)
+                -- 45 Artisan's Acuity (the currency for Blacksmithing and
+                -- Engineering knowledge; he has both) and 31 Restored
+                -- Artifacts (Archaeology turn-ins; he has Archaeology) were
+                -- offered for destroying as "no crafter uses it".
+                local owner = P.GetCharacter and P.GetCharacter(item.owner or P.currentCharacterKey)
+                local profs = {}
+                for _, prof in ipairs(owner and owner.professions or {}) do profs[#profs + 1] = prof.name end
+                add("general_material", (#profs > 0 and ((owner.name or "This character") .. " has " .. Names(profs) .. "; ") or "")
+                    .. "check whether a profession still uses it before letting it go")
             else
                 add("unused_material", "No character with a crafting role has a profession that uses it")
             end

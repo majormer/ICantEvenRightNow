@@ -175,6 +175,28 @@ T.test("housing: lumber is wanted by every crafter, never 'no crafter uses it'",
     T.eq(e.primary.id, "housing_material") T.contains(e.evidence, "any crafting profession")
 end)
 
+T.test("a general ('Other') crafting reagent is the player's call, not 'no crafter uses it'", function()
+    local game = mageWith(function(w)
+        w:put(0, 1, 210814, 45)   -- Artisan's Acuity
+        w:put(0, 2, I.LINEN, 20)
+    end, function(w)
+        w:defineItem(210814, { name = "Artisan's Acuity", classID = 7, subclassID = 11, quality = 3, maxStack = 9999,
+            sellPrice = 0, expansionID = 10, isCraftingReagent = true, bindType = 1 })
+    end)
+    game:db().characters["Mage-R"].professions = { { name = "Blacksmithing", skillLine = 164 }, { name = "Archaeology", skillLine = 794, secondary = true } }
+    game:Core().ScanInventory("bags", true)
+    local e = explain(game, 210814)
+    T.eq(e.primary.id, "general_material") T.eq(e.disposition, "review")
+    T.contains(e.evidence, "Mage has Blacksmithing, Archaeology")
+    -- A cloth nobody's profession uses still can go.
+    T.eq(explain(game, I.LINEN).primary.id, "unused_material")
+    -- And it is not offered for destroying.
+    local P = game:P()
+    local item
+    for _, it in ipairs(P.GetScanList("bags")) do if it.itemID == 210814 then item = it end end
+    T.ok(not P.CanGoWorthless(item))
+end)
+
 T.test("housing: decor items are 'use it' with the House Chest state; dyes and plans are kept", function()
     local function houseGame(entry, chest)
         return mageWith(function(w)
