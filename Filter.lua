@@ -611,13 +611,17 @@ local function MatchesTabFilters(item, tabName, extraParts)
             -- slots, which read 0 until the gear's data loads: after a reload
             -- every piece looked like an upgrade and the list shrank as the
             -- data arrived. Unknown equipment: nothing is called an upgrade.
-            local equippedIlvl
-            if P.PlayerEquippedLevel then
-                equippedIlvl = P.PlayerEquippedLevel(item.equipLoc)
+            -- One rule with "Upgrade for you" (Reasons.lua): recorded levels,
+            -- and an empty off-hand under a two-hander is not free (in game
+            -- Pull Bank Upgrades offered four off-hand pieces straight back
+            -- after they were deposited, 2026-09-28).
+            local isUpgrade
+            if P.IsUpgradeForPlayer then
+                isUpgrade = P.IsUpgradeForPlayer(item)
             else
-                equippedIlvl = GetEquippedItemLevel(item.equipLoc)
+                local equippedIlvl = GetEquippedItemLevel(item.equipLoc)
+                isUpgrade = equippedIlvl ~= nil and item.itemLevel > equippedIlvl
             end
-            local isUpgrade = equippedIlvl ~= nil and item.itemLevel > equippedIlvl
             if filters.upgrade.include == "Upgrade" and not isUpgrade then return false end
             if filters.upgrade.include == "Not Upgrade" and isUpgrade then return false end
         end

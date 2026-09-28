@@ -428,4 +428,13 @@ T.test("an off-hand piece is no upgrade next to a two-hander, and its plain keep
     P.SetDecision(8921, "keep")
     g:Core().ScanInventory("bags", true)
     T.eq(P.ExplainScanned(scanned(g, 8921)).primary.id, "decision_lapsed")
+    -- The Transfer upgrade filter agrees: once deposited, the beacon is not
+    -- offered back by Pull Bank Upgrades.
+    g.world:addBankTab(0, 6, "Main", 0, 20)
+    g.world:addBankTab(2, 12, "Tab 1", 0, 5)
+    g.world:put(12, 1, 8921, 1)
+    g:openBank()
+    for _, c in ipairs(P.GetTaskCards()) do
+        if c.name == "Pull Bank Upgrades" then T.eq(c.ready, 0, "no off-hand upgrade under a staff") end
+    end
 end)
