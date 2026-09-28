@@ -588,3 +588,24 @@ T.test("Pull Auctionable BoEs skips BoE items that have since been bound", funct
     g:openBank()
     T.eq(card(g).ready, 0, "a bound one is not")
 end)
+
+-- In game (2026-09-28), Deposit to Warband offered a Main's 25 Potent Healing
+-- Potions: a played character keeps its current-expansion supplies.
+T.test("Deposit to Warband leaves a played character's current supplies in the bags", function()
+    local function potionGame(role)
+        local g = T.game({ player = P_MAIN, setup = function(w)
+            F.defineItems(w)
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:addBankTab(2, 12, "Tab 1", 0, 5)
+            w:defineItem(9001, { name = "Potent Healing Potion", classID = 0, subclassID = 1, quality = 2,
+                maxStack = 200, sellPrice = 14, expansionID = 11, bindType = 8 })   -- Warbound
+            w:put(0, 1, 9001, 25)
+        end })
+        g:P().SetCharacterRole("Main-R", role)
+        g:openBank()
+        for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Deposit to Warband" then return c end end
+    end
+    T.eq(potionGame("main").ready, 0, "a Main keeps its flasks")
+    T.eq(potionGame("leveling").ready, 0, "so does a Leveling alt")
+    T.eq(potionGame("crafter").ready, 1, "a crafting-only alt hands them over")
+end)

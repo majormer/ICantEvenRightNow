@@ -107,6 +107,14 @@ local TASK_EXTRAS = {
             -- Never gear this character should equip: in game, Minormer's 16
             -- freshly withdrawn upgrades were offered straight back.
             if P.IsUpgradeForPlayer and P.IsUpgradeForPlayer(item) then return false end
+            -- Nor a played character's own supplies: current-expansion
+            -- consumables stay in the bags of a Main or Leveling character
+            -- (in game it offered Minormer's 25 Potent Healing Potions; the
+            -- player: "I agree on the healing potions", 2026-09-28).
+            if item.classID == 0 and P.IsCurrentExpansion and P.IsCurrentExpansion(item.expansionID) then
+                local role = P.GetCurrentCharacter and P.GetRole and P.GetRole(P.GetCurrentCharacter())
+                if role == "main" or role == "leveling" then return false end
+            end
             if not P.ExplainScanned then return true end
             return P.ExplainScanned(item).disposition == "keep"
         end,
