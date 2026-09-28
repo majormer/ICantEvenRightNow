@@ -246,3 +246,20 @@ T.test("Move Materials to Warband: crafter materials from the character bank to 
     T.ok(ids[256963], "housing lumber goes with the crafter materials")
     T.no(ids[I.OLD_SWORD], "gear is not")
 end)
+
+-- The player, on the lapsed keeps: "so I can see what I am currently wearing".
+T.test("the screen: hovering the item shows the game's tooltip with the worn piece beside it", function()
+    local g = game(function(w) w:put(0, 1, I.OLD_SWORD, 1) end, { [I.OLD_SWORD] = 900000 })
+    local P = g:P()
+    local frame = P.ShowTriage("bags")
+    T.contains(frame.facts:GetText(), "hover the name to compare with what you wear")
+    local compared = false
+    g.env.GameTooltip_ShowCompareItem = function() compared = true end
+    frame.hover:GetScript("OnEnter")(frame.hover)
+    local tooltip = g.env.GameTooltip
+    T.ok(tooltip:IsShown(), "tooltip shown")
+    T.contains(table.concat(tooltip._lines, "\n"), "Cataclysm Broadsword", "the bag copy's tooltip")
+    T.ok(compared, "compared with the worn piece")
+    frame.hover:GetScript("OnLeave")(frame.hover)
+    T.no(tooltip:IsShown())
+end)

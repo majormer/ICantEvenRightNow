@@ -230,6 +230,7 @@ local function Render()
     if item.itemLevel and item.itemLevel > 1 then facts[#facts + 1] = "iLvl " .. item.itemLevel end
     facts[#facts + 1] = P.GetExpansionName and P.GetExpansionName(item.expansionID) or ""
     facts[#facts + 1] = item.location or entry.where
+    if P.IsGearItem and P.IsGearItem(item) then facts[#facts + 1] = "hover the name to compare with what you wear" end
     if explanation.held then facts[#facts + 1] = "held " .. explanation.held end
     frame.facts:SetText(table.concat(facts, "  ·  "))
     frame.why:SetText("Why it's here: " .. (explanation.label or "?") .. (explanation.evidence and (" (" .. explanation.evidence .. ")") or ""))
@@ -457,6 +458,28 @@ local function Build()
     frame.icon:SetPoint("TOPLEFT", 0, 0)
     frame.name = kit.CreateLabel(area, "", "GameFontNormalLarge")
     frame.name:SetPoint("TOPLEFT", frame.icon, "TOPRIGHT", 8, -2)
+    -- Hover the icon or the name: the game's tooltip, with what this
+    -- character wears in that slot beside it (the player, on the lapsed
+    -- keeps: "so I can see what I am currently wearing", 2026-09-28).
+    frame.hover = CreateFrame("Button", nil, area)
+    frame.hover:SetPoint("TOPLEFT", frame.icon, "TOPLEFT", 0, 0)
+    frame.hover:SetSize(420, 38)
+    frame.hover:SetScript("OnEnter", function(self)
+        local item = state.queue[state.index] and state.queue[state.index].item
+        if not item or not GameTooltip then return end
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        -- The bag copy gives the full tooltip (gems, enchant, upgrade line);
+        -- anything else goes by link.
+        if item.scope == BAG_SCOPE and item.bagID and item.slot and GameTooltip.SetBagItem
+            and not (P.VerifySourceSlot and P.VerifySourceSlot(item)) then
+            GameTooltip:SetBagItem(item.bagID, item.slot)
+        else
+            GameTooltip:SetHyperlink(item.link or ("item:" .. tostring(item.itemID)))
+        end
+        if GameTooltip_ShowCompareItem then pcall(GameTooltip_ShowCompareItem, GameTooltip) end
+        GameTooltip:Show()
+    end)
+    frame.hover:SetScript("OnLeave", function() if GameTooltip then GameTooltip:Hide() end end)
     frame.facts = kit.CreateLabel(area, "", "GameFontHighlightSmall")
     frame.facts:SetPoint("TOPLEFT", frame.name, "BOTTOMLEFT", 0, -2)
     frame.facts:SetWidth(560) frame.facts:SetJustifyH("LEFT")
