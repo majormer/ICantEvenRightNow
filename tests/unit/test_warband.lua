@@ -449,7 +449,7 @@ T.test("a full Warband bank says so and offers to make room", function()
         F.defineItems(w)
         w:addBankTab(0, 6, "Main", 0, 20)
         w:addBankTab(2, 12, "Tab 1", 0, 1)
-        w:put(12, 1, I.OLD_SWORD, 1)     -- the only tab is full
+        w:put(12, 1, I.JUNK, 1)          -- the only tab is full, of junk that can go
         w:put(0, 1, I.LINEN, 20)
     end })
     g:openBank()
@@ -467,6 +467,38 @@ T.test("a full Warband bank says so and offers to make room", function()
     local card
     for _, c in ipairs(P.GetTaskCards()) do if c.name == "Deposit to Warband" then card = c end end
     if card and (card.blocked or 0) > 0 then T.contains(P.CardSummary(card), "blocked: Warband bank full") end
+end)
+
+T.test("a full Warband bank offers no pull when nothing in it can go, and names the auction character's waiting items", function()
+    local g = T.game({ player = P_MAIN, setup = function(w)
+        F.defineItems(w)
+        w:addBankTab(0, 6, "Main", 0, 20)
+        w:addBankTab(2, 12, "Tab 1", 0, 1)
+        w:put(12, 1, I.OLD_SWORD, 1)     -- full of an item that stays
+        w:put(0, 1, I.LINEN, 20)
+    end })
+    g:openBank()
+    local UI, P = g:UI(), g:P()
+    local alt = { key = "Kiosk-Feathermoon", name = "Kiosk" }
+    P.AuctionCharacter = function() return alt end
+    P.GetHandoffs = function(match)
+        local all = { { to = alt.key, state = "deposited" }, { to = alt.key, state = "deposited" }, { to = "Other-Realm", state = "deposited" } }
+        local out = {}
+        for _, e in ipairs(all) do if match(e) then out[#out + 1] = e end end
+        return out
+    end
+    g:slash("transfer")
+    UI.transferSource, UI.transferDest = "Bags", P.STORAGE_WARBAND_ROUTED
+    P.ResetTabFilters("Transfer")
+    P.SetFilterHideBlocked("Transfer", true)
+    g:Core().RefreshUI()
+    local panel = UI.frame.panels.Transfer
+    local text = panel.empty:GetText()
+    T.contains(text, "The Warband bank is full")
+    T.notContains(text, "pull out items")
+    T.contains(text, "have Kiosk collect the 2 items waiting to be auctioned")
+    T.contains(text, "1 of 5 bought")
+    T.ok(panel.emptyAction:GetText() ~= "Pull Warband Items That Can Go" or not panel.emptyAction:IsShown())
 end)
 
 T.test("Warbound-until-equipped is remembered while a tooltip is loading (saved across reloads)", function()
