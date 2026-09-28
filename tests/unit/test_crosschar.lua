@@ -305,6 +305,10 @@ T.test("equipment sets keep items; max-level trinkets and weapons are your call,
     T.eq(explain(8301).disposition, "review")
     T.eq(explain(8302).primary.id, "equipment_set")
     T.contains(explain(8302).evidence, "Main's M+ set")
+    -- A set piece stays in the bags: the game can't swap in banked gear.
+    local setItem
+    for _, item in ipairs(P.GetScanList("bags")) do if item.itemID == 8302 then setItem = item end end
+    T.ok(P.IsHeadedOut(setItem), "never offered for the bank")
     -- 180 against a worn 300 is far below (2026-09-28: item level 15 bows on a
     -- level 83 Hunter stayed "your call"); it can go like other outgrown gear.
     T.eq(explain(8303).primary.id, "outgrown_no_upgrade", "a weapon far below the worn one is outgrown")

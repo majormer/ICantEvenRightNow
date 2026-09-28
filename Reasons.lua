@@ -51,7 +51,9 @@ local REASONS = {
     housing_plan         = { disposition = "keep",   label = "House plans: use it to unlock", rank = 0.9 },
     housing_supply       = { disposition = "keep",   label = "Housing supply (dye, tool)" },
     usable_gear          = { disposition = "keep",   label = "Gear one of your played characters can use" },
-    equipment_set        = { disposition = "keep",   label = "In a saved equipment set" },
+    -- bags: a set can only swap in gear the character carries (in game
+    -- Deposit Old Items offered Gnomurcy's set tabard and doublet, 2026-09-28).
+    equipment_set        = { disposition = "keep",   label = "In a saved equipment set", bags = true },
     current_expansion    = { disposition = "keep",   label = "From the current expansion" },
     -- bags = true: stays in the bags, so no deposit task offers it.
     utility_item         = { disposition = "keep",   label = "Utility item you carry: stays in your bags", bags = true },
