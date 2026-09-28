@@ -872,7 +872,7 @@ local QUICK_WORKFLOWS = {
         hideBlocked = true, sort = "Name",
     },
     {
-        name = "Consolidate Warbound Gear",
+        name = "Consolidate Warbound Items",
         -- Bank (All Tabs) covers character bank tabs and the legacy bank; the
         -- Private Bank source isn't offered once tabs exist (in game the task
         -- opened "(modified)" with its source reset to Bags).

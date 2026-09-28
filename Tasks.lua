@@ -152,13 +152,15 @@ local TASK_EXTRAS = {
             return P.ExplainScanned(item).disposition == "keep"
         end,
     },
-    ["Consolidate Warbound Gear"] = {
-        description = "Warbound gear from the character bank into the Warband bank.",
-        -- Gear only (in game it listed Warbound lumber and tokens; Deposit
-        -- to Warband covers materials), and nothing headed out (it offered
+    ["Consolidate Warbound Items"] = {
+        description = "Warbound items from the character bank into the Warband bank, where every character reaches them.",
+        -- Gear, tokens, pet charms, cosmetics (the player, 2026-09-28: Trial
+        -- of Style tokens belong where any character can spend them).
+        -- Materials stay with Move Materials to Warband (in game this card
+        -- listed Warbound lumber twice), and nothing headed out (it offered
         -- 46 "Can go" pieces for the Warband bank).
         predicate = function(item)
-            return (item.classID == 2 or item.classID == 4) and not IsHeadedOut(item)
+            return item.classID ~= 7 and not IsHeadedOut(item)
         end,
     },
 }
@@ -569,6 +571,10 @@ function P.PreselectTask(task)
             -- Selling: only items that can clearly go. "Your call" items
             -- (situational trinkets, outgrown gear) are never pre-selected.
             if plan.dest == "Vendor" and explanation.disposition ~= "free" then safe = false end
+            -- Destroying: only what the player decided (it can't be undone).
+            if plan.dest == P.STORAGE_DESTROY and not (P.DecidedToDestroy and P.DecidedToDestroy(plan.item)) then
+                safe = false
+            end
         end
         if safe then UI.transferSelected[plan.key] = true end
     end

@@ -84,6 +84,9 @@ local REASONS = {
     decided_defer        = { disposition = "keep",   label = "Decision deferred", rank = 0.5 },
     decision_due         = { disposition = "review", label = "Your deferred decision is due", rank = 0.5, pinned = true },
     decision_blocked     = { disposition = "review", label = "Your decision can't be carried out: choose again", rank = 0.5, pinned = true },
+    bag_equip            = { disposition = "keep",   label = "A bag for an empty bag slot: equip it" },
+    bag_upgrade          = { disposition = "keep",   label = "Bigger than a bag you use: swap it in" },
+    bag_outgrown         = { disposition = "free",   label = "No bigger than any bag you use" },
     decision_lapsed      = { disposition = "review", label = "Kept as an upgrade; nobody needs it now: decide again", rank = 0.5, pinned = true },
     -- review
     -- A due investment reminder outranks free reasons: the player asked to be asked.
@@ -752,6 +755,32 @@ local function ExplainItem(item, ctx)
         add("quest_item", "Destroying a quest item can remove its quest from your log")
     end
 
+    -- Bags (general and reagent) this character holds, against the bags it
+    -- has equipped. In game (Dorftastic, 2026-09-28) a Gatherer's Reagent
+    -- Pouch had no reason at all and was banked as "old".
+    if item.classID == 1 and (item.subclassID == 0 or item.subclassID == 11)
+        and (not item.owner or item.owner == P.currentCharacterKey) and item.scope ~= "warband" then
+        local facts = P.ItemTooltipFacts and P.ItemTooltipFacts(item) or {}
+        local size = facts.containerSlots
+        local bagIDs = item.subclassID == 11 and { 5 } or { 1, 2, 3, 4 }
+        local smallest, empty
+        if size and C_Container and C_Container.GetContainerNumSlots then
+            for _, bagID in ipairs(bagIDs) do
+                local ok, n = pcall(C_Container.GetContainerNumSlots, bagID)
+                n = ok and tonumber(n) or nil
+                if n == 0 then empty = true elseif n and (not smallest or n < smallest) then smallest = n end
+            end
+        end
+        local kind = item.subclassID == 11 and "reagent bag" or "bag"
+        if size and empty then
+            add("bag_equip", size .. " slots, and a " .. kind .. " slot is empty")
+        elseif size and smallest and size > smallest then
+            add("bag_upgrade", size .. " slots; your smallest " .. kind .. " holds " .. smallest)
+        elseif size and smallest then
+            add("bag_outgrown", size .. " slots; every " .. kind .. " you use holds " .. smallest .. " or more")
+        end
+    end
+
     if item.classID == 20 then
         if item.subclassID == 0 or item.subclassID == 5 then
             local entry = P.HousingEntry and P.HousingEntry(item)
@@ -1314,6 +1343,22 @@ local function DecidedToDestroy(item)
 end
 P.DecidedToDestroy = DecidedToDestroy
 
+-- Can go, but nothing takes it: no vendor price (or the merchant refused
+-- it), no auction, no use. Only destroying clears it. In game (Dorftastic,
+-- 2026-09-28) fifteen Legion Trailseeker trinkets and rings and two learned
+-- toys sat in the bags for good: no card acted on them.
+local function CanGoWorthless(item)
+    if item.questUse or item.questActive then return false end
+    if (item.sellPrice or 0) > 0 and not (P.MerchantRefused and P.MerchantRefused(item.itemID)) then return false end
+    if not P.ExplainScanned then return false end
+    if P.ExplainScanned(item).disposition ~= "free" then return false end
+    local channels = P.ItemChannels and P.ItemChannels(item)
+    if not channels or not channels.destroy then return false end
+    if channels.auction or channels.use then return false end
+    return true
+end
+P.CanGoWorthless = CanGoWorthless
+
 local function CanGoAndSellable(item)
     if (item.sellPrice or 0) <= 0 then return false end
     if P.MerchantRefused and P.MerchantRefused(item.itemID) then return false end
@@ -1335,7 +1380,7 @@ function P.RegisterReasonTasks()
         preset = { name = "Pull Items That Can Go", source = P.STORAGE_ALL_BANK_TABS, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
-        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) end,
+        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) or CanGoWorthless(item) end,
     })
     -- The same for the Warband bank: in game it held 32 "Can go" stacks while
     -- the character-bank task (which doesn't read the Warband bank) showed 3.
@@ -1345,15 +1390,16 @@ function P.RegisterReasonTasks()
         preset = { name = "Pull Warband Items That Can Go", source = P.STORAGE_WARBAND_BANK, dest = "Bags",
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Vendor Value" },
-        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) end,
+        predicate = function(item) return CanGoAndSellable(item) or DecidedToDestroy(item) or CanGoWorthless(item) end,
     })
     P.RegisterTask({
-        name = "Destroy Decided Items",
-        description = "Items you decided to destroy, from your bags, one click each. The game asks you to confirm uncommon or better.",
-        preset = { name = "Destroy Decided Items", source = "Bags", dest = P.STORAGE_DESTROY,
+        name = "Destroy Items That Can Go",
+        description = "Items you decided to destroy, and items that can go but that no vendor, auction or character takes. "
+            .. "From your bags, one click each; the game asks you to confirm uncommon or better. A destroy can't be undone.",
+        preset = { name = "Destroy Items That Can Go", source = "Bags", dest = P.STORAGE_DESTROY,
             expansion = 0, bind = "All", type = "All", slot = "All", armorType = "All", upgrade = "All",
             hideBlocked = true, sort = "Name" },
-        predicate = DecidedToDestroy,
+        predicate = function(item) return DecidedToDestroy(item) or CanGoWorthless(item) end,
     })
     P.RegisterTask({
         name = "Sell Items That Can Go",

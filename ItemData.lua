@@ -255,6 +255,9 @@ function P.ItemTooltipFacts(item)
             local classes = text:match(CLASSES_PATTERN)
             if classes then facts.classes = classes end
             if text == KNOWN_LINE then facts.known = true end
+            -- "26 Slot Reagent Bag", "30 Slot Bag": a container's size.
+            local slots = text:match("^(%d+) Slot")
+            if slots and not facts.containerSlots then facts.containerSlots = tonumber(slots) end
             if not facts.setName then
                 local name, _, total = text:match(SET_NAME_PATTERN)
                 if name and tonumber(total) and tonumber(total) >= 2 then

@@ -295,7 +295,7 @@ T.test("Deposit Old Items keeps items for a quest in progress in the bags", func
     T.ok(names[I.QUEST_START], "a quest not started yet can be banked (your call)")
 end)
 
-T.test("Consolidate Warbound Gear reads the character bank tabs and leaves out gear that can go", function()
+T.test("Consolidate Warbound Items reads the character bank tabs and leaves out gear that can go", function()
     local game = bagGame(function(w)
         w:put(6, 1, I.OLD_SWORD, 1, { warboundUntilEquipped = true })   -- character bank: kept for an alt
         w:put(6, 2, I.BOUND_HELM, 1, { tooltipBinding = "warbound" })   -- character bank: appearance collected, can go
@@ -305,13 +305,15 @@ T.test("Consolidate Warbound Gear reads the character bank tabs and leaves out g
     game:P().SetCharacterRole("Main-R", "main")
     game:openBank()
     local P = game:P()
-    local task = P.FindTask("Consolidate Warbound Gear")
+    local task = P.FindTask("Consolidate Warbound Items")
     T.eq((P.GetTaskRoute(task)), P.STORAGE_ALL_BANK_TABS)
     local ids = {}
     for _, plan in ipairs(P.GetTaskPlans(task)) do ids[plan.item.itemID] = plan.item end
     T.ok(ids[I.OLD_SWORD], "Warbound-until-equipped gear kept for an alt is consolidated")
     T.no(ids[I.BOUND_HELM], "gear that can go is pulled to sell, not consolidated")
-    T.no(ids[I.WARBOUND_TOY], "Warbound non-gear belongs to Deposit to Warband")
+    -- 2026-09-28: tokens, pet charms and cosmetics go too (the player: Trial of
+    -- Style tokens belong where any character can spend them).
+    T.ok(ids[I.WARBOUND_TOY], "Warbound non-gear is consolidated too")
 end)
 
 T.test("Sell Old Consumables never offers an item the addon says to keep (a utility gadget in the consumable class)", function()

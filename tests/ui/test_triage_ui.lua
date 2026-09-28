@@ -192,7 +192,7 @@ T.test("Destroy Decided Items: bags only, one per click, DeleteCursorItem from t
     P.SetDecision(I.JUNK, "destroy")
     g:Core().ScanInventory("bags", true)
     local card
-    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Destroy Decided Items" then card = c end end
+    for _, c in ipairs(P.GetTaskCards()) do if c.name == "Destroy Items That Can Go" then card = c end end
     T.eq(card.ready, 2)
     g:slash("transfer")
     local UI = g:UI()
@@ -289,4 +289,58 @@ T.test("an item a quest in the log hands out is kept and never destroyed", funct
     for _, plan in ipairs(plans) do if plan.item.itemID == 9201 then found = plan end end
     T.ok(found and not found.movable, "destroy is blocked")
     T.contains(found.blocked, "would remove the quest")
+end)
+
+-- In game (Dorftastic, 2026-09-28) Legion trinkets with no sell price and
+-- learned toys were "can go", but no card acted on them.
+T.test("Destroy Items That Can Go offers what nothing takes, never pre-selected; decided ones are", function()
+    local g = game(function(w)
+        w:defineItem(9501, { name = "Worthless Idol", classID = 15, subclassID = 0, quality = 2, sellPrice = 0,
+            expansionID = 6, bindType = 1 })
+        w:put(0, 1, 9501, 1, { bound = true })   -- soulbound: no auction, no mail
+        w:put(0, 2, I.JUNK, 3)
+    end)
+    local P = g:P()
+    P.SetDecision(9501, "keep")          -- kept: nothing happens
+    g:Core().ScanInventory("bags", true)
+    local function plans()
+        local ids = {}
+        for _, plan in ipairs(P.GetTaskPlans(P.FindTask("Destroy Items That Can Go"))) do ids[plan.item.itemID] = plan end
+        return ids
+    end
+    T.no(plans()[9501], "a kept item is never offered")
+    P.SetDecision(9501, "sell")          -- can go, but no vendor price: only destroying clears it
+    g:Core().ScanInventory("bags", true)
+    T.ok(P.CanGoWorthless(scanned(g, 9501)))
+    T.ok(plans()[9501], "offered for destroying")
+    T.no(plans()[I.JUNK], "sellable junk goes to the vendor instead")
+    g:db().ui.preselectQuickTasks = true
+    P.PreselectTask(P.FindTask("Destroy Items That Can Go"))
+    T.eq(next(g:UI().transferSelected), nil, "not pre-selected: the player didn't decide to destroy it")
+    P.SetDecision(9501, "destroy")
+    P.PreselectTask(P.FindTask("Destroy Items That Can Go"))
+    T.ok(next(g:UI().transferSelected), "a decided destroy is pre-selected")
+end)
+
+-- In game (Dorftastic, 2026-09-28) a Gatherer's Reagent Pouch had no reason
+-- at all and was banked as "old".
+T.test("bags: equip into an empty slot, swap in a bigger one, let a smaller one go", function()
+    local function bagGame2(equipped)
+        return game(function(w)
+            w:defineItem(9601, { name = "Gatherer's Reagent Pouch", classID = 1, subclassID = 11, quality = 1,
+                sellPrice = 100, expansionID = 9, bindType = 1, tooltipLines = { "26 Slot Reagent Bag" } })
+            w:put(0, 1, 9601, 1)
+            w.containers[5] = equipped and { size = equipped, slots = {} } or nil
+        end)
+    end
+    local function verdict(size)
+        local g = bagGame2(size)
+        g:Core().ScanInventory("bags", true)
+        return g:P().ExplainScanned(scanned(g, 9601))
+    end
+    T.eq(verdict(0).primary.id, "bag_equip", "an empty reagent bag slot")
+    T.eq(verdict(20).primary.id, "bag_upgrade", "26 beats 20")
+    local e = verdict(36)
+    T.eq(e.primary.id, "bag_outgrown", "no bigger than the 36 in use")
+    T.eq(e.disposition, "free")
 end)

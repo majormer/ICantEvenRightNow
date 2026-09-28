@@ -18,7 +18,7 @@ It is cautious on purpose. Protected, quest, current-content, and ruled items ar
 
 - The console opens on **Home**, where every task is a card with a live count and value ("Deposit Old Items: 23 ready").
 - Cards that need a bank or vendor say so ("12 waiting: Visit a bank"). Click a card to open its review list.
-- Built-in tasks: Deposit Old Items, Pull Bank Upgrades, Pull Auctionable BoEs, Sell Old Consumables, Deposit to Warband, Consolidate Warbound Gear, Pull Items That Can Go, Sell Items That Can Go, Auction Candidates, Send to Alts, Waiting for You, Price My Items.
+- Built-in tasks: Deposit Old Items, Pull Bank Upgrades, Pull Auctionable BoEs, Sell Old Consumables, Deposit to Warband, Consolidate Warbound Items, Pull Items That Can Go, Sell Items That Can Go, Auction Candidates, Send to Alts, Waiting for You, Price My Items.
 - **Save as task** turns any custom setup (route, filters, search, item level, sort) into your own card.
 - At a bank or vendor, a small notice names the task that's ready (or the console opens, or nothing; your choice).
 
