@@ -567,3 +567,24 @@ T.test("Deposit to Warband never offers gear this character should equip", funct
     P.RefreshEquipped()
     T.no(P.IsUpgradeForPlayer(blade))
 end)
+
+-- In game (2026-09-28), Pull Auctionable BoEs offered 7 used (soulbound)
+-- Hexweave Bags whose own row said "it can't be auctioned".
+T.test("Pull Auctionable BoEs skips BoE items that have since been bound", function()
+    local function boeGame(bound)
+        return T.game({ player = P_MAIN, setup = function(w)
+            F.defineItems(w)
+            w:addBankTab(0, 6, "Main", 0, 20)
+            w:put(6, 1, I.OLD_SWORD, 1, { bound = bound })
+        end })
+    end
+    local function card(g)
+        for _, c in ipairs(g:P().GetTaskCards()) do if c.name == "Pull Auctionable BoEs" then return c end end
+    end
+    local g = boeGame(false)
+    g:openBank()
+    T.eq(card(g).ready, 1, "an unbound BoE is auctionable")
+    g = boeGame(true)
+    g:openBank()
+    T.eq(card(g).ready, 0, "a bound one is not")
+end)

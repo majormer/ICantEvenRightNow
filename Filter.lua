@@ -533,6 +533,10 @@ end
 local function MatchesBindInclude(item, include)
     return FilterMatchesInclude(include, function(value)
         if value == BIND_FILTER_BOE then
+            -- A BoE item that has since been bound (used bags, worn gear) is
+            -- soulbound now: in game Pull Auctionable BoEs offered 7 used
+            -- Hexweave Bags whose own row said "it can't be auctioned".
+            if item.isSoulbound or item.bindingScope == "Soulbound" then return false end
             return (item.bindingScope == "BoE" or item.bindType == 2) and not IsItemWarboundUntilEquipped(item)
         elseif value == BIND_FILTER_WUE then
             return IsItemWarboundUntilEquipped(item)
